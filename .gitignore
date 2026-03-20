@@ -1,0 +1,12 @@
+# Binary
+rptui
+test_image
+
+# Logs
+*.log
+
+# Screenshots
+*.png
+
+# Test files
+test_*.go
