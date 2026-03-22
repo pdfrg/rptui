@@ -2,6 +2,7 @@
 package modals
 
 import (
+	"fmt"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -16,15 +17,17 @@ type SkipWarningMsg struct {
 
 // SkipWarning modal for confirming song skip
 type SkipWarning struct {
-	styles *config.ThemeStyles
-	width  int
-	height int
+	styles       *config.ThemeStyles
+	width        int
+	height       int
+	minFavorites int
 }
 
 // NewSkipWarning creates a new SkipWarning modal
-func NewSkipWarning(styles *config.ThemeStyles) *SkipWarning {
+func NewSkipWarning(styles *config.ThemeStyles, minFavorites int) *SkipWarning {
 	return &SkipWarning{
-		styles: styles,
+		styles:       styles,
+		minFavorites: minFavorites,
 	}
 }
 
@@ -35,7 +38,7 @@ func (s *SkipWarning) SetSize(width, height int) {
 }
 
 // Update handles messages
-func (s *SkipWarning) Update(msg tea.Msg) (tea.Cmd) {
+func (s *SkipWarning) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
@@ -50,26 +53,32 @@ func (s *SkipWarning) Update(msg tea.Msg) (tea.Cmd) {
 
 // View renders the modal
 func (s SkipWarning) View() string {
-	modalWidth := 40
-	modalHeight := 8
-	
+	modalWidth := 50
+	modalHeight := 10
+
 	var b strings.Builder
 	b.WriteString("\n")
 	b.WriteString(centerText("SKIP SONG?", modalWidth))
 	b.WriteString("\n\n")
-	b.WriteString(centerText("Are you sure you want to skip", modalWidth))
+	b.WriteString(centerText("Skipping ahead of the live stream can result", modalWidth))
 	b.WriteString("\n")
-	b.WriteString(centerText("this song?", modalWidth))
+	b.WriteString(centerText("in an interruption of playback when the", modalWidth))
+	b.WriteString("\n")
+	b.WriteString(centerText("playlist end is reached.", modalWidth))
+	b.WriteString("\n\n")
+	b.WriteString(centerText(fmt.Sprintf("Save at least %d favorites to enable", s.minFavorites), modalWidth))
+	b.WriteString("\n")
+	b.WriteString(centerText("favorite mode for continuous playback.", modalWidth))
 	b.WriteString("\n\n")
 	b.WriteString(centerText("[y] Yes   [n] No", modalWidth))
-	
+
 	modalStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color(s.styles.Accent)).
 		Padding(1, 2).
 		Width(modalWidth).
 		Height(modalHeight)
-		
+
 	return modalStyle.Render(b.String())
 }
 

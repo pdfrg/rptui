@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -28,6 +29,18 @@ import (
 	"rptui-bubbletea/internal/tui/modals"
 	"rptui-bubbletea/internal/tui/widgets"
 )
+
+// Logger for TUI
+var logger *log.Logger
+
+func init() {
+	f, err := os.OpenFile("rptui-go.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err == nil {
+		logger = log.New(f, "[TUI] ", log.LstdFlags|log.Lshortfile)
+	} else {
+		logger = log.New(os.Stderr, "[TUI] ", log.LstdFlags|log.Lshortfile)
+	}
+}
 
 // Bottom view mode constants
 const (
@@ -77,6 +90,9 @@ type Model struct {
 	isPaused         bool
 	bottomViewMode   int
 	imageBase        string
+	favoriteCount    int  // cached count, updated on song change
+	imageCounter     int  // for unique image IDs
+	skipWarningShown bool // track if skip warning has been shown this session
 
 	// Current song info
 	currentSong *models.Song
@@ -91,13 +107,16 @@ type Model struct {
 	pollingNextBlock bool
 
 	// Bottom view content
-	lyrics        string
-	syncedLyrics  []api.SyncedLyric
-	artistInfo    *api.ArtistInfo
+	lyrics       string
+	syncedLyrics []api.SyncedLyric
+	artistInfo   *api.ArtistInfo
 
 	// Bubbles components
-	viewport   viewport.Model
-	albumArt   *termimg.ImageWidget
+	viewport    viewport.Model
+	albumArtStr string // cached rendered escape sequence
+
+	// Cached album art render string (only re-render when image changes)
+	albumArtLoaded bool
 
 	// Custom Widgets
 	headerWidget     *widgets.Header
@@ -108,6 +127,7 @@ type Model struct {
 	// Modal Widgets
 	optionsModal     *modals.Options
 	skipWarningModal *modals.SkipWarning
+	favoritesModal   *modals.Favorites
 
 	// UI dimensions
 	width  int
@@ -147,7 +167,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme) *Model {
 		cfg.MaxFavorites,
 	)
 	if err := cacheManager.EnsureDirectories(); err != nil {
-		log.Printf("Warning: failed to create cache directories: %v", err)
+		logger.Printf("Warning: failed to create cache directories: %v", err)
 	}
 
 	// Initialize custom widgets
@@ -158,7 +178,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme) *Model {
 
 	// Initialize modal widgets
 	optionsModal := modals.NewOptions(styles, cfg.Channel, cfg.Bitrate)
-	skipWarningModal := modals.NewSkipWarning(styles)
+	skipWarningModal := modals.NewSkipWarning(styles, cfg.MinFavorites)
 
 	// Initialize viewport for bottom views
 	viewport := viewport.New(
@@ -261,19 +281,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		
+
 		// Update component sizes
 		m.headerWidget.SetWidth(msg.Width)
 		m.footerWidget.SetWidth(msg.Width)
 		m.nowPlayingWidget.SetWidth(40)
-		
+
 		contentWidth := max(20, msg.Width-4)
 		contentHeight := max(5, msg.Height-14)
-		
+
 		m.viewport.SetWidth(contentWidth)
 		m.viewport.SetHeight(contentHeight)
 		m.playlistWidget.SetSize(contentWidth, contentHeight)
-		
+
 		return handle(m, nil)
 
 	case tea.KeyPressMsg:
@@ -284,6 +304,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmd = m.optionsModal.Update(msg)
 			case ModalSkipWarning:
 				cmd = m.skipWarningModal.Update(msg)
+			case ModalFavorites:
+				if m.favoritesModal != nil {
+					cmd = m.favoritesModal.Update(msg)
+				}
 			}
 			return handle(m, cmd)
 		}
@@ -312,6 +336,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.currentSongIndex < len(m.songs)-1 {
 				if err := m.mpvBackend.SkipNext(); err == nil {
 					m.currentSongIndex++
+					return handle(m, m.songChangedCmds())
+				}
+			}
+		}
+		return handle(m, nil)
+
+	case modals.FavoritesMsg:
+		m.activeModal = ModalNone
+		if msg.PlayEventID != nil {
+			fav, err := m.cacheManager.GetFavoriteByEventID(*msg.PlayEventID)
+			if err == nil && fav != nil {
+				song := fav.ToSong()
+				m.songs = []*models.Song{song}
+				m.currentSongIndex = 0
+				m.playlistStartIdx = 0
+
+				if err := m.mpvBackend.Start([]string{song.GaplessURL}); err == nil {
+					m.statusMsg = "Playing from favorites: " + song.Title
 					return handle(m, m.songChangedCmds())
 				}
 			}
@@ -361,8 +403,9 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "n":
-		// Skip next
-		if m.config.ShowSkipWarning {
+		// Skip next - show warning only once per session
+		if m.config.ShowSkipWarning && !m.skipWarningShown {
+			m.skipWarningShown = true
 			m.activeModal = ModalSkipWarning
 			return m, nil
 		}
@@ -431,8 +474,10 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			wasFavorite := m.cacheManager.IsFavorite(m.currentSong)
 			if _, err := m.cacheManager.ToggleFavorite(m.currentSong); err == nil {
 				if wasFavorite {
+					m.favoriteCount--
 					m.statusMsg = "Removed from favorites"
 				} else {
+					m.favoriteCount++
 					m.statusMsg = "Added to favorites"
 				}
 				m.updatePlaylist()
@@ -460,11 +505,16 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.activeModal = ModalOptions
 		return m, nil
 
+	case "m":
+		// Manage favorites modal
+		m.favoritesModal = modals.NewFavorites(m.styles, m.cacheManager)
+		m.activeModal = ModalFavorites
+		return m, nil
+
 	case "$":
 		// Open RP donate page
 		m.statusMsg = "Opening RP donate page..."
-		// Would need to open browser - TODO
-		return m, nil
+		return m, openDonatePageCmd
 
 	case "up", "k":
 		// Scroll up in viewport
@@ -551,7 +601,7 @@ func (m Model) handleProgressTick(msg progressTickMsg) (tea.Model, tea.Cmd) {
 		if m.currentSongIndex >= 0 && m.currentSongIndex < len(m.songs) {
 			// Auto-skip blocklisted songs
 			if m.cacheManager.IsBlocked(m.songs[m.currentSongIndex]) {
-				log.Printf("Auto-skipping blocklisted: %s", m.songs[m.currentSongIndex].Title)
+				logger.Printf("Auto-skipping blocklisted: %s", m.songs[m.currentSongIndex].Title)
 				if m.currentSongIndex < len(m.songs)-1 {
 					m.mpvBackend.SkipNext()
 				}
@@ -598,22 +648,45 @@ func (m Model) handleImageLoaded(msg imageLoadedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if msg.err != nil {
-		log.Printf("Image load error: %v", msg.err)
+		logger.Printf("Image load error: %v", msg.err)
 		return m, nil
 	}
 
 	// Decode image (jpeg/png decoders registered via blank imports)
-	img, _, err := image.Decode(bytes.NewReader(msg.imageData))
+	img, format, err := image.Decode(bytes.NewReader(msg.imageData))
 	if err != nil {
-		log.Printf("Image decode error: %v", err)
+		logger.Printf("Image decode error: %v", err)
 		return m, nil
 	}
 
-	widget := termimg.NewImageWidgetFromImage(img)
-	widget.SetSize(40, 20)
-	widget.SetProtocol(termimg.Sixel)
+	logger.Printf("Image decoded: %s, format=%s, bounds=%v, dataLen=%d", m.currentSong.Title, format, img.Bounds(), len(msg.imageData))
 
-	m.albumArt = widget
+	// Copy album art to file if configured
+	if m.config.CopyAlbumArt && m.config.AlbumArtPath != "" {
+		if err := os.WriteFile(m.config.AlbumArtPath, msg.imageData, 0644); err != nil {
+			logger.Printf("Warning: failed to copy album art to %s: %v", m.config.AlbumArtPath, err)
+		}
+	}
+
+	// Clear go-termimg's global resize cache before rendering. The cache keys
+	// on (targetSize, path, srcBounds) — since path is empty for in-memory images,
+	// all 500x500 sources map to the same key and return stale pixel data.
+	termimg.ClearResizeCache()
+
+	tiImg := termimg.New(img).
+		Size(36, 18).
+		Scale(termimg.ScaleFit).
+		Protocol(termimg.Kitty)
+
+	rendered, err := tiImg.Render()
+	if err != nil {
+		logger.Printf("Album art render error: %v", err)
+		return m, nil
+	}
+
+	logger.Printf("Album art loaded for: %s (len=%d)", m.currentSong.Title, len(rendered))
+	m.albumArtStr = rendered
+	m.albumArtLoaded = true
 	return m, nil
 }
 
@@ -778,8 +851,14 @@ func (m *Model) songChangedCmds() tea.Cmd {
 	m.lyrics = ""
 	m.syncedLyrics = nil
 	m.artistInfo = nil
-	m.albumArt = nil
+	m.albumArtStr = ""
+	m.albumArtLoaded = false
 	m.playbackPos = mpv.PlaybackPosition{}
+
+	// Update cached favorite count
+	if count, err := m.cacheManager.GetFavoriteCount(); err == nil {
+		m.favoriteCount = count
+	}
 
 	// Update playlist and bottom view
 	m.updatePlaylist()
@@ -794,7 +873,10 @@ func (m *Model) songChangedCmds() tea.Cmd {
 
 	// Load album art (if available)
 	if m.currentSong.CoverLarge != "" {
+		logger.Printf("Loading album art: %s", m.currentSong.CoverLarge)
 		cmds = append(cmds, m.loadImageCmd(m.currentSong.CoverLarge))
+	} else {
+		logger.Printf("No album art URL for song: %s", m.currentSong.Title)
 	}
 
 	// Always fetch lyrics and artist info (not gated on album art)
@@ -874,18 +956,23 @@ func (m Model) loadImageCmd(url string) tea.Cmd {
 	}
 
 	eventID := m.currentSong.EventID // capture for closure
+	songTitle := m.currentSong.Title // capture for logging
 	return func() tea.Msg {
+		logger.Printf("Fetching album art: %s for %s", url, songTitle)
 		resp, err := http.Get(url)
 		if err != nil {
+			logger.Printf("Album art fetch error: %v", err)
 			return imageLoadedMsg{eventID: eventID, err: err}
 		}
 		defer resp.Body.Close()
 
 		data, err := io.ReadAll(resp.Body)
 		if err != nil {
+			logger.Printf("Album art read error: %v", err)
 			return imageLoadedMsg{eventID: eventID, err: err}
 		}
 
+		logger.Printf("Album art fetched: %s, %d bytes", songTitle, len(data))
 		return imageLoadedMsg{
 			eventID:   eventID,
 			imageData: data,
@@ -915,6 +1002,10 @@ func (m Model) View() tea.View {
 
 	// 2. Main Content (Now Playing + Album Art)
 	// Use cached playback position (updated every tick, no IPC here)
+
+	// Now-playing always gets full width
+	m.nowPlayingWidget.SetWidth(m.width - 4)
+
 	nowPlayingView := m.nowPlayingWidget.View(
 		m.currentSong,
 		m.isPaused,
@@ -923,12 +1014,9 @@ func (m Model) View() tea.View {
 		m.config.GetDisplayInfo(),
 		m.getFavoriteCount(),
 		m.cacheManager.IsFavorite(m.currentSong),
+		m.getSkipsAvailable(),
+		m.getPrevAvailable(),
 	)
-
-	var albumArtView string
-	if m.albumArt != nil {
-		albumArtView, _ = m.albumArt.Render()
-	}
 
 	// 3. Bottom Section (Playlist or other)
 	var bottomSection string
@@ -941,38 +1029,16 @@ func (m Model) View() tea.View {
 	// 4. Footer
 	footer := m.footerWidget.View()
 
-	// Assemble manually to avoid JoinVertical clipping issues
-	// Header (1 line + 1 line space)
-	// MainSection (~12 lines + 1 line space)
-	// BottomSection (remaining lines)
-	// Footer (1 line at bottom)
-
 	var b strings.Builder
 	b.WriteString(header + "\n\n")
-	
-	// Join Now Playing and Art
-	mainLines := strings.Split(nowPlayingView, "\n")
-	artLines := strings.Split(albumArtView, "\n")
-	maxMainLines := max(len(mainLines), len(artLines))
-	
-	for i := 0; i < maxMainLines; i++ {
-		var left, right string
-		if i < len(mainLines) {
-			left = fmt.Sprintf("%-50s", mainLines[i])
-		} else {
-			left = strings.Repeat(" ", 50)
-		}
-		if i < len(artLines) {
-			right = artLines[i]
-		}
-		b.WriteString(left + "  " + right + "\n")
-	}
-	b.WriteString("\n")
+
+	// Now-playing info
+	b.WriteString(nowPlayingView + "\n")
 
 	// The bottom section should fill the remaining space except for the footer
 	currentHeight := lipgloss.Height(b.String())
 	remainingHeight := m.height - currentHeight - 1 // -1 for footer
-	
+
 	if remainingHeight > 0 {
 		// Crop or pad bottom section
 		bottomLines := strings.Split(bottomSection, "\n")
@@ -987,7 +1053,20 @@ func (m Model) View() tea.View {
 
 	b.WriteString(footer)
 
-	finalView := b.String()
+	// 5. Album art positioned at upper right using cursor escape sequences.
+	//    Clear all previous Kitty images first to prevent stale art when
+	//    the new image has the same pixel dimensions as the previous one.
+	var artSuffix string
+	if m.config.ShowAlbumArt && m.albumArtLoaded && m.albumArtStr != "" {
+		artCol := m.width - 37
+		if artCol < 1 {
+			artCol = 1
+		}
+		clearStr := termimg.ClearAllString()
+		artSuffix = fmt.Sprintf("%s\x1b[s\x1b[2;%dH%s\x1b[u", clearStr, artCol, m.albumArtStr)
+	}
+
+	finalView := b.String() + artSuffix
 
 	// 5. Overlay Modal if active
 	if m.activeModal != ModalNone {
@@ -997,6 +1076,10 @@ func (m Model) View() tea.View {
 			modalView = m.optionsModal.View()
 		case ModalSkipWarning:
 			modalView = m.skipWarningModal.View()
+		case ModalFavorites:
+			if m.favoritesModal != nil {
+				modalView = m.favoritesModal.View()
+			}
 		}
 
 		if modalView != "" {
@@ -1008,19 +1091,101 @@ func (m Model) View() tea.View {
 }
 
 func placeModal(width, height int, baseView, modalView string) string {
-	// Simple overlay using lipgloss Place
-	return lipgloss.Place(width, height,
-		lipgloss.Center, lipgloss.Center,
-		modalView,
-		lipgloss.WithWhitespaceChars(" "),
-	)
+	baseLines := strings.Split(baseView, "\n")
+	modalLines := strings.Split(modalView, "\n")
+
+	for len(baseLines) < height {
+		baseLines = append(baseLines, "")
+	}
+
+	modalHeight := len(modalLines)
+	modalWidth := 0
+	for _, line := range modalLines {
+		if w := lipgloss.Width(line); w > modalWidth {
+			modalWidth = w
+		}
+	}
+
+	startY := max(0, (height-modalHeight)/2)
+	startX := max(0, (width-modalWidth)/2)
+
+	for i, modalLine := range modalLines {
+		y := startY + i
+		if y >= len(baseLines) {
+			break
+		}
+
+		baseLine := baseLines[y]
+		baseWidth := lipgloss.Width(baseLine)
+
+		if baseWidth < startX {
+			baseLine += strings.Repeat(" ", startX-baseWidth)
+		}
+
+		var newLine strings.Builder
+		col := 0
+		inEscape := false
+		for _, r := range baseLine {
+			if r == '\x1b' {
+				inEscape = true
+			}
+			if inEscape {
+				newLine.WriteRune(r)
+				if r == 'm' {
+					inEscape = false
+				}
+				continue
+			}
+			if col >= startX {
+				break
+			}
+			newLine.WriteRune(r)
+			col++
+		}
+
+		newLine.WriteString(modalLine)
+
+		modalVisualWidth := lipgloss.Width(modalLine)
+		endX := startX + modalVisualWidth
+
+		col = 0
+		inEscape = false
+		var suffix strings.Builder
+		for _, r := range baseLine {
+			if r == '\x1b' {
+				inEscape = true
+				suffix.WriteRune(r)
+				continue
+			}
+			if inEscape {
+				suffix.WriteRune(r)
+				if r == 'm' {
+					inEscape = false
+				}
+				continue
+			}
+			col++
+			if col > endX {
+				suffix.WriteRune(r)
+			}
+		}
+
+		newLine.WriteString(suffix.String())
+		baseLines[y] = newLine.String()
+	}
+
+	return strings.Join(baseLines, "\n")
 }
 
 // getFavoriteCount returns the number of favorites
 func (m Model) getFavoriteCount() int {
-	count, err := m.cacheManager.GetFavoriteCount()
-	if err != nil {
-		return 0
-	}
-	return count
+	return m.favoriteCount
+}
+
+func (m Model) getSkipsAvailable() int {
+	return max(0, len(m.songs)-1-m.currentSongIndex)
+}
+
+func (m Model) getPrevAvailable() int {
+	return m.currentSongIndex
 }

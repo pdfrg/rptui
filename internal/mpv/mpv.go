@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"os/exec"
@@ -12,6 +13,18 @@ import (
 	"sync"
 	"time"
 )
+
+// Logger for MPV
+var logger *log.Logger
+
+func init() {
+	f, err := os.OpenFile("rptui-go.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err == nil {
+		logger = log.New(f, "[MPV] ", log.LstdFlags|log.Lshortfile)
+	} else {
+		logger = log.New(os.Stderr, "[MPV] ", log.LstdFlags|log.Lshortfile)
+	}
+}
 
 // MPVBackend controls MPV via subprocess for audio playback
 type MPVBackend struct {
@@ -93,12 +106,40 @@ func (m *MPVBackend) Start(urls []string) error {
 	}
 	args = append(args, urls...)
 
+	logger.Printf("MPV Start: socket=%s, urls=%d", m.socketPath, len(urls))
+	for i, url := range urls {
+		logger.Printf("MPV URL[%d]: %s", i, url)
+	}
+
 	m.process = exec.Command("mpv", args...)
 	m.process.Stdout = nil
-	m.process.Stderr = nil
+	// Capture stderr to log any MPV errors
+	stderrPipe, err := m.process.StderrPipe()
+	if err != nil {
+		logger.Printf("Failed to get stderr pipe: %v", err)
+	}
 
 	if err := m.process.Start(); err != nil {
+		logger.Printf("MPV Start FAILED: %v", err)
 		return fmt.Errorf("failed to start MPV: %w", err)
+	}
+
+	logger.Printf("MPV started with PID %d", m.process.Process.Pid)
+
+	// Read stderr in background
+	if stderrPipe != nil {
+		go func() {
+			buf := make([]byte, 4096)
+			for {
+				n, err := stderrPipe.Read(buf)
+				if n > 0 {
+					logger.Printf("MPV stderr: %s", string(buf[:n]))
+				}
+				if err != nil {
+					break
+				}
+			}
+		}()
 	}
 
 	m.currentURLs = urls
@@ -106,11 +147,13 @@ func (m *MPVBackend) Start(urls []string) error {
 	m.pauseStartTime = time.Time{}
 
 	// Wait a moment for socket to be created
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 
 	// Check if socket was created
 	if _, err := os.Stat(m.socketPath); os.IsNotExist(err) {
-		// Socket not created, but continue anyway
+		logger.Printf("WARNING: MPV socket not created at %s", m.socketPath)
+	} else {
+		logger.Printf("MPV socket exists at %s", m.socketPath)
 	}
 
 	return nil

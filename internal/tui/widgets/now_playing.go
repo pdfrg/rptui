@@ -17,7 +17,7 @@ type NowPlaying struct {
 	accentStyle     lipgloss.Style
 	mutedStyle      lipgloss.Style
 	width           int
-	
+
 	// Bubbles progress bar
 	progress progress.Model
 }
@@ -29,7 +29,7 @@ func NewNowPlaying(fgStyle, accentStyle, mutedStyle lipgloss.Style, accentColor 
 		progress.WithColors(lipgloss.Color(accentColor), lipgloss.Color("#333333")),
 		progress.WithoutPercentage(),
 	)
-	
+
 	return &NowPlaying{
 		foregroundStyle: fgStyle,
 		accentStyle:     accentStyle,
@@ -41,7 +41,10 @@ func NewNowPlaying(fgStyle, accentStyle, mutedStyle lipgloss.Style, accentColor 
 // SetWidth sets the width of the widget
 func (n *NowPlaying) SetWidth(width int) {
 	n.width = width
-	n.progress.SetWidth(40) // Keep fixed width for now
+	// Cap progress bar at 50 chars
+	progWidth := min(50, width-2)
+	progWidth = max(20, progWidth)
+	n.progress.SetWidth(progWidth)
 }
 
 // UpdateProgress updates the progress bar percent (0.0 to 1.0)
@@ -65,6 +68,8 @@ func (n NowPlaying) View(
 	configInfo string,
 	favoriteCount int,
 	isFavorite bool,
+	skipsAvailable int,
+	prevAvailable int,
 ) string {
 	if song == nil {
 		return " No song playing"
@@ -73,14 +78,14 @@ func (n NowPlaying) View(
 	title := n.foregroundStyle.Bold(true).Render(song.Title)
 	artist := n.mutedStyle.Render(song.Artist)
 	album := n.mutedStyle.Render(fmt.Sprintf("%s (%s)", song.Album, song.Year))
-	
+
 	progView := n.progress.View()
 
 	percentPos := timePos / song.GetDurationSeconds() * 100
 	if song.GetDurationSeconds() <= 0 {
 		percentPos = 0
 	}
-	
+
 	timeStr := n.foregroundStyle.Render(fmt.Sprintf("%s / %s (%.0f%%)",
 		formatDuration(timePos),
 		formatDuration(song.GetDurationSeconds()),
@@ -92,6 +97,18 @@ func (n NowPlaying) View(
 	}
 	ratingStr := n.accentStyle.Render(rating)
 
+	// Navigation line
+	nextStr := "--"
+	if skipsAvailable > 0 {
+		nextStr = fmt.Sprintf("%d", skipsAvailable)
+	}
+	prevStr := "--"
+	if prevAvailable > 0 {
+		prevStr = fmt.Sprintf("%d", prevAvailable)
+	}
+	navLine := n.mutedStyle.Render(fmt.Sprintf("Next: %s | Prev: %s | Favorites: %d",
+		nextStr, prevStr, favoriteCount))
+
 	status := "Playing"
 	if isPaused {
 		status = n.accentStyle.Render("Paused")
@@ -102,8 +119,8 @@ func (n NowPlaying) View(
 
 	connectedLine := fmt.Sprintf("%s • %s", n.foregroundStyle.Render("Connected"), n.mutedStyle.Render(connectedTime.Format("15:04:05")))
 
-	return fmt.Sprintf(" %s\n\n %s\n\n %s\n\n\n %s\n\n %s\n\n %s\n\n %s\n\n %s\n",
-		title, artist, album, progView, timeStr, ratingStr, statusLine, connectedLine)
+	return fmt.Sprintf(" %s\n %s\n %s\n\n %s\n\n %s\n\n %s\n\n %s\n\n %s\n\n %s\n",
+		title, artist, album, progView, timeStr, ratingStr, navLine, statusLine, connectedLine)
 }
 
 // formatDuration formats seconds as MM:SS or HH:MM:SS
