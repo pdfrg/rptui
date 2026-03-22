@@ -29,15 +29,15 @@ func init() {
 
 // CachedSong represents a song stored in cache
 type CachedSong struct {
-	EventID    int64   `json:"event_id"`
-	Title      string  `json:"title"`
-	Artist     string  `json:"artist"`
-	Album      string  `json:"album"`
-	Year       string  `json:"year"`
-	Duration   int64   `json:"duration"`
-	GaplessURL string  `json:"gapless_url"`
-	CoverLarge string  `json:"cover_large"`
-	AddedAt    int64   `json:"added_at"` // Unix timestamp
+	EventID    int64  `json:"event_id"`
+	Title      string `json:"title"`
+	Artist     string `json:"artist"`
+	Album      string `json:"album"`
+	Year       string `json:"year"`
+	Duration   int64  `json:"duration"`
+	GaplessURL string `json:"gapless_url"`
+	CoverLarge string `json:"cover_large"`
+	AddedAt    int64  `json:"added_at"` // Unix timestamp
 }
 
 // UnmarshalJSON implements custom JSON unmarshaling to handle string event_id
@@ -105,24 +105,18 @@ func (c *CacheManager) IsFavorite(song *models.Song) bool {
 
 	// Check metadata.json (Python format)
 	metadataPath := filepath.Join(c.favoritesDir, "metadata.json")
-	logger.Printf("Checking favorites: metadata.json path: %s, exists: %v", metadataPath, fileExists(metadataPath))
-	
+
 	if _, err := os.Stat(metadataPath); err == nil {
 		data, err := os.ReadFile(metadataPath)
 		if err != nil {
-			logger.Printf("Error reading metadata.json: %v", err)
 			return false
 		}
 		var favorites []CachedSong
 		if err := json.Unmarshal(data, &favorites); err != nil {
-			logger.Printf("Error parsing metadata.json: %v", err)
 			return false
 		}
-		logger.Printf("Found %d favorites in metadata.json", len(favorites))
 		for _, fav := range favorites {
-			logger.Printf("Checking favorite: event_id=%d, title=%s", fav.EventID, fav.Title)
 			if fav.EventID == song.EventID {
-				logger.Printf("Found match for song %s", song.Title)
 				return true
 			}
 		}
@@ -341,31 +335,24 @@ func (c *CacheManager) loadCachedSongs(dir string) ([]CachedSong, error) {
 func (c *CacheManager) GetFavoriteCount() (int, error) {
 	// Check for metadata.json first (Python format)
 	metadataPath := filepath.Join(c.favoritesDir, "metadata.json")
-	logger.Printf("GetFavoriteCount: checking metadata.json at %s", metadataPath)
-	
+
 	if _, err := os.Stat(metadataPath); err == nil {
-		// Read metadata.json to count favorites
 		data, err := os.ReadFile(metadataPath)
 		if err != nil {
-			logger.Printf("GetFavoriteCount: error reading metadata.json: %v", err)
 			return 0, err
 		}
 		var favorites []CachedSong
 		if err := json.Unmarshal(data, &favorites); err != nil {
-			logger.Printf("GetFavoriteCount: error parsing metadata.json: %v", err)
 			return 0, err
 		}
-		logger.Printf("GetFavoriteCount: found %d favorites in metadata.json", len(favorites))
 		return len(favorites), nil
 	}
-	logger.Printf("GetFavoriteCount: metadata.json not found, checking individual files")
 
 	// Count individual JSON files (Go format)
 	favorites, err := c.GetFavorites()
 	if err != nil {
 		return 0, err
 	}
-	logger.Printf("GetFavoriteCount: found %d individual favorite files", len(favorites))
 	return len(favorites), nil
 }
 

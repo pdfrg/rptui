@@ -2,6 +2,7 @@
 package tui
 
 import (
+	"os/exec"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -60,4 +61,11 @@ func tickPollCmd() tea.Cmd {
 	return tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
 		return pollTickMsg(t)
 	})
+}
+
+// openDonatePageCmd opens the Radio Paradise donate page in the default browser
+func openDonatePageCmd() tea.Msg {
+	cmd := exec.Command("xdg-open", "https://radioparadise.com/donate")
+	cmd.Start()
+	return nil
 }

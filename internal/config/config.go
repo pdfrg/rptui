@@ -25,8 +25,6 @@ var BitrateNames = map[int]string{
 	2: "128k AAC",
 	3: "320k AAC",
 	4: "FLAC",
-	5: "128k MP3",
-	6: "320k MP3",
 }
 
 // Config manages user configuration persistence
@@ -138,8 +136,8 @@ func (c *Config) applyDefaults() {
 		c.Channel = defaults.Channel
 	}
 
-	// Validate bitrate (1-6 are valid bitrates)
-	if c.Bitrate < 1 || c.Bitrate > 6 {
+	// Validate bitrate (1-4 are valid bitrates; MP3 removed)
+	if c.Bitrate < 1 || c.Bitrate > 4 {
 		c.Bitrate = defaults.Bitrate
 	}
 
