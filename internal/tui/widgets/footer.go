@@ -37,6 +37,8 @@ func NewFooter(accentStyle, mutedStyle lipgloss.Style) *Footer {
 			{Key: "f", Icon: "", Label: "Fave"},
 			{Key: "b", Icon: "", Label: "Block"},
 			{Key: "o", Icon: "", Label: "Opt"},
+			{Key: "m", Icon: "", Label: "Manage"},
+			{Key: "$", Icon: "", Label: "Support RP"},
 			{Key: "q", Icon: "", Label: "Quit"},
 		},
 	}
@@ -52,14 +54,14 @@ func (h Footer) View() string {
 	var parts []string
 	for _, kb := range h.keys {
 		keyPart := h.accentStyle.Render(kb.Key)
-		
+
 		var descPart string
 		if kb.Icon != "" {
 			descPart = h.mutedStyle.Render(kb.Icon)
 		} else if kb.Label != "" {
 			descPart = h.mutedStyle.Render(kb.Label)
 		}
-		
+
 		if descPart != "" {
 			parts = append(parts, keyPart+" "+descPart)
 		} else {
@@ -67,5 +69,16 @@ func (h Footer) View() string {
 		}
 	}
 
-	return strings.Join(parts, "  ")
+	content := strings.Join(parts, "  ")
+
+	// Center only if width has been set
+	if h.width > 0 {
+		contentWidth := lipgloss.Width(content)
+		if h.width > contentWidth {
+			padding := (h.width - contentWidth) / 2
+			content = strings.Repeat(" ", padding) + content
+		}
+	}
+
+	return content
 }

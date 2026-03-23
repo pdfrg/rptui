@@ -1,0 +1,81 @@
+harmonize theming with python app
+	currently playing
+		[X] song - in foreground, should be accent
+		[X] artist - in muted, should be foreground
+		[X] song elapsed/duration(%) - in foreground, should be muted
+		[X] navline - in muted, should be foreground
+		[X] statusline - status (eg "Paused") in accent, first "dot" in foreground, rest muted, all should be muted
+		[X] connectedline - "Connected" in foreground, time in muted, all should be muted
+		progressbar
+			[X] currently a gradient, accent to what looks like progressbar background
+			[X] python doesn't use gradient, but we should use gradient
+			[X] prefer darker (near black or black) background
+			[X] prefer cursor to accent gradient
+			[X] currently full thickness (entire terminal block)
+			[X] prefer thin line like python
+			[X] can remove blank line between progressbar and elapsed/duration(%) line
+	albumart
+		[X] python shows proper aspect ratio
+		[X] currently appears horizontally "squished"
+		[X] probably due to trying to fit into set number of terminal blocks
+		[X] can go-termimg display a set number of pixels instead?
+		[X] otherwise, may need to take terminal block size into account and correct
+		example bash output:
+			❯ IFS=';' read -rs -d t -p $'\e[16t' _ h w _ && echo "Cell height: $h px, width: $w px" && echo "Ratio (h/w): $(bc <<< "scale=3; $h / $w")"
+			Cell height: 20 px, width: 9 px
+			Ratio (h/w): 2.222
+		[X] currently slightly too large
+		[X] overlaps playlist headers
+		[X] aspect ratio fix may correct this
+	playlist
+		column headers currently foreground text, normal background
+		python uses different background (muted?) shown full terminal width, creating a "bar" effect
+			also uses white text, though we don't have to use white
+		python uses accent color for currently playing, we use cursor
+			here, I prefer cursor color, keep
+	footer(keybinds)
+		[X] missing "m Manage" and "$ Support RP"
+		[X] need to remove space below footer (looks like 1 extra line)
+		[X] currently left aligned, should be centered
+		
+modals
+	options
+		needs improvement
+		current station and bitrate picker are clunky
+			prefer proper "bubbles" widgets
+		no option for "show skip warning", "show album art", and "copy album art to file"
+			these need switches
+			again prefer proper "bubbles" widgets			
+	skip
+		needs improvement
+		as for options
+	manage
+		needs improvement
+		current implementation not working
+			shows 0 favorites and 0 blocklisted, even though there should be entries
+		visual style awkward
+		python scrollable text boxes much better
+		again, consider proper "bubbles" widgets
+
+alternate views
+	all
+		no scrollabar visible, though text is actually scrollable
+		lrclib and wikipedia api processing needs further testing/improving
+	synced lyrics
+		currently the active lyric is just indicated with an arrow
+		python uses different color, prefer "cursor" color
+	artist info
+		currently we have the first line as the artist name surrounded by 3 line runes
+			not needed, just remove that line
+		the summary doesn't word wrap, most text is not seen
+		example discography parsing issue
+			artist "The The"
+				correctly shows all albums from 1981 to 2016
+				but then returns last line as "^ Roberts, David (2006)"
+
+end of playlist before API returns new block
+	not enough favorites -- tested
+	or possibly played all favorites -- not tested
+	no update to status, app just appears to hang
+		should say "Ahead of livestream.  Awaiting new songs..." and then keep updating the time so user sees activity.
+			or perhaps show an animation ("bubbles" spinner, or .|..|...)?
