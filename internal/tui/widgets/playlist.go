@@ -10,10 +10,10 @@ import (
 
 // Playlist represents the playlist table widget
 type Playlist struct {
-	table      table.Model
-	styles     *config.ThemeStyles
-	width      int
-	height     int
+	table  table.Model
+	styles *config.ThemeStyles
+	width  int
+	height int
 }
 
 // NewPlaylist creates a new Playlist widget
@@ -26,7 +26,7 @@ func NewPlaylist(styles *config.ThemeStyles) *Playlist {
 		{Title: "Album", Width: 25},
 		{Title: "Year", Width: 5},
 	}
-	
+
 	t := table.New(
 		table.WithColumns(columns),
 		table.WithHeight(10),
@@ -39,12 +39,14 @@ func NewPlaylist(styles *config.ThemeStyles) *Playlist {
 		BorderStyle(lipgloss.NormalBorder()).
 		BorderForeground(lipgloss.Color(styles.Muted)).
 		BorderBottom(true).
-		Bold(false)
+		Bold(false).
+		Foreground(lipgloss.Color(styles.Foreground)).
+		Background(lipgloss.Color(styles.Muted))
 	s.Selected = s.Selected.
 		Foreground(lipgloss.Color(styles.Cursor)).
 		Bold(true)
 	t.SetStyles(s)
-	
+
 	return &Playlist{
 		table:  t,
 		styles: styles,

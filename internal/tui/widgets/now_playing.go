@@ -136,7 +136,7 @@ func (n NowPlaying) View(
 
 	connectedLine := n.mutedStyle.Render(fmt.Sprintf("Connected • %s", connectedTime.Format("15:04:05")))
 
-	return fmt.Sprintf(" %s\n %s\n %s\n\n %s\n %s\n\n %s\n\n %s\n\n %s\n\n %s\n\n",
+	return fmt.Sprintf(" %s\n %s\n %s\n\n %s\n %s\n %s\n %s\n %s\n %s",
 		title, artist, album, progView, timeStr, ratingStr, navLine, statusLine, connectedLine)
 }
 
