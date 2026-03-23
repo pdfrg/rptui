@@ -1198,7 +1198,7 @@ func (m Model) View() tea.View {
 
 	// The bottom section should fill the remaining space except for the footer
 	currentHeight := lipgloss.Height(b.String())
-	remainingHeight := m.height - currentHeight - 1 // -1 for footer
+	remainingHeight := m.height - currentHeight - 2 // -2: adjust for header/footer spacing
 
 	if remainingHeight > 0 {
 		// Crop or pad bottom section
