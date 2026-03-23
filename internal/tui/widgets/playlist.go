@@ -33,15 +33,13 @@ func NewPlaylist(styles *config.ThemeStyles) *Playlist {
 		table.WithWidth(100),
 	)
 
-	// Apply styles
+	// Apply styles - header background = lightened background color, no border
+	headerBg := lightenColor(styles.Background, 0.30)
 	s := table.DefaultStyles()
 	s.Header = s.Header.
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color(styles.Muted)).
-		BorderBottom(true).
 		Bold(false).
-		Foreground(lipgloss.Color(styles.Foreground)).
-		Background(lipgloss.Color(styles.Muted))
+		Foreground(lipgloss.Color(styles.Muted)).
+		Background(lipgloss.Color(headerBg))
 	s.Selected = s.Selected.
 		Foreground(lipgloss.Color(styles.Cursor)).
 		Bold(true)

@@ -22,6 +22,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/blacktop/go-termimg"
+	"github.com/charmbracelet/x/ansi"
 	"rptui-bubbletea/internal/api"
 	"rptui-bubbletea/internal/cache"
 	"rptui-bubbletea/internal/config"
@@ -200,6 +201,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme) *Model {
 		viewport.WithWidth(100),
 		viewport.WithHeight(15),
 	)
+	viewport.SoftWrap = true
 
 	// Initialize help
 	help := help.New()
@@ -834,10 +836,11 @@ func (m *Model) updateBottomView() {
 				endIdx = len(m.syncedLyrics)
 			}
 
+			cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Cursor)).Bold(true)
 			var lines []string
 			for i := startIdx; i < endIdx; i++ {
 				if i == currentLineIdx {
-					lines = append(lines, "▶ "+m.syncedLyrics[i].Content)
+					lines = append(lines, cursorStyle.Render("▶ "+m.syncedLyrics[i].Content))
 				} else {
 					lines = append(lines, "  "+m.syncedLyrics[i].Content)
 				}
@@ -850,8 +853,6 @@ func (m *Model) updateBottomView() {
 			content = "Loading artist info..."
 		} else {
 			var lines []string
-			lines = append(lines, fmt.Sprintf("=== %s ===", m.artistInfo.PageTitle))
-			lines = append(lines, "")
 			lines = append(lines, m.artistInfo.Summary)
 			if m.artistInfo.Discography != "" {
 				lines = append(lines, "")
@@ -870,6 +871,12 @@ func (m *Model) updateBottomView() {
 
 	case ViewOff:
 		content = ""
+	}
+
+	// Word-wrap content to viewport width before setting
+	viewWidth := m.viewport.Width()
+	if content != "" && viewWidth > 0 {
+		content = ansi.Wordwrap(content, viewWidth, "")
 	}
 
 	m.viewport.SetContent(content)
