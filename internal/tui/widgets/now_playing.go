@@ -26,6 +26,21 @@ func darkenColor(hex string, factor float64) string {
 	return fmt.Sprintf("#%02x%02x%02x", r, g, b)
 }
 
+// lightenColor increases the brightness of a hex color by the given factor (0.0-1.0)
+func lightenColor(hex string, factor float64) string {
+	if len(hex) != 7 || hex[0] != '#' {
+		return hex
+	}
+	var r, g, b int
+	fmt.Sscanf(hex[1:3], "%x", &r)
+	fmt.Sscanf(hex[3:5], "%x", &g)
+	fmt.Sscanf(hex[5:7], "%x", &b)
+	r = min(255, int(float64(r)*(1+factor)))
+	g = min(255, int(float64(g)*(1+factor)))
+	b = min(255, int(float64(b)*(1+factor)))
+	return fmt.Sprintf("#%02x%02x%02x", r, g, b)
+}
+
 // NowPlaying represents the current song info widget
 type NowPlaying struct {
 	foregroundStyle lipgloss.Style
