@@ -1194,7 +1194,7 @@ func (m Model) View() tea.View {
 	b.WriteString(header + "\n\n")
 
 	// Now-playing info
-	b.WriteString(nowPlayingView + "\n")
+	b.WriteString(nowPlayingView)
 
 	// The bottom section should fill the remaining space except for the footer
 	currentHeight := lipgloss.Height(b.String())

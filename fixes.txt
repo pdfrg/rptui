@@ -28,8 +28,8 @@ harmonize theming with python app
 		[X] overlaps playlist headers
 		[X] aspect ratio fix may correct this
 	playlist
-		column headers currently foreground text, normal background
-		python uses different background (muted?) shown full terminal width, creating a "bar" effect
+		[X] column headers currently foreground text, normal background
+		[X] python uses different background (muted?) shown full terminal width, creating a "bar" effect
 			also uses white text, though we don't have to use white
 		python uses accent color for currently playing, we use cursor
 			here, I prefer cursor color, keep
