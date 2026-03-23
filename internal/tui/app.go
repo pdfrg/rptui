@@ -10,6 +10,7 @@ import (
 	_ "image/png"
 	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"strings"
@@ -106,6 +107,10 @@ type Model struct {
 	// Next block polling
 	pollingNextBlock bool
 
+	// Auto-favorite playback
+	favoritesQueue       []cache.CachedSong
+	lastFavoriteQueuedAt time.Time
+
 	// Bottom view content
 	lyrics       string
 	syncedLyrics []api.SyncedLyric
@@ -150,11 +155,21 @@ type Model struct {
 
 	// Help
 	help help.Model
+
+	// Terminal cell ratio for album art aspect ratio correction
+	cellRatio float64
 }
 
 // NewModel creates a new TUI model
 func NewModel(cfg *config.Config, theme *config.ColorTheme) *Model {
 	styles := config.NewThemeStyles(theme)
+
+	// Initialize terminal cell ratio for album art
+	features := termimg.QueryTerminalFeatures()
+	cellRatio := float64(features.FontHeight) / float64(features.FontWidth)
+	if cellRatio <= 0 {
+		cellRatio = 2.0 // fallback (typical terminal: ~2x taller than wide)
+	}
 
 	// Initialize API clients
 	rpAPI := api.NewRadioParadiseAPI(cfg.Channel, cfg.Bitrate)
@@ -173,7 +188,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme) *Model {
 	// Initialize custom widgets
 	headerWidget := widgets.NewHeader(styles.Header, "rptui - Radio Paradise")
 	footerWidget := widgets.NewFooter(styles.AccentStyle, styles.MutedStyle)
-	nowPlayingWidget := widgets.NewNowPlaying(styles.ForegroundStyle, styles.AccentStyle, styles.MutedStyle, theme.Accent)
+	nowPlayingWidget := widgets.NewNowPlaying(styles.ForegroundStyle, styles.AccentStyle, styles.MutedStyle, theme.Accent, theme.Cursor, theme.Background)
 	playlistWidget := widgets.NewPlaylist(styles)
 
 	// Initialize modal widgets
@@ -207,6 +222,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme) *Model {
 		skipWarningModal: skipWarningModal,
 		viewport:         viewport,
 		help:             help,
+		cellRatio:        cellRatio,
 	}
 }
 
@@ -407,7 +423,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.config.ShowSkipWarning && !m.skipWarningShown {
 			m.skipWarningShown = true
 			m.activeModal = ModalSkipWarning
-			return m, nil
+			return m, clearKittyImagesCmd()
 		}
 		if m.currentSongIndex < len(m.songs)-1 {
 			if err := m.mpvBackend.SkipNext(); err == nil {
@@ -503,13 +519,13 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "o":
 		// Options modal
 		m.activeModal = ModalOptions
-		return m, nil
+		return m, clearKittyImagesCmd()
 
 	case "m":
 		// Manage favorites modal
 		m.favoritesModal = modals.NewFavorites(m.styles, m.cacheManager)
 		m.activeModal = ModalFavorites
-		return m, nil
+		return m, clearKittyImagesCmd()
 
 	case "$":
 		// Open RP donate page
@@ -551,8 +567,16 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // handleBlockFetched handles the block fetched message
 func (m Model) handleBlockFetched(msg blockFetchedMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
-		m.err = msg.err
-		m.statusMsg = fmt.Sprintf("Error: %v", msg.err)
+		if !m.initialized {
+			// Fatal on startup — can't play without a block
+			m.err = msg.err
+			m.statusMsg = fmt.Sprintf("Error: %v", msg.err)
+			return m, nil
+		}
+		// Already playing — log the error and keep polling for next block
+		logger.Printf("Block fetch error (retrying): %v", msg.err)
+		m.statusMsg = "Retrying next block..."
+		m.pollingNextBlock = true
 		return m, nil
 	}
 
@@ -616,6 +640,11 @@ func (m Model) handleProgressTick(msg progressTickMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// Check if we should auto-queue a favorite
+	if cmd := m.checkAndQueueFavorite(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+
 	// Update synced lyrics position if in that view
 	if m.bottomViewMode == ViewSyncedLyrics && len(m.syncedLyrics) > 0 {
 		m.updateBottomView()
@@ -673,8 +702,19 @@ func (m Model) handleImageLoaded(msg imageLoadedMsg) (tea.Model, tea.Cmd) {
 	// all 500x500 sources map to the same key and return stale pixel data.
 	termimg.ClearResizeCache()
 
+	// Calculate album art dimensions based on terminal cell ratio
+	// Space is height constrained: album art is to the right of now playing (~9 lines)
+	// and above the playlist (~starts at row 11). Available: ~8-9 rows.
+	// Use 16 rows to fit (with 2 row gap above playlist), width based on cell ratio.
+	// cellRatio = cellHeight / cellWidth (typical ~2.0, e.g., 7x14)
+	height := 16
+	width := int(float64(height) * m.cellRatio)
+	if width < 10 {
+		width = 10 // minimum width
+	}
+
 	tiImg := termimg.New(img).
-		Size(36, 18).
+		Size(width, height).
 		Scale(termimg.ScaleFit).
 		Protocol(termimg.Kitty)
 
@@ -886,6 +926,81 @@ func (m *Model) songChangedCmds() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// checkAndQueueFavorite checks if we should queue a favorite for auto-playback.
+// Called every progress tick (1s). Mirrors Python's _check_and_queue_favorite_if_needed.
+func (m *Model) checkAndQueueFavorite() tea.Cmd {
+	if !m.pollingNextBlock {
+		return nil
+	}
+	if m.favoriteCount < m.config.MinFavorites {
+		return nil
+	}
+	if !m.mpvBackend.IsRunning() {
+		return nil
+	}
+	if time.Since(m.lastFavoriteQueuedAt) < 30*time.Second {
+		return nil
+	}
+	if m.currentSong == nil || m.playbackPos.TimePos < 0 {
+		return nil
+	}
+
+	songDuration := float64(m.currentSong.Duration) / 1000.0
+	timeRemaining := songDuration - m.playbackPos.TimePos
+	if timeRemaining > 10 {
+		return nil
+	}
+
+	logger.Printf("About to stop (%.1fs remaining), queueing favorite", timeRemaining)
+	m.lastFavoriteQueuedAt = time.Now()
+	return m.queueNextFavorite()
+}
+
+// queueNextFavorite picks a random favorite and appends it to the MPV playlist.
+// Mirrors Python's _queue_next_favorite.
+func (m *Model) queueNextFavorite() tea.Cmd {
+	favorites, err := m.cacheManager.GetFavorites()
+	if err != nil || len(favorites) == 0 {
+		m.statusMsg = "No favorites available..."
+		return nil
+	}
+
+	// Refill shuffled queue if empty
+	if len(m.favoritesQueue) == 0 {
+		m.favoritesQueue = make([]cache.CachedSong, len(favorites))
+		copy(m.favoritesQueue, favorites)
+		rand.Shuffle(len(m.favoritesQueue), func(i, j int) {
+			m.favoritesQueue[i], m.favoritesQueue[j] = m.favoritesQueue[j], m.favoritesQueue[i]
+		})
+		logger.Printf("Shuffled favorites queue with %d songs", len(m.favoritesQueue))
+	}
+
+	// Pop first item
+	fav := m.favoritesQueue[0]
+	m.favoritesQueue = m.favoritesQueue[1:]
+
+	song := fav.ToSong()
+
+	// Append to MPV playlist
+	if err := m.mpvBackend.AppendToPlaylist([]string{song.GaplessURL}); err != nil {
+		logger.Printf("Failed to append favorite to playlist: %v", err)
+		m.statusMsg = fmt.Sprintf("Error queueing favorite: %v", err)
+		return nil
+	}
+
+	// Append to song list (don't change currentSongIndex — let natural
+	// transition detection in handleProgressTick pick it up when MPV
+	// actually starts playing the new track)
+	m.songs = append(m.songs, song)
+
+	m.statusMsg = fmt.Sprintf("★ Queued favorite: %s", song.Title)
+	logger.Printf("Appended favorite to playlist: %s", song.Title)
+
+	// Update playlist display to show the queued song
+	m.updatePlaylist()
+	return nil
+}
+
 // fetchLyricsCmd fetches lyrics for the current song
 func (m Model) fetchLyricsCmd() tea.Cmd {
 	if m.currentSong == nil {
@@ -997,6 +1112,52 @@ func (m Model) View() tea.View {
 		return altView("Loading...\n\nPress q to quit")
 	}
 
+	// If a modal is active, render it full-screen (like the Python app).
+	// This avoids z-order issues with Kitty album art graphics.
+	if m.activeModal != ModalNone {
+		var modalView string
+		switch m.activeModal {
+		case ModalOptions:
+			modalView = m.optionsModal.View()
+		case ModalSkipWarning:
+			modalView = m.skipWarningModal.View()
+		case ModalFavorites:
+			if m.favoritesModal != nil {
+				modalView = m.favoritesModal.View()
+			}
+		}
+
+		if modalView != "" {
+			// Kitty images are cleared via tea.Raw when the modal opens
+			// (see clearKittyImagesCmd). We don't embed the clear sequence
+			// in the view content because the cell-based renderer strips it.
+
+			// Center the modal vertically and horizontally
+			modalLines := strings.Split(modalView, "\n")
+			modalHeight := len(modalLines)
+			modalWidth := 0
+			for _, line := range modalLines {
+				if w := lipgloss.Width(line); w > modalWidth {
+					modalWidth = w
+				}
+			}
+
+			padTop := max(0, (m.height-modalHeight)/2)
+			padLeft := max(0, (m.width-modalWidth)/2)
+			leftPad := strings.Repeat(" ", padLeft)
+
+			var b strings.Builder
+			for i := 0; i < padTop; i++ {
+				b.WriteString("\n")
+			}
+			for _, line := range modalLines {
+				b.WriteString(leftPad + line + "\n")
+			}
+
+			return altView(b.String())
+		}
+	}
+
 	// 1. Header
 	header := m.headerWidget.View()
 
@@ -1058,7 +1219,14 @@ func (m Model) View() tea.View {
 	//    the new image has the same pixel dimensions as the previous one.
 	var artSuffix string
 	if m.config.ShowAlbumArt && m.albumArtLoaded && m.albumArtStr != "" {
-		artCol := m.width - 37
+		// Recalculate dimensions for positioning (same formula as in handleImageLoaded)
+		artHeight := 16
+		artWidth := int(float64(artHeight) * m.cellRatio)
+		if artWidth < 10 {
+			artWidth = 10
+		}
+		// Position with 2-cell right padding
+		artCol := m.width - artWidth - 2
 		if artCol < 1 {
 			artCol = 1
 		}
@@ -1066,115 +1234,7 @@ func (m Model) View() tea.View {
 		artSuffix = fmt.Sprintf("%s\x1b[s\x1b[2;%dH%s\x1b[u", clearStr, artCol, m.albumArtStr)
 	}
 
-	finalView := b.String() + artSuffix
-
-	// 5. Overlay Modal if active
-	if m.activeModal != ModalNone {
-		var modalView string
-		switch m.activeModal {
-		case ModalOptions:
-			modalView = m.optionsModal.View()
-		case ModalSkipWarning:
-			modalView = m.skipWarningModal.View()
-		case ModalFavorites:
-			if m.favoritesModal != nil {
-				modalView = m.favoritesModal.View()
-			}
-		}
-
-		if modalView != "" {
-			finalView = placeModal(m.width, m.height, finalView, modalView)
-		}
-	}
-
-	return altView(finalView)
-}
-
-func placeModal(width, height int, baseView, modalView string) string {
-	baseLines := strings.Split(baseView, "\n")
-	modalLines := strings.Split(modalView, "\n")
-
-	for len(baseLines) < height {
-		baseLines = append(baseLines, "")
-	}
-
-	modalHeight := len(modalLines)
-	modalWidth := 0
-	for _, line := range modalLines {
-		if w := lipgloss.Width(line); w > modalWidth {
-			modalWidth = w
-		}
-	}
-
-	startY := max(0, (height-modalHeight)/2)
-	startX := max(0, (width-modalWidth)/2)
-
-	for i, modalLine := range modalLines {
-		y := startY + i
-		if y >= len(baseLines) {
-			break
-		}
-
-		baseLine := baseLines[y]
-		baseWidth := lipgloss.Width(baseLine)
-
-		if baseWidth < startX {
-			baseLine += strings.Repeat(" ", startX-baseWidth)
-		}
-
-		var newLine strings.Builder
-		col := 0
-		inEscape := false
-		for _, r := range baseLine {
-			if r == '\x1b' {
-				inEscape = true
-			}
-			if inEscape {
-				newLine.WriteRune(r)
-				if r == 'm' {
-					inEscape = false
-				}
-				continue
-			}
-			if col >= startX {
-				break
-			}
-			newLine.WriteRune(r)
-			col++
-		}
-
-		newLine.WriteString(modalLine)
-
-		modalVisualWidth := lipgloss.Width(modalLine)
-		endX := startX + modalVisualWidth
-
-		col = 0
-		inEscape = false
-		var suffix strings.Builder
-		for _, r := range baseLine {
-			if r == '\x1b' {
-				inEscape = true
-				suffix.WriteRune(r)
-				continue
-			}
-			if inEscape {
-				suffix.WriteRune(r)
-				if r == 'm' {
-					inEscape = false
-				}
-				continue
-			}
-			col++
-			if col > endX {
-				suffix.WriteRune(r)
-			}
-		}
-
-		newLine.WriteString(suffix.String())
-		baseLines[y] = newLine.String()
-	}
-
-	return strings.Join(baseLines, "\n")
+	return altView(b.String() + artSuffix)
 }
 
 // getFavoriteCount returns the number of favorites

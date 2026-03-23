@@ -11,6 +11,21 @@ import (
 	"rptui-bubbletea/internal/models"
 )
 
+// darkenColor reduces the brightness of a hex color by the given factor (0.0-1.0)
+func darkenColor(hex string, factor float64) string {
+	if len(hex) != 7 || hex[0] != '#' {
+		return hex
+	}
+	var r, g, b int
+	fmt.Sscanf(hex[1:3], "%x", &r)
+	fmt.Sscanf(hex[3:5], "%x", &g)
+	fmt.Sscanf(hex[5:7], "%x", &b)
+	r = int(float64(r) * (1 - factor))
+	g = int(float64(g) * (1 - factor))
+	b = int(float64(b) * (1 - factor))
+	return fmt.Sprintf("#%02x%02x%02x", r, g, b)
+}
+
 // NowPlaying represents the current song info widget
 type NowPlaying struct {
 	foregroundStyle lipgloss.Style
@@ -23,12 +38,14 @@ type NowPlaying struct {
 }
 
 // NewNowPlaying creates a new NowPlaying widget
-func NewNowPlaying(fgStyle, accentStyle, mutedStyle lipgloss.Style, accentColor string) *NowPlaying {
+func NewNowPlaying(fgStyle, accentStyle, mutedStyle lipgloss.Style, accentColor, cursorColor, bgColor string) *NowPlaying {
 	p := progress.New(
 		progress.WithWidth(40),
-		progress.WithColors(lipgloss.Color(accentColor), lipgloss.Color("#333333")),
+		progress.WithColors(lipgloss.Color(cursorColor), lipgloss.Color(accentColor)), // gradient fill
 		progress.WithoutPercentage(),
+		progress.WithFillCharacters('', ''),
 	)
+	p.EmptyColor = lipgloss.Color(darkenColor(bgColor, 0.3)) // unfilled = background darkened 30%
 
 	return &NowPlaying{
 		foregroundStyle: fgStyle,
@@ -41,8 +58,8 @@ func NewNowPlaying(fgStyle, accentStyle, mutedStyle lipgloss.Style, accentColor 
 // SetWidth sets the width of the widget
 func (n *NowPlaying) SetWidth(width int) {
 	n.width = width
-	// Cap progress bar at 50 chars
-	progWidth := min(50, width-2)
+	// Cap progress bar at 40 chars
+	progWidth := min(40, width-2)
 	progWidth = max(20, progWidth)
 	n.progress.SetWidth(progWidth)
 }
@@ -75,8 +92,8 @@ func (n NowPlaying) View(
 		return " No song playing"
 	}
 
-	title := n.foregroundStyle.Bold(true).Render(song.Title)
-	artist := n.mutedStyle.Render(song.Artist)
+	title := n.accentStyle.Bold(true).Render(song.Title)
+	artist := n.foregroundStyle.Render(song.Artist)
 	album := n.mutedStyle.Render(fmt.Sprintf("%s (%s)", song.Album, song.Year))
 
 	progView := n.progress.View()
@@ -86,7 +103,7 @@ func (n NowPlaying) View(
 		percentPos = 0
 	}
 
-	timeStr := n.foregroundStyle.Render(fmt.Sprintf("%s / %s (%.0f%%)",
+	timeStr := n.mutedStyle.Render(fmt.Sprintf("%s / %s (%.0f%%)",
 		formatDuration(timePos),
 		formatDuration(song.GetDurationSeconds()),
 		percentPos))
@@ -106,20 +123,20 @@ func (n NowPlaying) View(
 	if prevAvailable > 0 {
 		prevStr = fmt.Sprintf("%d", prevAvailable)
 	}
-	navLine := n.mutedStyle.Render(fmt.Sprintf("Next: %s | Prev: %s | Favorites: %d",
+	navLine := n.foregroundStyle.Render(fmt.Sprintf("Next: %s | Prev: %s | Favorites: %d",
 		nextStr, prevStr, favoriteCount))
 
 	status := "Playing"
 	if isPaused {
-		status = n.accentStyle.Render("Paused")
+		status = n.mutedStyle.Render("Paused")
 	} else {
-		status = n.accentStyle.Render("Playing")
+		status = n.mutedStyle.Render("Playing")
 	}
 	statusLine := fmt.Sprintf("%s • %s", status, n.mutedStyle.Render(configInfo))
 
-	connectedLine := fmt.Sprintf("%s • %s", n.foregroundStyle.Render("Connected"), n.mutedStyle.Render(connectedTime.Format("15:04:05")))
+	connectedLine := n.mutedStyle.Render(fmt.Sprintf("Connected • %s", connectedTime.Format("15:04:05")))
 
-	return fmt.Sprintf(" %s\n %s\n %s\n\n %s\n\n %s\n\n %s\n\n %s\n\n %s\n\n %s\n",
+	return fmt.Sprintf(" %s\n %s\n %s\n\n %s\n %s\n\n %s\n\n %s\n\n %s\n\n %s\n\n",
 		title, artist, album, progView, timeStr, ratingStr, navLine, statusLine, connectedLine)
 }
 
