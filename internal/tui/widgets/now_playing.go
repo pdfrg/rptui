@@ -138,8 +138,10 @@ func (n NowPlaying) View(
 	if prevAvailable > 0 {
 		prevStr = fmt.Sprintf("%d", prevAvailable)
 	}
-	navLine := n.foregroundStyle.Render(fmt.Sprintf("Next: %s | Prev: %s | Favorites: %d",
-		nextStr, prevStr, favoriteCount))
+	navLine := fmt.Sprintf("%s %s  %s %s  ⭐ %s",
+		n.mutedStyle.Render("󰒮"), n.foregroundStyle.Render(prevStr),
+		n.mutedStyle.Render("󰒭"), n.foregroundStyle.Render(nextStr),
+		n.foregroundStyle.Render(fmt.Sprintf("%d", favoriteCount)))
 
 	status := "Playing"
 	if isPaused {
@@ -147,7 +149,7 @@ func (n NowPlaying) View(
 	} else {
 		status = n.mutedStyle.Render("Playing")
 	}
-	statusLine := fmt.Sprintf("%s • %s", status, n.mutedStyle.Render(configInfo))
+	statusLine := fmt.Sprintf("%s %s %s", status, n.mutedStyle.Render("•"), n.mutedStyle.Render(configInfo))
 
 	connectedLine := n.mutedStyle.Render(fmt.Sprintf("Connected • %s", connectedTime.Format("15:04:05")))
 

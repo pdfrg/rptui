@@ -36,8 +36,10 @@ type CachedSong struct {
 	Year       string `json:"year"`
 	Duration   int64  `json:"duration"`
 	GaplessURL string `json:"gapless_url"`
-	CoverLarge string `json:"cover_large"`
-	AddedAt    int64  `json:"added_at"` // Unix timestamp
+	CoverLarge     string `json:"cover_large"`
+	Rating         string `json:"rating"`
+	ListenerRating string `json:"listener_rating"`
+	AddedAt        int64  `json:"added_at"` // Unix timestamp
 }
 
 // UnmarshalJSON implements custom JSON unmarshaling to handle string event_id
@@ -163,15 +165,17 @@ func (c *CacheManager) AddFavorite(song *models.Song) error {
 
 	// Save favorite
 	cached := CachedSong{
-		EventID:    song.EventID,
-		Title:      song.Title,
-		Artist:     song.Artist,
-		Album:      song.Album,
-		Year:       song.Year,
-		Duration:   song.Duration,
-		GaplessURL: song.GaplessURL,
-		CoverLarge: song.CoverLarge,
-		AddedAt:    time.Now().Unix(),
+		EventID:        song.EventID,
+		Title:          song.Title,
+		Artist:         song.Artist,
+		Album:          song.Album,
+		Year:           song.Year,
+		Duration:       song.Duration,
+		GaplessURL:     song.GaplessURL,
+		CoverLarge:     song.CoverLarge,
+		Rating:         song.Rating,
+		ListenerRating: song.ListenerRating,
+		AddedAt:        time.Now().Unix(),
 	}
 
 	data, err := json.MarshalIndent(cached, "", "  ")
@@ -226,15 +230,17 @@ func (c *CacheManager) AddBlocklist(song *models.Song) error {
 	}
 
 	cached := CachedSong{
-		EventID:    song.EventID,
-		Title:      song.Title,
-		Artist:     song.Artist,
-		Album:      song.Album,
-		Year:       song.Year,
-		Duration:   song.Duration,
-		GaplessURL: song.GaplessURL,
-		CoverLarge: song.CoverLarge,
-		AddedAt:    time.Now().Unix(),
+		EventID:        song.EventID,
+		Title:          song.Title,
+		Artist:         song.Artist,
+		Album:          song.Album,
+		Year:           song.Year,
+		Duration:       song.Duration,
+		GaplessURL:     song.GaplessURL,
+		CoverLarge:     song.CoverLarge,
+		Rating:         song.Rating,
+		ListenerRating: song.ListenerRating,
+		AddedAt:        time.Now().Unix(),
 	}
 
 	data, err := json.MarshalIndent(cached, "", "  ")
@@ -415,13 +421,15 @@ func (c *CacheManager) CleanupOldFavorites() error {
 // ToSong converts a CachedSong to a models.Song
 func (cs *CachedSong) ToSong() *models.Song {
 	return &models.Song{
-		Title:      cs.Title,
-		Artist:     cs.Artist,
-		Album:      cs.Album,
-		Year:       cs.Year,
-		Duration:   cs.Duration,
-		EventID:    cs.EventID,
-		GaplessURL: cs.GaplessURL,
-		CoverLarge: cs.CoverLarge,
+		Title:          cs.Title,
+		Artist:         cs.Artist,
+		Album:          cs.Album,
+		Year:           cs.Year,
+		Duration:       cs.Duration,
+		EventID:        cs.EventID,
+		GaplessURL:     cs.GaplessURL,
+		CoverLarge:     cs.CoverLarge,
+		Rating:         cs.Rating,
+		ListenerRating: cs.ListenerRating,
 	}
 }

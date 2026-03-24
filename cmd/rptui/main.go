@@ -33,4 +33,9 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error running program: %v\n", err)
 		os.Exit(1)
 	}
+
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Radio Paradise is commercial-free and relies on listener donations.")
+	fmt.Fprintln(os.Stderr, "Please consider supporting RP by visiting their website:")
+	fmt.Fprintln(os.Stderr, "https://radioparadise.com/donate")
 }

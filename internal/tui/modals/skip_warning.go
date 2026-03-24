@@ -3,7 +3,6 @@ package modals
 
 import (
 	"fmt"
-	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -18,8 +17,6 @@ type SkipWarningMsg struct {
 // SkipWarning modal for confirming song skip
 type SkipWarning struct {
 	styles       *config.ThemeStyles
-	width        int
-	height       int
 	minFavorites int
 }
 
@@ -29,12 +26,6 @@ func NewSkipWarning(styles *config.ThemeStyles, minFavorites int) *SkipWarning {
 		styles:       styles,
 		minFavorites: minFavorites,
 	}
-}
-
-// SetSize sets the dimensions
-func (s *SkipWarning) SetSize(width, height int) {
-	s.width = width
-	s.height = height
 }
 
 // Update handles messages
@@ -53,39 +44,50 @@ func (s *SkipWarning) Update(msg tea.Msg) tea.Cmd {
 
 // View renders the modal
 func (s SkipWarning) View() string {
-	modalWidth := 50
-	modalHeight := 10
+	modalWidth := 60
+	contentWidth := modalWidth - 6
 
-	var b strings.Builder
-	b.WriteString("\n")
-	b.WriteString(centerText("SKIP SONG?", modalWidth))
-	b.WriteString("\n\n")
-	b.WriteString(centerText("Skipping ahead of the live stream can result", modalWidth))
-	b.WriteString("\n")
-	b.WriteString(centerText("in an interruption of playback when the", modalWidth))
-	b.WriteString("\n")
-	b.WriteString(centerText("playlist end is reached.", modalWidth))
-	b.WriteString("\n\n")
-	b.WriteString(centerText(fmt.Sprintf("Save at least %d favorites to enable", s.minFavorites), modalWidth))
-	b.WriteString("\n")
-	b.WriteString(centerText("favorite mode for continuous playback.", modalWidth))
-	b.WriteString("\n\n")
-	b.WriteString(centerText("[y] Yes   [n] No", modalWidth))
+	accentStyle := s.styles.AccentStyle
+	mutedStyle := s.styles.MutedStyle
+
+	warningStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("208")).
+		Bold(true)
+
+	var lines []string
+
+	// Title
+	lines = append(lines, centerStyled(warningStyle.Render("SKIP SONG?"), contentWidth))
+	lines = append(lines, "")
+
+	// Body text
+	lines = append(lines, centerStyled(mutedStyle.Render("Skipping ahead of the live stream can result"), contentWidth))
+	lines = append(lines, centerStyled(mutedStyle.Render("in an interruption of playback when the"), contentWidth))
+	lines = append(lines, centerStyled(mutedStyle.Render("playlist end is reached."), contentWidth))
+	lines = append(lines, "")
+	lines = append(lines, centerStyled(mutedStyle.Render(fmt.Sprintf("Save at least %d favorites (press ", s.minFavorites))+
+		accentStyle.Render("f")+mutedStyle.Render(") to enable"), contentWidth))
+	lines = append(lines, centerStyled(mutedStyle.Render("favorite mode for continuous playback."), contentWidth))
+	lines = append(lines, "")
+
+	// Confirm/cancel
+	helpText := accentStyle.Render("y") + mutedStyle.Render(" skip  ") +
+		accentStyle.Render("n") + mutedStyle.Render(" cancel")
+	lines = append(lines, centerStyled(helpText, contentWidth))
+
+	content := ""
+	for i, line := range lines {
+		content += line
+		if i < len(lines)-1 {
+			content += "\n"
+		}
+	}
 
 	modalStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color(s.styles.Accent)).
 		Padding(1, 2).
-		Width(modalWidth).
-		Height(modalHeight)
+		Width(modalWidth)
 
-	return modalStyle.Render(b.String())
-}
-
-func centerText(text string, width int) string {
-	if len(text) >= width {
-		return text
-	}
-	padding := (width - len(text)) / 2
-	return strings.Repeat(" ", padding) + text
+	return modalStyle.Render(content)
 }

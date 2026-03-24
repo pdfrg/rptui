@@ -146,6 +146,14 @@ func (m *MPVBackend) Start(urls []string) error {
 	m.isPaused = false
 	m.pauseStartTime = time.Time{}
 
+	// Reap the process in background so ProcessState is populated
+	// when MPV exits naturally (end of playlist). Without this,
+	// IsRunning() returns true forever after natural exit.
+	go func() {
+		m.process.Wait()
+		logger.Printf("MPV process exited naturally")
+	}()
+
 	// Wait a moment for socket to be created
 	time.Sleep(200 * time.Millisecond)
 
@@ -312,6 +320,24 @@ func (m *MPVBackend) SkipPrev() error {
 
 	cmd := IPCCommand{
 		Command: []any{"playlist-prev"},
+	}
+
+	_, err := m.sendIPCCommandLocked(cmd)
+	return err
+}
+
+// SeekRelative seeks relative to current position by delta seconds.
+// Positive = forward, negative = backward.
+func (m *MPVBackend) SeekRelative(deltaSeconds float64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.process == nil {
+		return fmt.Errorf("MPV not running")
+	}
+
+	cmd := IPCCommand{
+		Command: []any{"seek", deltaSeconds, "relative"},
 	}
 
 	_, err := m.sendIPCCommandLocked(cmd)

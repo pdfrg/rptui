@@ -11,7 +11,6 @@ Initially ported to GO using tview framework.  All core UI elements working,
 except image support.  Abandoned tview framework.  Now redoing port with bubbletea.
 Python app functionality tested and working.  Much of Go code from tview repo
 copied directly to this repo.  Much of other code should be easily adapted.
-Initial implementation with bubbletea very basic.  Images not yet displaying.
 
 **Source Repository:** `/home/mds/Projects/rptui/` (Python, read-only reference)
 **Source Repository:** `/home/mds/Projects/rptui-go/` (Go, tview framerwork, no image support)  
@@ -26,16 +25,20 @@ https://pkg.go.dev/charm.land/lipgloss/v2
 https://pkg.go.dev/charm.land/bubbles/v2
 https://pkg.go.dev/github.com/blacktop/go-termimg
 
+## If documentation is not clear, packages not behaving as expected, or any difficult bugs
+
+Read source files directly at ~/go/pkg/mod/ to understand behavior!
+
 ---
 
 ## Development Workflow
 
 ### Git Commits
 
-- **Commit frequently** when significant features are completed AND manually tested
+- **Commit frequently** when significant features are completed AND manually tested.
+  READ THAT AGAIN:  ONLY WHEN MANUALLY TESTED AND CONFIRMED WORKING!!!
 - **Commit message format:** `feat: description` or `fix: description` or `refactor: description`
-- **Test before commit:** All committed code should be manually tested and working
-- **Small commits:** Prefer multiple small, focused commits over large monolithic ones
+
 
 ### Python Code Reference
 
@@ -236,10 +239,11 @@ Priority order:
 | Key | Action |
 |-----|--------|
 | `Space` | Play/Pause |
-| `s` | Stop |
 | `n` | Skip next |
 | `r` | Restart song |
 | `p` | Previous song |
+| `Left` | Seek backward 10 seconds |
+| `Right` | Seek forward 10 seconds |
 | `o` | Options modal |
 | `v` | Toggle bottom view (playlist → lyrics → synced lyrics → artist → off) |
 | `f` | Add/remove favorite |
@@ -319,39 +323,6 @@ require (
 - Favorites: Copy `~/.cache/rptui/favorites/` → `$XDG_CACHE_HOME/rptui/favorites/`
 - Blocklist: Copy `~/.cache/rptui/blocklist/` → `$XDG_CACHE_HOME/rptui/blocklist/`
 
-### Feature Parity Checklist
-
-- [ ] Block-based playback with gapless URLs
-- [ ] Time-based metadata sync
-- [ ] Full block playlist
-- [ ] Gapless playback via MPV
-- [ ] Progress display with progress bar
-- [ ] Average user rating display
-- [ ] MPRIS metadata (via mpv-mpris)
-- [ ] Smart polling (5s intervals)
-- [ ] Pause handling with 5-min timeout
-- [ ] Skip song functionality
-- [ ] Restart song functionality
-- [ ] Previous song functionality
-- [ ] Station selection
-- [ ] Bitrate selection
-- [ ] Show/hide album art toggle
-- [ ] Copy album art to file
-- [ ] Config persistence
-- [ ] Playlist display with columns
-- [ ] Playlist navigation
-- [ ] 5-way bottom view toggle
-- [ ] Natural song transitions
-- [ ] Lyrics display (plain + synced)
-- [ ] Artist info view (Wikipedia)
-- [ ] Favorites feature
-- [ ] Auto-playback from favorites
-- [ ] Star indicator for favorited songs
-- [ ] Skip warning modal
-- [ ] Support RP donate page
-- [ ] Theme support (Omarchy colors)
-- [ ] Blocklist feature (hotkey `b`)
-
 ---
 
 ## Contact/Questions
@@ -363,37 +334,7 @@ If uncertain about implementation details:
 
 ---
 
-## Status of tview Go project
+## Known bugs/Roadmap
 
-2026-03-15 - Phase 2 Complete: Core TUI fully functional with proper styling
-
-### Phase 2 Completed Features
-
-- ✅ Main TUI application with tview
-- ✅ Custom ProgressBar widget (thin, black background, accent fill)
-- ✅ Main layout matching Python app (header, now-playing info, album art, playlist, footer)
-- ✅ Now-playing info with proper spacing and colors
-- ✅ Playlist table with proper column widths and styling
-- ✅ Currently playing song highlighted in cursor color
-- ✅ Previously played and upcoming songs in foreground color
-- ✅ Progress bar updates every second
-- ✅ Time display updates every second
-- ✅ Connected time updates every 5 seconds
-- ✅ Natural song transition detection
-- ✅ Keyboard shortcuts (Space, n, p, r, v, f, b, $, o, q)
-- ✅ Footer with accent-colored keybindings
-- ✅ Theme support (Omarchy colors with fallback)
-- ✅ Favorites integration (reads Python metadata.json)
-- ✅ MPV backend with proper cleanup
-
-### Phase 3 
-
-- ✅ Options modal (station/bitrate selection, toggles)
-- ✅ Skip warning modal
-- [ ] Manage favorites modal
-- ✅ Lyrics display (plain + synced)
-- ✅ Artist info view (Wikipedia integration) (except artist image)
-- [ ] Album art display (kitty/sixel protocols)
-- [ ] Background polling for next block
-- [ ] Blocklist functionality
-- [ ] Auto-skip blocklisted songs
+user generated text file: fixes.txt
+OK to edit to keep up to date

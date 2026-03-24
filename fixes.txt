@@ -30,9 +30,9 @@ harmonize theming with python app
 	playlist
 		[X] column headers currently foreground text, normal background
 		[X] python uses different background (muted?) shown full terminal width, creating a "bar" effect
-			also uses white text, though we don't have to use white
-		python uses accent color for currently playing, we use cursor
-			here, I prefer cursor color, keep
+				also uses white text, though we don't have to use white
+		[X] python uses accent color for currently playing, we use cursor
+				here, I prefer cursor color, keep
 	footer(keybinds)
 		[X] missing "m Manage" and "$ Support RP"
 		[X] need to remove space below footer (looks like 1 extra line)
@@ -59,23 +59,65 @@ modals
 
 alternate views
 	all
-		no scrollabar visible, though text is actually scrollable
-		lrclib and wikipedia api processing needs further testing/improving
+		[X] no scrollabar visible, though text is actually scrollable (not possible with bubbles viewport)
 	synced lyrics
-		currently the active lyric is just indicated with an arrow
-		python uses different color, prefer "cursor" color
+		[X] currently the active lyric is just indicated with an arrow
+		[X] python uses different color, prefer "cursor" color
 	artist info
-		currently we have the first line as the artist name surrounded by 3 line runes
-			not needed, just remove that line
-		the summary doesn't word wrap, most text is not seen
-		example discography parsing issue
+		[X] currently we have the first line as the artist name surrounded by 3 line runes
+		[X]		not needed, just remove that line
+		[X] the summary doesn't word wrap, most text is not seen
+
+add artist thumnail to artist info view
+	will need to be scrollable
+	will also need to clear when we open modals or toggle views
+	if scrolling not possible, could just fallback to "press <key> to view artist image(s)"
+		then open modal with artist thumb and possibly other images from wikipedia page
+		go-termimg has a gallery feature
+
+[X] allow seek forward/backward by 5 or 10 seconds, or 1 minute
+		maybe use arrow hotkeys like mpv does
+		left/right for small seek, up/down for larger (up/down is for scrolling alt views)
+
+[X] allow to change station directly from main UI
+		maybe use number hotkeys?
+
+live theme reloads
+	detect changes in Omarchy theme (and maybe custom theme?)
+
+[X] status stopped handling
+		maybe better just to remove stop function anyway
+
+[X] station change handling
+
+lrclib and wikipedia api processing needs further testing/improving
+	example discography parsing issue
 			artist "The The"
 				correctly shows all albums from 1981 to 2016
 				but then returns last line as "^ Roberts, David (2006)"
 
-end of playlist before API returns new block
-	not enough favorites -- tested
-	or possibly played all favorites -- not tested
-	no update to status, app just appears to hang
-		should say "Ahead of livestream.  Awaiting new songs..." and then keep updating the time so user sees activity.
-			or perhaps show an animation ("bubbles" spinner, or .|..|...)?
+implement command line switches (override config file)
+	size small (no album art, no playlist -- like toggle "v" to off) -s s or -s small
+	size medium (no playlist) -s m or -s medium
+	size large (default, show all) -s l or -s large
+	if run from launcher, can we open terminal of just that size?
+	if run from within terminal, no resize
+
+	favorites "jukebox" mode -- queue all faves random and play, at end repeat all
+		--jukebox or -j
+		no API queries
+		jukebox_min_faves = 50 (setting in config file, not editable from app)
+		also add "j" hotkey for "Juke"
+			clears playlist, enters jukebox mode just like from command line
+		need to decide how to handle playlist
+			add all to playlist, but would then have to scroll
+			add a given number of songs, then when near end, add more, prune as needed, similar to normal mode
+		would need to show status jukebox or similar. is there a jukebox emoji?
+
+[X] print exit message
+		Radio Paradise is commercial-free and relies on listener donations.
+		Please consider supporting RP by visiting their website.
+		<link> (same as in $ Support RP hotkey)
+
+comments in config file describing options/settings
+

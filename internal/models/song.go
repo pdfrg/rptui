@@ -24,6 +24,8 @@ type Song struct {
 	GaplessURL     string  `json:"gapless_url"`
 	URL            string  `json:"url"`
 	IsCurrent      bool    `json:"is_current"`
+	IsFromFavorite bool    `json:"-"` // true if queued from favorites (not from API)
+	BlockID        int64   `json:"-"` // which block this song belongs to
 }
 
 // NewSong creates a new Song from API data
