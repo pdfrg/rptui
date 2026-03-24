@@ -1,6 +1,6 @@
 # RadioParadise Bubbletea TUI - Implementation Status
 
-**Last Updated:** 2026-03-20  
+**Last Updated:** 2026-03-22  
 **Framework:** bubbletea v2 / lipgloss v2 / bubbles v2
 
 ---
@@ -54,11 +54,15 @@ blocklist, and progress tracking are working.
 
 ### Data Features
 - [x] Favorites (add/remove, star indicator, Python metadata.json compat)
+- [x] Favorites modal (list, delete, play from favorites — `m` key)
+- [x] Auto-playback from favorites (queues random favorite when near end of block)
 - [x] Blocklist (add/remove, indicator)
 - [x] Auto-skip blocklisted songs on natural transition
 - [x] Lyrics display (plain text via LRCLib)
 - [x] Synced lyrics display (time-synced, highlighted current line)
 - [x] Artist info (Wikipedia summary + discography)
+- [x] Copy album art to file (config: `copy_album_art` / `album_art_path`)
+- [x] Open RP donate page (`$` key via `xdg-open`)
 
 ### Playback Engine
 - [x] 1-second progress tick (tea.Tick, always re-armed)
@@ -66,6 +70,10 @@ blocklist, and progress tracking are working.
 - [x] Natural song transition detection (MPV playlist position)
 - [x] Next-block polling when on last song of block
 - [x] Playback position cached in model (no IPC in View)
+- [x] Error recovery (retry block fetch on network error, don't crash mid-session)
+
+### UI
+- [x] Full-screen modals (Options, Skip Warning, Favorites render as full screen, clearing album art)
 
 ### v2 Framework Compliance
 - [x] `View()` returns `tea.View` with `.AltScreen = true`
@@ -84,20 +92,13 @@ blocklist, and progress tracking are working.
 - [ ] Album art display — image decoding works now (jpeg/png registered), but
       rendering via go-termimg/sixel needs testing in kitty/sixel-capable terminal
 - [ ] Album art — try Kitty protocol first, fall back to Sixel
-- [ ] Copy album art to file (config: `copy_album_art` / `album_art_path`)
 
 ### Medium Priority
-- [ ] Manage favorites modal (list, delete, play from favorites)
-- [ ] Auto-playback from favorites (when no block available)
-- [ ] Pause handling with 5-minute timeout (Python has this)
-- [ ] Open RP donate page (`$` key — needs `xdg-open` integration)
 - [ ] MPRIS metadata (via mpv-mpris plugin, should work automatically)
-- [ ] Modal overlay — current `placeModal()` replaces base view instead of overlaying
 
 ### Low Priority
 - [ ] Background color adaptive styling (use `isDark` from BackgroundColorMsg)
-- [ ] Responsive layout (adapt now-playing/art widths to terminal size)
-- [ ] Error recovery (retry block fetch on network error)
+- [ ] Responsive layout (adapt playlist column widths to terminal size)
 - [ ] Logging to file (structured, with log levels)
 - [ ] Unit tests (API clients, config, cache)
 

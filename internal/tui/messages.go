@@ -16,6 +16,7 @@ import (
 type blockFetchedMsg struct {
 	songs     []*models.Song
 	imageBase string
+	blockID   int // for detecting new vs cached response
 	err       error
 }
 
@@ -48,6 +49,14 @@ type imageLoadedMsg struct {
 }
 
 // Command functions
+
+// clearKittyImagesCmd sends the Kitty graphics clear escape sequence directly
+// to the terminal via tea.Raw, bypassing the cell-based renderer. This is
+// needed because APC sequences embedded in View() content get consumed by the
+// cell buffer and don't reliably reach the terminal.
+func clearKittyImagesCmd() tea.Cmd {
+	return tea.Raw("\x1b_Ga=d,d=A\x1b\\")
+}
 
 // tickProgressCmd returns a command that sends progressTickMsg every second
 func tickProgressCmd() tea.Cmd {

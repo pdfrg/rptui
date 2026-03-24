@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/table"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
@@ -107,6 +108,7 @@ type Model struct {
 
 	// Next block polling
 	pollingNextBlock bool
+	lastBlockID      int // track last block ID to detect new vs cached response
 
 	// Auto-favorite playback
 	favoritesQueue       []cache.CachedSong
@@ -157,6 +159,9 @@ type Model struct {
 	// Help
 	help help.Model
 
+	// Spinner for "awaiting new songs" animation
+	spinner spinner.Model
+
 	// Terminal cell ratio for album art aspect ratio correction
 	cellRatio float64
 }
@@ -193,7 +198,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme) *Model {
 	playlistWidget := widgets.NewPlaylist(styles)
 
 	// Initialize modal widgets
-	optionsModal := modals.NewOptions(styles, cfg.Channel, cfg.Bitrate)
+	optionsModal := modals.NewOptions(styles, cfg.Channel, cfg.Bitrate, cfg.ShowAlbumArt, cfg.ShowSkipWarning, cfg.CopyAlbumArt)
 	skipWarningModal := modals.NewSkipWarning(styles, cfg.MinFavorites)
 
 	// Initialize viewport for bottom views
@@ -205,6 +210,11 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme) *Model {
 
 	// Initialize help
 	help := help.New()
+
+	// Initialize spinner
+	sp := spinner.New()
+	sp.Spinner = spinner.Points
+	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Accent))
 
 	return &Model{
 		config:           cfg,
@@ -224,6 +234,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme) *Model {
 		skipWarningModal: skipWarningModal,
 		viewport:         viewport,
 		help:             help,
+		spinner:          sp,
 		cellRatio:        cellRatio,
 	}
 }
@@ -238,34 +249,33 @@ func (m Model) Init() tea.Cmd {
 	)
 }
 
-// fetchBlockCmd fetches the initial block from the API
+// fetchBlockCmd fetches a block from the API.
+// Returns data only — handleBlockFetched decides whether to start/append MPV.
 func (m Model) fetchBlockCmd() tea.Msg {
 	block, err := m.rpAPI.GetBlock(context.Background())
 	if err != nil {
 		return blockFetchedMsg{err: fmt.Errorf("GetBlock error: %w", err)}
 	}
 
-	// Parse songs
 	songs, imageBase := m.rpAPI.ParseBlockSongs(block)
 	if len(songs) == 0 {
 		return blockFetchedMsg{err: fmt.Errorf("no songs in block")}
 	}
 
-	// Build playlist URLs
-	urls := make([]string, len(songs))
-	for i, song := range songs {
-		urls[i] = song.GaplessURL
+	blockID := 0
+	if block.BlockID != "" {
+		fmt.Sscanf(block.BlockID, "%d", &blockID)
 	}
 
-	// Start MPV
-	if err := m.mpvBackend.Start(urls); err != nil {
-		return blockFetchedMsg{songs: songs, imageBase: imageBase, err: fmt.Errorf("MPV error: %w", err)}
+	// Stamp each song with its block ID for pruning decisions
+	for i := range songs {
+		songs[i].BlockID = int64(blockID)
 	}
 
 	return blockFetchedMsg{
 		songs:     songs,
 		imageBase: imageBase,
-		err:       nil,
+		blockID:   blockID,
 	}
 }
 
@@ -281,6 +291,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Always update playlist (handles table scrolling)
 	if cmd := m.playlistWidget.Update(msg); cmd != nil {
 		cmds = append(cmds, cmd)
+	}
+
+	// Always update spinner (for animation)
+	var spinnerCmd tea.Cmd
+	m.spinner, spinnerCmd = m.spinner.Update(msg)
+	if spinnerCmd != nil {
+		cmds = append(cmds, spinnerCmd)
 	}
 
 	// Local helper to handle return values
@@ -306,7 +323,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.nowPlayingWidget.SetWidth(40)
 
 		contentWidth := max(20, msg.Width-4)
-		contentHeight := max(5, msg.Height-14)
+		contentHeight := max(5, msg.Height-15)
 
 		m.viewport.SetWidth(contentWidth)
 		m.viewport.SetHeight(contentHeight)
@@ -334,19 +351,58 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case modals.OptionsMsg:
 		m.activeModal = ModalNone
+		if msg.Closed {
+			return handle(m, nil)
+		}
+
+		// Apply toggle config changes (these don't require restart)
+		if msg.ShowAlbumArt != nil {
+			m.config.ShowAlbumArt = *msg.ShowAlbumArt
+		}
+		if msg.ShowSkipWarn != nil {
+			m.config.ShowSkipWarning = *msg.ShowSkipWarn
+		}
+		if msg.CopyAlbumArt != nil {
+			m.config.CopyAlbumArt = *msg.CopyAlbumArt
+		}
+
+		needsRestart := msg.Station != nil || msg.Bitrate != nil
+
+		// Apply station/bitrate changes
 		if msg.Station != nil {
 			m.config.Channel = *msg.Station
-			m.config.Save()
 			m.rpAPI.SetChannel(*msg.Station)
-			return handle(m, m.fetchBlockCmd)
 		}
 		if msg.Bitrate != nil {
 			m.config.Bitrate = *msg.Bitrate
-			m.config.Save()
 			m.rpAPI.SetBitrate(*msg.Bitrate)
-			return handle(m, m.fetchBlockCmd)
 		}
-		return handle(m, nil)
+		m.config.Save()
+
+		if !needsRestart {
+			return handle(m, nil)
+		}
+
+		// Full restart: stop MPV, clear state, re-fetch fresh block
+		m.mpvBackend.Stop()
+		m.songs = nil
+		m.currentSongIndex = 0
+		m.playlistStartIdx = 0
+		m.currentSong = nil
+		m.isPlaying = false
+		m.isPaused = false
+		m.pollingNextBlock = false
+		m.lastBlockID = 0
+		m.lyrics = ""
+		m.syncedLyrics = nil
+		m.artistInfo = nil
+		m.albumArtLoaded = false
+		m.albumArtStr = ""
+		m.initialized = false
+		m.connectedAt = time.Time{}
+		m.statusMsg = "Restarting..."
+
+		return handle(m, m.fetchBlockCmd)
 
 	case modals.SkipWarningMsg:
 		m.activeModal = ModalNone
@@ -366,6 +422,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			fav, err := m.cacheManager.GetFavoriteByEventID(*msg.PlayEventID)
 			if err == nil && fav != nil {
 				song := fav.ToSong()
+				song.IsFromFavorite = true
 				m.songs = []*models.Song{song}
 				m.currentSongIndex = 0
 				m.playlistStartIdx = 0
@@ -459,12 +516,36 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case "s":
-		// Stop
-		if err := m.mpvBackend.Stop(); err == nil {
-			m.isPlaying = false
-			m.isPaused = false
-			m.statusMsg = "Stopped"
+	case "left", "right":
+		// Seek: left=-10s, right=+10s
+		if m.currentSong == nil || !m.isPlaying || m.isPaused {
+			return m, nil
+		}
+		var delta float64
+		if msg.String() == "left" {
+			delta = -10
+		} else {
+			delta = 10
+		}
+		if delta > 0 {
+			remaining := m.currentSong.GetDurationSeconds() - m.playbackPos.TimePos
+			maxDelta := remaining - 0.5
+			if maxDelta < 0 {
+				maxDelta = 0
+			}
+			if delta > maxDelta {
+				delta = maxDelta
+			}
+		}
+		if delta == 0 {
+			return m, nil
+		}
+		if err := m.mpvBackend.SeekRelative(delta); err == nil {
+			if delta > 0 {
+				m.statusMsg = fmt.Sprintf("Seek +%ds", int(delta))
+			} else {
+				m.statusMsg = fmt.Sprintf("Seek %ds", int(delta))
+			}
 		}
 		return m, nil
 
@@ -518,8 +599,14 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case "0", "1", "2", "3", "5":
+		// Station hotkeys
+		station := int(msg.String()[0] - '0')
+		return m.switchStation(station)
+
 	case "o":
 		// Options modal
+		m.optionsModal = modals.NewOptions(m.styles, m.config.Channel, m.config.Bitrate, m.config.ShowAlbumArt, m.config.ShowSkipWarning, m.config.CopyAlbumArt)
 		m.activeModal = ModalOptions
 		return m, clearKittyImagesCmd()
 
@@ -536,16 +623,12 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case "up", "k":
 		// Scroll up in viewport
-		if m.bottomViewMode != ViewPlaylist {
-			m.viewport.ScrollUp(1)
-		}
+		m.viewport.ScrollUp(1)
 		return m, nil
 
 	case "down", "j":
 		// Scroll down in viewport
-		if m.bottomViewMode != ViewPlaylist {
-			m.viewport.ScrollDown(1)
-		}
+		m.viewport.ScrollDown(1)
 		return m, nil
 
 	case "g":
@@ -566,6 +649,43 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// switchStation changes the station and restarts playback
+func (m Model) switchStation(channel int) (tea.Model, tea.Cmd) {
+	if channel == m.config.Channel {
+		return m, nil
+	}
+
+	stationName := config.StationNames[channel]
+	if stationName == "" {
+		return m, nil
+	}
+
+	m.config.Channel = channel
+	m.rpAPI.SetChannel(channel)
+	m.config.Save()
+
+	// Full restart: stop MPV, clear state, re-fetch fresh block
+	m.mpvBackend.Stop()
+	m.songs = nil
+	m.currentSongIndex = 0
+	m.playlistStartIdx = 0
+	m.currentSong = nil
+	m.isPlaying = false
+	m.isPaused = false
+	m.pollingNextBlock = false
+	m.lastBlockID = 0
+	m.lyrics = ""
+	m.syncedLyrics = nil
+	m.artistInfo = nil
+	m.albumArtLoaded = false
+	m.albumArtStr = ""
+	m.initialized = false
+	m.connectedAt = time.Time{}
+	m.statusMsg = fmt.Sprintf("Switching to %s...", stationName)
+
+	return m, m.fetchBlockCmd
+}
+
 // handleBlockFetched handles the block fetched message
 func (m Model) handleBlockFetched(msg blockFetchedMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
@@ -582,21 +702,123 @@ func (m Model) handleBlockFetched(msg blockFetchedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	m.songs = msg.songs
-	m.imageBase = msg.imageBase
-	m.currentSongIndex = 0
-	m.isPlaying = true
-	m.pollingNextBlock = false
-
-	// Set connected time on first init
-	if !m.initialized {
-		m.connectedAt = time.Now()
+	// Check for promo block (blockID == 0) — skip in all cases
+	if msg.blockID == 0 {
+		logger.Printf("Skipping promo block (blockID=0)")
+		if !m.initialized {
+			m.statusMsg = "Waiting for stream..."
+		}
+		return m, m.fetchBlockCmd
 	}
 
+	// If already initialized, we're appending to existing playlist
+	if m.initialized {
+		// Check for cached response (block ID decreased)
+		if msg.blockID > 0 && msg.blockID < m.lastBlockID {
+			logger.Printf("Block ID decreased (%d -> %d), likely cached response, skipping", m.lastBlockID, msg.blockID)
+			return m, nil
+		}
+
+		// Update last block ID
+		if msg.blockID > 0 {
+			m.lastBlockID = msg.blockID
+		}
+
+		// Check if last API song (skip favorites) is still in response
+		// Python walks backward to find last non-favorite song's event ID
+		if len(m.songs) > 0 {
+			var lastAPIEventID int64
+			for i := len(m.songs) - 1; i >= 0; i-- {
+				if !m.songs[i].IsFromFavorite {
+					lastAPIEventID = m.songs[i].EventID
+					break
+				}
+			}
+
+			if lastAPIEventID > 0 {
+				for _, song := range msg.songs {
+					if song.EventID == lastAPIEventID {
+						logger.Printf("Last API song still in response, continuing to poll")
+						return m, nil
+					}
+				}
+			}
+		}
+
+		// Guard: if fewer than 2 songs, likely partial/early response
+		if len(msg.songs) < 2 {
+			logger.Printf("Only %d song(s) in new block, continuing to poll", len(msg.songs))
+			return m, nil
+		}
+
+		// New block received - append or restart
+		logger.Printf("New block received (blockID=%d), %d songs", msg.blockID, len(msg.songs))
+
+		// Build URLs for new songs
+		urls := make([]string, len(msg.songs))
+		for i, song := range msg.songs {
+			urls[i] = song.GaplessURL
+		}
+
+		mpvWasStopped := !m.mpvBackend.IsRunning()
+
+		if mpvWasStopped {
+			// MPV has stopped - restart with new block
+			logger.Printf("MPV stopped, restarting playback with new block")
+			m.currentSongIndex = len(m.songs) // will point to first new song
+			m.songs = append(m.songs, msg.songs...)
+			m.playlistStartIdx = m.currentSongIndex
+			if err := m.mpvBackend.Start(urls); err != nil {
+				logger.Printf("Failed to restart MPV: %v", err)
+				return m, nil
+			}
+			m.isPlaying = true
+		} else {
+			// MPV still running - append to playlist
+			if err := m.mpvBackend.AppendToPlaylist(urls); err != nil {
+				logger.Printf("Failed to append to playlist: %v", err)
+				return m, nil
+			}
+			m.songs = append(m.songs, msg.songs...)
+		}
+
+		m.imageBase = msg.imageBase
+		m.pollingNextBlock = false
+		m.statusMsg = "Playing"
+
+		m.updatePlaylist()
+
+		logger.Printf("Total songs: %d, currentIdx: %d", len(m.songs), m.currentSongIndex)
+
+		// If MPV was restarted, trigger song change UI update
+		if mpvWasStopped {
+			return m, m.songChangedCmds()
+		}
+		return m, nil
+	}
+
+	// First load (not initialized yet) — start MPV
+	urls := make([]string, len(msg.songs))
+	for i, song := range msg.songs {
+		urls[i] = song.GaplessURL
+	}
+	if err := m.mpvBackend.Start(urls); err != nil {
+		m.err = fmt.Errorf("MPV error: %w", err)
+		m.statusMsg = fmt.Sprintf("Error: %v", err)
+		return m, nil
+	}
+
+	m.songs = msg.songs
+	m.imageBase = msg.imageBase
+	m.lastBlockID = msg.blockID
+	m.currentSongIndex = 0
+	m.playlistStartIdx = 0
+	m.isPlaying = true
+	m.pollingNextBlock = false
+	m.connectedAt = time.Now()
 	m.statusMsg = "Playing"
 	m.initialized = true
 
-	// Use centralized song-change helper (sets currentSong, fetches art/lyrics/artist)
 	return m, m.songChangedCmds()
 }
 
@@ -611,20 +833,33 @@ func (m Model) handleProgressTick(msg progressTickMsg) (tea.Model, tea.Cmd) {
 	// Get playback position from MPV and store in model (avoid IPC in View)
 	pos, err := m.mpvBackend.GetPlaybackPosition()
 	if err != nil {
-		return m, tea.Batch(cmds...)
+		// MPV has stopped - if on last song, enable polling
+		if m.currentSongIndex >= len(m.songs)-1 {
+			if !m.pollingNextBlock {
+				logger.Printf("Playback stopped at end of playlist, enabling polling")
+				m.pollingNextBlock = true
+				cmds = append(cmds, m.spinner.Tick)
+			}
+		}
+	} else {
+		m.playbackPos = pos
 	}
-	m.playbackPos = pos
 
-	// Update progress bar (0.0 to 1.0)
-	if cmd := m.nowPlayingWidget.UpdateProgress(pos.PercentPos / 100.0); cmd != nil {
-		cmds = append(cmds, cmd)
+	// Update progress bar (0.0 to 1.0) - only if we got a valid position
+	if err == nil {
+		if cmd := m.nowPlayingWidget.UpdateProgress(pos.PercentPos / 100.0); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	}
 
 	// Check for natural song transition (like Python's _detect_song_transition)
-	mpvPos, err := m.mpvBackend.GetPlaylistPosition()
-	if err == nil && mpvPos >= 0 && mpvPos != m.currentSongIndex {
-		m.currentSongIndex = mpvPos
-		if m.currentSongIndex >= 0 && m.currentSongIndex < len(m.songs) {
+	// Account for playlistStartIdx offset: MPV playlist position is relative
+	// to when MPV was started, but our songs[] index is absolute
+	mpvPos, mpvErr := m.mpvBackend.GetPlaylistPosition()
+	if mpvErr == nil && mpvPos >= 0 {
+		absoluteIdx := m.playlistStartIdx + mpvPos
+		if absoluteIdx != m.currentSongIndex && absoluteIdx >= 0 && absoluteIdx < len(m.songs) {
+			m.currentSongIndex = absoluteIdx
 			// Auto-skip blocklisted songs
 			if m.cacheManager.IsBlocked(m.songs[m.currentSongIndex]) {
 				logger.Printf("Auto-skipping blocklisted: %s", m.songs[m.currentSongIndex].Title)
@@ -634,11 +869,25 @@ func (m Model) handleProgressTick(msg progressTickMsg) (tea.Model, tea.Cmd) {
 				return m, tea.Batch(cmds...)
 			}
 			cmds = append(cmds, m.songChangedCmds())
+		}
+	}
 
-			// If on last song of block, trigger next block polling
-			if m.currentSongIndex >= len(m.songs)-1 {
-				m.pollingNextBlock = true
-			}
+	// Start polling when on last song with ≤2 min remaining
+	if !m.pollingNextBlock && m.currentSongIndex >= len(m.songs)-1 && m.currentSong != nil && err == nil {
+		songDuration := float64(m.currentSong.Duration) / 1000.0
+		timeRemaining := songDuration - m.playbackPos.TimePos
+		if timeRemaining <= 120 && timeRemaining > 0 {
+			logger.Printf("Last song with %.0fs remaining, starting to poll for next block", timeRemaining)
+			m.pollingNextBlock = true
+		}
+	}
+
+	// MPV stopped on last song - ensure polling is active and start spinner
+	if !m.mpvBackend.IsRunning() && !m.mpvBackend.IsPaused() && m.currentSongIndex >= len(m.songs)-1 {
+		if !m.pollingNextBlock {
+			logger.Printf("MPV stopped on last song, enabling polling")
+			m.pollingNextBlock = true
+			cmds = append(cmds, m.spinner.Tick)
 		}
 	}
 
@@ -664,8 +913,15 @@ func (m Model) handlePollTick(msg pollTickMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 	}
 
-	// If we're on the last song and need next block, fetch it
-	if m.pollingNextBlock {
+	// Update clock display every 5 seconds (like Python's do_poll)
+	m.connectedAt = time.Now()
+
+	if m.mpvBackend.IsPaused() {
+		m.statusMsg = "Paused"
+	}
+
+	// If polling for next block, fetch it
+	if m.pollingNextBlock && !m.mpvBackend.IsPaused() {
 		cmds = append(cmds, m.fetchBlockCmd)
 	}
 
@@ -770,6 +1026,46 @@ func (m Model) handleArtistFetched(msg artistFetchedMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// prunePlaylist removes old songs from previous blocks, keeping up to 3 before
+// the currently playing song for prev-song functionality.
+// Only prunes songs that belong to an older block than the current song.
+func (m *Model) prunePlaylist() {
+	if m.currentSongIndex < 0 || m.currentSongIndex >= len(m.songs) {
+		return
+	}
+
+	currentBlockID := m.songs[m.currentSongIndex].BlockID
+
+	// Find how many old-block songs precede the current song
+	keepStart := m.currentSongIndex - 3
+	if keepStart <= 0 {
+		return
+	}
+
+	// Only prune if the song at keepStart-1 is from an older block
+	// Walk forward from 0 to find the prune boundary: stop at the first
+	// song that is either from the current block or within 3 of current
+	pruneEnd := 0
+	for i := 0; i < keepStart; i++ {
+		if m.songs[i].BlockID >= currentBlockID {
+			break
+		}
+		pruneEnd = i + 1
+	}
+
+	if pruneEnd <= 0 {
+		return
+	}
+
+	m.songs = m.songs[pruneEnd:]
+	m.currentSongIndex -= pruneEnd
+	m.playlistStartIdx -= pruneEnd
+	if m.playlistStartIdx < 0 {
+		m.playlistStartIdx = 0
+	}
+	logger.Printf("Pruned %d old-block songs, currentIdx=%d, playlistStartIdx=%d", pruneEnd, m.currentSongIndex, m.playlistStartIdx)
 }
 
 // updatePlaylist updates the playlist table
@@ -907,7 +1203,8 @@ func (m *Model) songChangedCmds() tea.Cmd {
 		m.favoriteCount = count
 	}
 
-	// Update playlist and bottom view
+	// Prune old-block songs, then update playlist and bottom view
+	m.prunePlaylist()
 	m.updatePlaylist()
 	m.updateBottomView()
 
@@ -987,6 +1284,7 @@ func (m *Model) queueNextFavorite() tea.Cmd {
 	m.favoritesQueue = m.favoritesQueue[1:]
 
 	song := fav.ToSong()
+	song.IsFromFavorite = true
 
 	// Append to MPV playlist
 	if err := m.mpvBackend.AppendToPlaylist([]string{song.GaplessURL}); err != nil {
@@ -1203,9 +1501,15 @@ func (m Model) View() tea.View {
 	// Now-playing info
 	b.WriteString(nowPlayingView + "\n")
 
+	// Show spinner animation when waiting for new songs AND MPV has stopped (Python line 3242-3244)
+	// Only show when truly at end of content, not while still playing and polling for next block
+	if m.pollingNextBlock && !m.mpvBackend.IsRunning() {
+		b.WriteString(m.styles.MutedStyle.Render("Ahead of livestream. Awaiting new songs"+m.spinner.View()+" ") + "\n")
+	}
+
 	// The bottom section should fill the remaining space except for the footer
 	currentHeight := lipgloss.Height(b.String())
-	remainingHeight := m.height - currentHeight
+	remainingHeight := m.height - currentHeight - 1 // 2 footer lines
 
 	if remainingHeight > 0 {
 		// Crop or pad bottom section
