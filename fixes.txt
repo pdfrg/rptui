@@ -1,123 +1,31 @@
-harmonize theming with python app
-	currently playing
-		[X] song - in foreground, should be accent
-		[X] artist - in muted, should be foreground
-		[X] song elapsed/duration(%) - in foreground, should be muted
-		[X] navline - in muted, should be foreground
-		[X] statusline - status (eg "Paused") in accent, first "dot" in foreground, rest muted, all should be muted
-		[X] connectedline - "Connected" in foreground, time in muted, all should be muted
-		progressbar
-			[X] currently a gradient, accent to what looks like progressbar background
-			[X] python doesn't use gradient, but we should use gradient
-			[X] prefer darker (near black or black) background
-			[X] prefer cursor to accent gradient
-			[X] currently full thickness (entire terminal block)
-			[X] prefer thin line like python
-			[X] can remove blank line between progressbar and elapsed/duration(%) line
-	albumart
-		[X] python shows proper aspect ratio
-		[X] currently appears horizontally "squished"
-		[X] probably due to trying to fit into set number of terminal blocks
-		[X] can go-termimg display a set number of pixels instead?
-		[X] otherwise, may need to take terminal block size into account and correct
-		example bash output:
-			❯ IFS=';' read -rs -d t -p $'\e[16t' _ h w _ && echo "Cell height: $h px, width: $w px" && echo "Ratio (h/w): $(bc <<< "scale=3; $h / $w")"
-			Cell height: 20 px, width: 9 px
-			Ratio (h/w): 2.222
-		[X] currently slightly too large
-		[X] overlaps playlist headers
-		[X] aspect ratio fix may correct this
-	playlist
-		[X] column headers currently foreground text, normal background
-		[X] python uses different background (muted?) shown full terminal width, creating a "bar" effect
-				also uses white text, though we don't have to use white
-		[X] python uses accent color for currently playing, we use cursor
-				here, I prefer cursor color, keep
-	footer(keybinds)
-		[X] missing "m Manage" and "$ Support RP"
-		[X] need to remove space below footer (looks like 1 extra line)
-		[X] currently left aligned, should be centered
-		
-modals
-	options
-		needs improvement
-		current station and bitrate picker are clunky
-			prefer proper "bubbles" widgets
-		no option for "show skip warning", "show album art", and "copy album art to file"
-			these need switches
-			again prefer proper "bubbles" widgets			
-	skip
-		needs improvement
-		as for options
-	manage
-		needs improvement
-		current implementation not working
-			shows 0 favorites and 0 blocklisted, even though there should be entries
-		visual style awkward
-		python scrollable text boxes much better
-		again, consider proper "bubbles" widgets
+# problems or improvements of current features
+# roadmap.txt is for major new features or changes
 
-alternate views
-	all
-		[X] no scrollabar visible, though text is actually scrollable (not possible with bubbles viewport)
-	synced lyrics
-		[X] currently the active lyric is just indicated with an arrow
-		[X] python uses different color, prefer "cursor" color
-	artist info
-		[X] currently we have the first line as the artist name surrounded by 3 line runes
-		[X]		not needed, just remove that line
-		[X] the summary doesn't word wrap, most text is not seen
-
-add artist thumnail to artist info view
-	will need to be scrollable
-	will also need to clear when we open modals or toggle views
-	if scrolling not possible, could just fallback to "press <key> to view artist image(s)"
-		then open modal with artist thumb and possibly other images from wikipedia page
-		go-termimg has a gallery feature
-
-[X] allow seek forward/backward by 5 or 10 seconds, or 1 minute
-		maybe use arrow hotkeys like mpv does
-		left/right for small seek, up/down for larger (up/down is for scrolling alt views)
-
-[X] allow to change station directly from main UI
-		maybe use number hotkeys?
-
-live theme reloads
-	detect changes in Omarchy theme (and maybe custom theme?)
-
-[X] status stopped handling
-		maybe better just to remove stop function anyway
-
-[X] station change handling
-
+[hold on this item for wikipedia replacement with other artist info source, see: roadmap.txt]
 lrclib and wikipedia api processing needs further testing/improving
-	example discography parsing issue
-			artist "The The"
-				correctly shows all albums from 1981 to 2016
-				but then returns last line as "^ Roberts, David (2006)"
+	artist page identification issues
+		Gone Gone Beyond > returns "Gone" is a song by Irish rock band U2
+	discography parsing issues
+		The The
+			correctly shows all albums from 1981 to 2016
+			but then returns last line as "^ Roberts, David (2006)"
+		Manassas
+			only shows "^ Salaverri, Fernando (2005)"
+	no discography returned
+		Thievery Corporation
+		Medeski Martin & Wood
+		Cracker	
+		Tool
+		Camera Obscura
+		Blind Pilot
+		Puscifer
+		The Georgia Satellites
+		Lucho Bermudez (note: accent on u in Bermudez)
 
-implement command line switches (override config file)
-	size small (no album art, no playlist -- like toggle "v" to off) -s s or -s small
-	size medium (no playlist) -s m or -s medium
-	size large (default, show all) -s l or -s large
-	if run from launcher, can we open terminal of just that size?
-	if run from within terminal, no resize
+copy default theme (catppucin mocha) to colors.toml so I can test built-in theme
+	and modify if desired
+	consider additional built in themes (for non Omarchy users)
+		would need theme setting and config then
+	
 
-	favorites "jukebox" mode -- queue all faves random and play, at end repeat all
-		--jukebox or -j
-		no API queries
-		jukebox_min_faves = 50 (setting in config file, not editable from app)
-		also add "j" hotkey for "Juke"
-			clears playlist, enters jukebox mode just like from command line
-		need to decide how to handle playlist
-			add all to playlist, but would then have to scroll
-			add a given number of songs, then when near end, add more, prune as needed, similar to normal mode
-		would need to show status jukebox or similar. is there a jukebox emoji?
-
-[X] print exit message
-		Radio Paradise is commercial-free and relies on listener donations.
-		Please consider supporting RP by visiting their website.
-		<link> (same as in $ Support RP hotkey)
-
-comments in config file describing options/settings
-
+	

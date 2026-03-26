@@ -92,8 +92,8 @@ go run test_wikipedia.go
 
 **File Creation Rule:** ONLY use write_file or edit tools - NEVER use cat, sed, awk, or similar shell commands to create/edit files.
 # Search logs for specific patterns
-grep -i "error\|favorite" rptui-go.log
-tail -f rptui-go.log  # Follow log in real-time
+grep -i "error\|favorite" rptui.log
+tail -f rptui.log  # Follow log in real-time
 
 # Test API endpoints
 curl -s "https://api.radioparadise.com/api/play?..." | jq
@@ -147,7 +147,7 @@ rptui-bubbletea/
 | Config Path | `~/.config/rptui/config.toml` | Shared with Python for migration |
 | Cache Path | `$XDG_CACHE_HOME/rptui/` | XDG compliance, subdirs: `favorites/`, `blocklist/` |
 | MPV Socket | `$XDG_RUNTIME_DIR/mpv/rptui-socket` | Multi-user safe, no stale sockets |
-| Logging | `rptui-go.log` (separate) | Avoid conflicts with Python version |
+| Logging | `rptui.log` (separate) | Avoid conflicts with Python version |
 
 ---
 
@@ -297,7 +297,7 @@ require (
 
 ### Logging
 
-- Log file: `rptui-go.log` in project root
+- Log file: `rptui.log` in project root
 - Level: INFO (configurable to DEBUG)
 - Format: `%(asctime)s %(levelname)s %(message)s`
 

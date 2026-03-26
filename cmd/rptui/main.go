@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"rptui-bubbletea/internal/config"
+	_ "rptui-bubbletea/internal/loginit"
 	"rptui-bubbletea/internal/tui"
 )
 

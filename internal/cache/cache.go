@@ -4,13 +4,16 @@ package cache
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
+	"sync"
 	"time"
 
+	"rptui-bubbletea/internal/loginit"
 	"rptui-bubbletea/internal/models"
 )
 
@@ -18,33 +21,27 @@ import (
 var logger *log.Logger
 
 func init() {
-	// Setup logging to file
-	f, err := os.OpenFile("rptui-go.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err == nil {
-		logger = log.New(f, "[CACHE] ", log.LstdFlags|log.Lshortfile)
-	} else {
-		logger = log.New(os.Stderr, "[CACHE] ", log.LstdFlags|log.Lshortfile)
-	}
+	logger = loginit.InitLogger("[CACHE] ")
 }
 
 // CachedSong represents a song stored in cache
 type CachedSong struct {
-	EventID    int64  `json:"event_id"`
-	Title      string `json:"title"`
-	Artist     string `json:"artist"`
-	Album      string `json:"album"`
-	Year       string `json:"year"`
-	Duration   int64  `json:"duration"`
-	GaplessURL string `json:"gapless_url"`
+	EventID        int64  `json:"event_id"`
+	Title          string `json:"title"`
+	Artist         string `json:"artist"`
+	Album          string `json:"album"`
+	Year           string `json:"year"`
+	Duration       int64  `json:"duration"`
+	GaplessURL     string `json:"gapless_url"`
 	CoverLarge     string `json:"cover_large"`
 	Rating         string `json:"rating"`
 	ListenerRating string `json:"listener_rating"`
-	AddedAt        int64  `json:"added_at"` // Unix timestamp
+	AudioPath      string `json:"audio_path,omitempty"` // Local file path for downloaded audio
+	AddedAt        int64  `json:"added_at"`             // Unix timestamp
 }
 
 // UnmarshalJSON implements custom JSON unmarshaling to handle string event_id
 func (cs *CachedSong) UnmarshalJSON(data []byte) error {
-	// Create alias to avoid infinite recursion
 	type Alias CachedSong
 	aux := &struct {
 		EventID any `json:"event_id"`
@@ -57,7 +54,6 @@ func (cs *CachedSong) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	// Handle event_id as string or number
 	switch v := aux.EventID.(type) {
 	case string:
 		fmt.Sscanf(v, "%d", &cs.EventID)
@@ -72,9 +68,12 @@ func (cs *CachedSong) UnmarshalJSON(data []byte) error {
 
 // CacheManager manages both favorites and blocklist
 type CacheManager struct {
+	mu           sync.RWMutex
 	favoritesDir string
 	blocklistDir string
 	maxFavorites int
+	favorites    []CachedSong
+	blocklist    []CachedSong
 }
 
 // NewCacheManager creates a new cache manager
@@ -86,7 +85,7 @@ func NewCacheManager(favoritesDir, blocklistDir string, maxFavorites int) *Cache
 	}
 }
 
-// EnsureDirectories creates the cache directories if they don't exist
+// EnsureDirectories creates the cache directories and loads metadata
 func (c *CacheManager) EnsureDirectories() error {
 	if err := os.MkdirAll(c.favoritesDir, 0755); err != nil {
 		return fmt.Errorf("failed to create favorites directory: %w", err)
@@ -94,76 +93,89 @@ func (c *CacheManager) EnsureDirectories() error {
 	if err := os.MkdirAll(c.blocklistDir, 0755); err != nil {
 		return fmt.Errorf("failed to create blocklist directory: %w", err)
 	}
+	c.favorites = c.loadMetadata(c.favoritesDir)
+	c.blocklist = c.loadMetadata(c.blocklistDir)
+	return nil
+}
+
+// loadMetadata loads songs from metadata.json in the given directory
+func (c *CacheManager) loadMetadata(dir string) []CachedSong {
+	path := filepath.Join(dir, "metadata.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			logger.Printf("Failed to read %s: %v", path, err)
+		}
+		return []CachedSong{}
+	}
+	var songs []CachedSong
+	if err := json.Unmarshal(data, &songs); err != nil {
+		logger.Printf("Failed to parse %s: %v", path, err)
+		return []CachedSong{}
+	}
+	logger.Printf("Loaded %d entries from %s", len(songs), path)
+	return songs
+}
+
+// saveMetadata writes songs to metadata.json in the given directory
+func (c *CacheManager) saveMetadata(dir string, songs []CachedSong) error {
+	path := filepath.Join(dir, "metadata.json")
+	data, err := json.MarshalIndent(songs, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal metadata: %w", err)
+	}
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("failed to write metadata: %w", err)
+	}
 	return nil
 }
 
 // IsFavorite checks if a song is in favorites
 func (c *CacheManager) IsFavorite(song *models.Song) bool {
-	// Check individual file first (Go format)
-	path := c.getFavoritePath(song.EventID)
-	if _, err := os.Stat(path); err == nil {
-		return true
-	}
-
-	// Check metadata.json (Python format)
-	metadataPath := filepath.Join(c.favoritesDir, "metadata.json")
-
-	if _, err := os.Stat(metadataPath); err == nil {
-		data, err := os.ReadFile(metadataPath)
-		if err != nil {
-			return false
-		}
-		var favorites []CachedSong
-		if err := json.Unmarshal(data, &favorites); err != nil {
-			return false
-		}
-		for _, fav := range favorites {
-			if fav.EventID == song.EventID {
-				return true
-			}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	for _, fav := range c.favorites {
+		if fav.EventID == song.EventID {
+			return true
 		}
 	}
-
 	return false
-}
-
-// fileExists checks if a file exists
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
 }
 
 // IsBlocked checks if a song is in blocklist
 func (c *CacheManager) IsBlocked(song *models.Song) bool {
-	path := c.getBlocklistPath(song.EventID)
-	_, err := os.Stat(path)
-	return err == nil
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	for _, b := range c.blocklist {
+		if b.EventID == song.EventID {
+			return true
+		}
+	}
+	return false
 }
 
-// AddFavorite adds a song to favorites
-func (c *CacheManager) AddFavorite(song *models.Song) error {
+// AddFavorite adds a song to favorites and triggers audio download
+func (c *CacheManager) AddFavorite(song *models.Song, fileExt string) (string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	// Check if already exists
-	if c.IsFavorite(song) {
-		return nil // Already exists
-	}
-
-	// Check max limit
-	favorites, err := c.GetFavorites()
-	if err != nil {
-		return err
-	}
-
-	if len(favorites) >= c.maxFavorites {
-		// Remove oldest favorite
-		if len(favorites) > 0 {
-			oldest := favorites[len(favorites)-1]
-			if err := c.RemoveFavoriteByID(oldest.EventID); err != nil {
-				return err
-			}
+	for _, fav := range c.favorites {
+		if fav.EventID == song.EventID {
+			return "", nil
 		}
 	}
 
-	// Save favorite
+	// Enforce max limit
+	if len(c.favorites) >= c.maxFavorites {
+		// Remove oldest (last = oldest, since newest is prepended)
+		oldest := c.favorites[len(c.favorites)-1]
+		c.removeAudioFile(oldest.AudioPath)
+		c.favorites = c.favorites[:len(c.favorites)-1]
+	}
+
+	audioPath := c.buildAudioPath(song, fileExt)
+
 	cached := CachedSong{
 		EventID:        song.EventID,
 		Title:          song.Title,
@@ -175,58 +187,63 @@ func (c *CacheManager) AddFavorite(song *models.Song) error {
 		CoverLarge:     song.CoverLarge,
 		Rating:         song.Rating,
 		ListenerRating: song.ListenerRating,
+		AudioPath:      audioPath,
 		AddedAt:        time.Now().Unix(),
 	}
 
-	data, err := json.MarshalIndent(cached, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal favorite: %w", err)
+	// Prepend (newest first)
+	c.favorites = append([]CachedSong{cached}, c.favorites...)
+
+	if err := c.saveMetadata(c.favoritesDir, c.favorites); err != nil {
+		// Rollback
+		c.favorites = c.favorites[1:]
+		return "", err
 	}
 
-	path := c.getFavoritePath(song.EventID)
-	if err := os.WriteFile(path, data, 0644); err != nil {
-		return fmt.Errorf("failed to write favorite: %w", err)
-	}
-
-	return nil
+	return audioPath, nil
 }
 
-// RemoveFavorite removes a song from favorites
-func (c *CacheManager) RemoveFavorite(song *models.Song) error {
-	return c.RemoveFavoriteByID(song.EventID)
-}
+// RemoveFavorite removes a song from favorites by event ID
+func (c *CacheManager) RemoveFavorite(eventID int64) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-// RemoveFavoriteByID removes a song from favorites by event ID
-func (c *CacheManager) RemoveFavoriteByID(eventID int64) error {
-	path := c.getFavoritePath(eventID)
-	if err := os.Remove(path); err != nil {
-		if os.IsNotExist(err) {
-			return nil // Already removed
+	for i, fav := range c.favorites {
+		if fav.EventID == eventID {
+			c.removeAudioFile(fav.AudioPath)
+			c.favorites = append(c.favorites[:i], c.favorites[i+1:]...)
+			return c.saveMetadata(c.favoritesDir, c.favorites)
 		}
-		return fmt.Errorf("failed to remove favorite: %w", err)
 	}
 	return nil
 }
 
 // ToggleFavorite adds or removes a song from favorites
-func (c *CacheManager) ToggleFavorite(song *models.Song) (bool, error) {
+// Returns (added bool, audioPath, error)
+func (c *CacheManager) ToggleFavorite(song *models.Song, fileExt string) (bool, string, error) {
 	if c.IsFavorite(song) {
-		if err := c.RemoveFavorite(song); err != nil {
-			return false, err
+		if err := c.RemoveFavorite(song.EventID); err != nil {
+			return false, "", err
 		}
-		return false, nil
+		return false, "", nil
 	}
 
-	if err := c.AddFavorite(song); err != nil {
-		return false, err
+	audioPath, err := c.AddFavorite(song, fileExt)
+	if err != nil {
+		return false, "", err
 	}
-	return true, nil
+	return true, audioPath, nil
 }
 
 // AddBlocklist adds a song to blocklist
 func (c *CacheManager) AddBlocklist(song *models.Song) error {
-	if c.IsBlocked(song) {
-		return nil // Already exists
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	for _, b := range c.blocklist {
+		if b.EventID == song.EventID {
+			return nil
+		}
 	}
 
 	cached := CachedSong{
@@ -243,32 +260,20 @@ func (c *CacheManager) AddBlocklist(song *models.Song) error {
 		AddedAt:        time.Now().Unix(),
 	}
 
-	data, err := json.MarshalIndent(cached, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal blocklist entry: %w", err)
-	}
-
-	path := c.getBlocklistPath(song.EventID)
-	if err := os.WriteFile(path, data, 0644); err != nil {
-		return fmt.Errorf("failed to write blocklist entry: %w", err)
-	}
-
-	return nil
+	c.blocklist = append([]CachedSong{cached}, c.blocklist...)
+	return c.saveMetadata(c.blocklistDir, c.blocklist)
 }
 
-// RemoveBlocklist removes a song from blocklist
-func (c *CacheManager) RemoveBlocklist(song *models.Song) error {
-	return c.RemoveBlocklistByID(song.EventID)
-}
+// RemoveBlocklist removes a song from blocklist by event ID
+func (c *CacheManager) RemoveBlocklist(eventID int64) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-// RemoveBlocklistByID removes a song from blocklist by event ID
-func (c *CacheManager) RemoveBlocklistByID(eventID int64) error {
-	path := c.getBlocklistPath(eventID)
-	if err := os.Remove(path); err != nil {
-		if os.IsNotExist(err) {
-			return nil // Already removed
+	for i, b := range c.blocklist {
+		if b.EventID == eventID {
+			c.blocklist = append(c.blocklist[:i], c.blocklist[i+1:]...)
+			return c.saveMetadata(c.blocklistDir, c.blocklist)
 		}
-		return fmt.Errorf("failed to remove blocklist entry: %w", err)
 	}
 	return nil
 }
@@ -276,7 +281,7 @@ func (c *CacheManager) RemoveBlocklistByID(eventID int64) error {
 // ToggleBlocklist adds or removes a song from blocklist
 func (c *CacheManager) ToggleBlocklist(song *models.Song) (bool, error) {
 	if c.IsBlocked(song) {
-		if err := c.RemoveBlocklist(song); err != nil {
+		if err := c.RemoveBlocklist(song.EventID); err != nil {
 			return false, err
 		}
 		return false, nil
@@ -288,138 +293,69 @@ func (c *CacheManager) ToggleBlocklist(song *models.Song) (bool, error) {
 	return true, nil
 }
 
-// GetFavorites returns all favorite songs sorted by added date (newest first)
+// GetFavorites returns all favorite songs (newest first)
 func (c *CacheManager) GetFavorites() ([]CachedSong, error) {
-	return c.loadCachedSongs(c.favoritesDir)
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	result := make([]CachedSong, len(c.favorites))
+	copy(result, c.favorites)
+	return result, nil
 }
 
-// GetBlocklist returns all blocklisted songs sorted by added date (newest first)
+// GetBlocklist returns all blocklisted songs (newest first)
 func (c *CacheManager) GetBlocklist() ([]CachedSong, error) {
-	return c.loadCachedSongs(c.blocklistDir)
-}
-
-// loadCachedSongs loads all cached songs from a directory
-func (c *CacheManager) loadCachedSongs(dir string) ([]CachedSong, error) {
-	var songs []CachedSong
-
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return songs, nil
-		}
-		return nil, fmt.Errorf("failed to read directory: %w", err)
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
-			continue
-		}
-
-		path := filepath.Join(dir, entry.Name())
-		data, err := os.ReadFile(path)
-		if err != nil {
-			continue // Skip unreadable files
-		}
-
-		var song CachedSong
-		if err := json.Unmarshal(data, &song); err != nil {
-			continue // Skip invalid files
-		}
-
-		songs = append(songs, song)
-	}
-
-	// Sort by added date (newest first)
-	sort.Slice(songs, func(i, j int) bool {
-		return songs[i].AddedAt > songs[j].AddedAt
-	})
-
-	return songs, nil
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	result := make([]CachedSong, len(c.blocklist))
+	copy(result, c.blocklist)
+	return result, nil
 }
 
 // GetFavoriteCount returns the number of favorites
 func (c *CacheManager) GetFavoriteCount() (int, error) {
-	// Check for metadata.json first (Python format)
-	metadataPath := filepath.Join(c.favoritesDir, "metadata.json")
-
-	if _, err := os.Stat(metadataPath); err == nil {
-		data, err := os.ReadFile(metadataPath)
-		if err != nil {
-			return 0, err
-		}
-		var favorites []CachedSong
-		if err := json.Unmarshal(data, &favorites); err != nil {
-			return 0, err
-		}
-		return len(favorites), nil
-	}
-
-	// Count individual JSON files (Go format)
-	favorites, err := c.GetFavorites()
-	if err != nil {
-		return 0, err
-	}
-	return len(favorites), nil
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return len(c.favorites), nil
 }
 
 // GetBlocklistCount returns the number of blocklisted songs
 func (c *CacheManager) GetBlocklistCount() (int, error) {
-	blocklist, err := c.GetBlocklist()
-	if err != nil {
-		return 0, err
-	}
-	return len(blocklist), nil
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return len(c.blocklist), nil
 }
 
 // GetFavoriteByEventID returns a favorite song by event ID
 func (c *CacheManager) GetFavoriteByEventID(eventID int64) (*CachedSong, error) {
-	path := c.getFavoritePath(eventID)
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	for i := range c.favorites {
+		if c.favorites[i].EventID == eventID {
+			return &c.favorites[i], nil
 		}
-		return nil, err
 	}
-
-	var song CachedSong
-	if err := json.Unmarshal(data, &song); err != nil {
-		return nil, err
-	}
-
-	return &song, nil
+	return nil, nil
 }
-
-// getFavoritePath returns the path for a favorite file
-func (c *CacheManager) getFavoritePath(eventID int64) string {
-	return filepath.Join(c.favoritesDir, fmt.Sprintf("%d.json", eventID))
-}
-
-// getBlocklistPath returns the path for a blocklist file
-func (c *CacheManager) getBlocklistPath(eventID int64) string {
-	return filepath.Join(c.blocklistDir, fmt.Sprintf("%d.json", eventID))
-}
-
-// CleanupOldFavorites removes oldest favorites if count exceeds max
-func (c *CacheManager) CleanupOldFavorites() error {
-	favorites, err := c.GetFavorites()
-	if err != nil {
-		return err
-	}
-
-	for len(favorites) > c.maxFavorites {
-		oldest := favorites[len(favorites)-1]
-		if err := c.RemoveFavoriteByID(oldest.EventID); err != nil {
-			return err
+func (c *CacheManager) UpdateFavoriteAudioPath(eventID int64, audioPath string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for i, fav := range c.favorites {
+		if fav.EventID == eventID {
+			c.favorites[i].AudioPath = audioPath
+			if err := c.saveMetadata(c.favoritesDir, c.favorites); err != nil {
+				logger.Printf("Failed to update metadata after download: %v", err)
+			}
+			return
 		}
-		favorites = favorites[:len(favorites)-1]
 	}
-
-	return nil
 }
 
 // ToSong converts a CachedSong to a models.Song
 func (cs *CachedSong) ToSong() *models.Song {
+	url := cs.GaplessURL
+	if cs.AudioPath != "" {
+		url = cs.AudioPath
+	}
 	return &models.Song{
 		Title:          cs.Title,
 		Artist:         cs.Artist,
@@ -427,9 +363,94 @@ func (cs *CachedSong) ToSong() *models.Song {
 		Year:           cs.Year,
 		Duration:       cs.Duration,
 		EventID:        cs.EventID,
-		GaplessURL:     cs.GaplessURL,
+		GaplessURL:     url,
 		CoverLarge:     cs.CoverLarge,
 		Rating:         cs.Rating,
 		ListenerRating: cs.ListenerRating,
 	}
+}
+
+// DownloadFavorite downloads the audio file for a favorite in the background
+func (c *CacheManager) DownloadFavorite(audioPath, url string, eventID int64) {
+	if audioPath == "" || url == "" {
+		return
+	}
+	// Skip if already downloaded
+	if _, err := os.Stat(audioPath); err == nil {
+		return
+	}
+	go c.downloadAudio(audioPath, url, eventID)
+}
+
+func (c *CacheManager) downloadAudio(path, url string, eventID int64) {
+	logger.Printf("Downloading favorite audio: %s", filepath.Base(path))
+
+	client := &http.Client{Timeout: 5 * time.Minute}
+	resp, err := client.Get(url)
+	if err != nil {
+		logger.Printf("Failed to download audio for event %d: %v", eventID, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		logger.Printf("Audio download returned status %d for event %d", resp.StatusCode, eventID)
+		return
+	}
+
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		logger.Printf("Failed to create directory for audio: %v", err)
+		return
+	}
+
+	f, err := os.Create(path)
+	if err != nil {
+		logger.Printf("Failed to create audio file %s: %v", path, err)
+		return
+	}
+	defer f.Close()
+
+	if _, err := io.Copy(f, resp.Body); err != nil {
+		logger.Printf("Failed to write audio file %s: %v", path, err)
+		os.Remove(path)
+		return
+	}
+
+	logger.Printf("Downloaded audio: %s", filepath.Base(path))
+}
+
+// buildAudioPath generates a human-readable file path for a favorite's audio
+func (c *CacheManager) buildAudioPath(song *models.Song, fileExt string) string {
+	safeArtist := sanitizeFilename(song.Artist, 50)
+	safeAlbum := sanitizeFilename(song.Album, 50)
+	safeTitle := sanitizeFilename(song.Title, 50)
+	filename := fmt.Sprintf("%s-%s-%s.%s", safeArtist, safeAlbum, safeTitle, fileExt)
+	return filepath.Join(c.favoritesDir, filename)
+}
+
+// removeAudioFile deletes an audio file if the path is set
+func (c *CacheManager) removeAudioFile(path string) {
+	if path == "" {
+		return
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		logger.Printf("Failed to remove audio file %s: %v", path, err)
+	}
+}
+
+// sanitizeFilename removes unsafe characters and truncates to maxLen
+func sanitizeFilename(s string, maxLen int) string {
+	unsafe := `/\:*?"<>|`
+	var b strings.Builder
+	for _, r := range s {
+		if strings.ContainsRune(unsafe, r) {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	result := strings.TrimSpace(b.String())
+	if len(result) > maxLen {
+		result = result[:maxLen]
+	}
+	return result
 }

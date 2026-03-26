@@ -12,18 +12,15 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"rptui-bubbletea/internal/loginit"
 )
 
 // Logger for MPV
 var logger *log.Logger
 
 func init() {
-	f, err := os.OpenFile("rptui-go.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err == nil {
-		logger = log.New(f, "[MPV] ", log.LstdFlags|log.Lshortfile)
-	} else {
-		logger = log.New(os.Stderr, "[MPV] ", log.LstdFlags|log.Lshortfile)
-	}
+	logger = loginit.InitLogger("[MPV] ")
 }
 
 // MPVBackend controls MPV via subprocess for audio playback
@@ -355,6 +352,23 @@ func (m *MPVBackend) SeekToStart() error {
 
 	cmd := IPCCommand{
 		Command: []any{"seek", 0, "absolute"},
+	}
+
+	_, err := m.sendIPCCommandLocked(cmd)
+	return err
+}
+
+// SetMute sets the mute state
+func (m *MPVBackend) SetMute(muted bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.process == nil {
+		return fmt.Errorf("MPV not running")
+	}
+
+	cmd := IPCCommand{
+		Command: []any{"set_property", "mute", muted},
 	}
 
 	_, err := m.sendIPCCommandLocked(cmd)

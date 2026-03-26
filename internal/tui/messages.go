@@ -48,7 +48,28 @@ type imageLoadedMsg struct {
 	err       error
 }
 
+// statusClearMsg is sent after a timeout to clear temporary status messages
+type statusClearMsg struct {
+	seq int
+}
+
+// connRetryTickMsg is sent on the next retry interval during backoff
+type connRetryTickMsg time.Time
+
+// renderAlbumArtMsg is sent after a short delay to re-render album art.
+// The delay ensures the cell-based renderer has finished its redraw before
+// we send the Kitty graphics escape sequence via tea.Raw.
+type renderAlbumArtMsg struct{}
+
 // Command functions
+
+// renderAlbumArtAfterDelay returns a command that triggers album art re-render
+// after a short delay, allowing the cell renderer to finish its redraw first.
+func renderAlbumArtAfterDelay() tea.Cmd {
+	return tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
+		return renderAlbumArtMsg{}
+	})
+}
 
 // clearKittyImagesCmd sends the Kitty graphics clear escape sequence directly
 // to the terminal via tea.Raw, bypassing the cell-based renderer. This is
@@ -77,4 +98,23 @@ func openDonatePageCmd() tea.Msg {
 	cmd := exec.Command("xdg-open", "https://radioparadise.com/donate")
 	cmd.Start()
 	return nil
+}
+
+// setStatus sets a temporary status message that auto-clears after 5 seconds.
+// Returns a tea.Cmd (possibly nil) that should be batched with other commands.
+func setStatus(m *Model, msg string, isError bool) tea.Cmd {
+	m.statusMsg = msg
+	m.statusIsError = isError
+	m.statusSeq++
+	seq := m.statusSeq
+	return tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+		return statusClearMsg{seq: seq}
+	})
+}
+
+// tickConnRetryCmd returns a command that fires after the given duration (retry backoff)
+func tickConnRetryCmd(d time.Duration) tea.Cmd {
+	return tea.Tick(d, func(t time.Time) tea.Msg {
+		return connRetryTickMsg(t)
+	})
 }

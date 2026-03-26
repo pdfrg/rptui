@@ -8,26 +8,19 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
+
+	"rptui-bubbletea/internal/loginit"
 )
 
 // Logger for API
 var logger *log.Logger
 
 func init() {
-	// Setup logging to file (only if not already initialized by another package)
-	if logger == nil {
-		f, err := os.OpenFile("rptui-go.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-		if err == nil {
-			logger = log.New(f, "[API] ", log.LstdFlags|log.Lshortfile)
-		} else {
-			logger = log.New(os.Stderr, "[API] ", log.LstdFlags|log.Lshortfile)
-		}
-	}
+	logger = loginit.InitLogger("[API] ")
 }
 
 // ArtistInfo represents Wikipedia artist information
@@ -36,7 +29,7 @@ type ArtistInfo struct {
 	PageTitle    string
 	PageURL      string
 	ThumbnailURL string
-	Discography  string  // Studio albums list
+	Discography  string // Studio albums list
 }
 
 // WikipediaClient provides access to Wikipedia API
@@ -109,7 +102,7 @@ var albumIndicators = []string{
 type SearchResponse struct {
 	Query struct {
 		Search []struct {
-			Title string `json:"title"`
+			Title   string `json:"title"`
 			Snippet string `json:"snippet"`
 		} `json:"search"`
 	} `json:"query"`
@@ -146,7 +139,7 @@ type ParseResponse struct {
 // FindArtist finds Wikipedia article for an artist
 func (w *WikipediaClient) FindArtist(ctx context.Context, artistName string) (*ArtistInfo, error) {
 	logger.Printf("=== FindArtist START: %s ===", artistName)
-	
+
 	// Try direct summary first (simplest approach)
 	directSummary, err := w.getSummary(ctx, artistName)
 	if err != nil {
@@ -156,13 +149,13 @@ func (w *WikipediaClient) FindArtist(ctx context.Context, artistName string) (*A
 		logger.Printf("Direct summary: Title=%s, Desc=%s", directSummary.Title, directSummary.Description)
 		logger.Printf("Is musician: %v", w.isMusicianPage(directSummary))
 	}
-	
+
 	if err == nil && directSummary != nil && w.isMusicianPage(directSummary) {
 		logger.Printf("Found artist via direct summary: %s", directSummary.Title)
-		
+
 		// Fetch discography section
 		discography := w.fetchDiscography(ctx, directSummary.Title)
-		
+
 		return &ArtistInfo{
 			Summary:      cleanWikiText(directSummary.Extract),
 			PageTitle:    directSummary.Title,
@@ -178,7 +171,7 @@ func (w *WikipediaClient) FindArtist(ctx context.Context, artistName string) (*A
 	// Order: exact name first, then qualified searches
 	// This ensures exact matches are found before qualified ones
 	searchQueries := []string{
-		artistName,  // Try exact name FIRST
+		artistName, // Try exact name FIRST
 		fmt.Sprintf("%s musician", artistName),
 		fmt.Sprintf("%s singer", artistName),
 		fmt.Sprintf("%s band", artistName),
@@ -245,13 +238,13 @@ func (w *WikipediaClient) FindArtist(ctx context.Context, artistName string) (*A
 			continue
 		}
 		logger.Printf("  Summary: Title=%s, Desc=%s", summary.Title, summary.Description)
-		
+
 		if w.isMusicianPage(summary) {
 			logger.Printf("Found artist via search: %s (score=%.2f)", summary.Title, r.score)
-			
+
 			// Fetch discography section
 			discography := w.fetchDiscography(ctx, summary.Title)
-			
+
 			return &ArtistInfo{
 				Summary:      cleanWikiText(summary.Extract),
 				PageTitle:    summary.Title,
@@ -319,7 +312,7 @@ func (w *WikipediaClient) getSummary(ctx context.Context, title string) (*Summar
 	// Wikipedia URLs need special escaping: spaces become underscores, but parentheses stay literal
 	// This matches Python's urllib.parse.quote behavior
 	wikiTitle := strings.ReplaceAll(title, " ", "_")
-	
+
 	u := fmt.Sprintf(
 		"https://en.wikipedia.org/api/rest_v1/page/summary/%s",
 		wikiTitle,
@@ -354,30 +347,30 @@ func cleanWikiText(text string) string {
 	// Remove bold/italic markers like ''' and ''
 	text = strings.ReplaceAll(text, "'''", "")
 	text = strings.ReplaceAll(text, "''", "")
-	
+
 	// Remove [[link|text]] style links, keep text
 	linkRegex := regexp.MustCompile(`\[\[[^\]]*\|([^\]]*)\]\]`)
 	text = linkRegex.ReplaceAllString(text, "$1")
-	
+
 	// Remove [[link]] style links, keep link name
 	linkRegex2 := regexp.MustCompile(`\[\[([^\]]*)\]\]`)
 	text = linkRegex2.ReplaceAllString(text, "$1")
-	
+
 	// Remove <ref>...</ref> tags
 	refRegex := regexp.MustCompile(`<ref[^>]*>.*?</ref>`)
 	text = refRegex.ReplaceAllString(text, "")
-	
+
 	// Remove {{...}} templates
 	templateRegex := regexp.MustCompile(`\{\{[^}]*\}\}`)
 	text = templateRegex.ReplaceAllString(text, "")
-	
+
 	// Decode HTML entities
 	text = html.UnescapeString(text)
-	
+
 	// Clean up extra whitespace
 	text = strings.TrimSpace(text)
 	text = regexp.MustCompile(`\s+`).ReplaceAllString(text, " ")
-	
+
 	return text
 }
 
@@ -386,24 +379,24 @@ func (w *WikipediaClient) fetchDiscography(ctx context.Context, pageTitle string
 	// First get sections to find discography/studio albums section index
 	// Wikipedia URLs need special escaping: spaces become underscores, but parentheses stay literal
 	wikiTitle := strings.ReplaceAll(pageTitle, " ", "_")
-	
+
 	u := fmt.Sprintf(
 		"https://en.wikipedia.org/w/api.php?action=parse&page=%s&prop=sections&format=json",
 		wikiTitle,
 	)
-	
+
 	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
 	if err != nil {
 		return ""
 	}
 	req.Header.Set("User-Agent", w.userAgent)
-	
+
 	resp, err := w.httpClient.Do(req)
 	if err != nil {
 		return ""
 	}
 	defer resp.Body.Close()
-	
+
 	var sectionsResult struct {
 		Parse struct {
 			Sections []struct {
@@ -412,11 +405,11 @@ func (w *WikipediaClient) fetchDiscography(ctx context.Context, pageTitle string
 			} `json:"sections"`
 		} `json:"parse"`
 	}
-	
+
 	if err := json.NewDecoder(resp.Body).Decode(&sectionsResult); err != nil {
 		return ""
 	}
-	
+
 	// Find studio albums or discography section
 	var targetIndex string
 	for _, s := range sectionsResult.Parse.Sections {
@@ -429,33 +422,33 @@ func (w *WikipediaClient) fetchDiscography(ctx context.Context, pageTitle string
 			targetIndex = s.Index
 		}
 	}
-	
+
 	if targetIndex == "" {
 		logger.Printf("fetchDiscography: No discography/studio albums section found for %s", pageTitle)
 		return ""
 	}
-	
+
 	logger.Printf("fetchDiscography: Found section index %s for %s", targetIndex, pageTitle)
-	
+
 	// Fetch section HTML content
 	u = fmt.Sprintf(
 		"https://en.wikipedia.org/w/api.php?action=parse&page=%s&section=%s&prop=text&format=json",
 		wikiTitle,
 		url.QueryEscape(targetIndex),
 	)
-	
+
 	req, err = http.NewRequestWithContext(ctx, "GET", u, nil)
 	if err != nil {
 		return ""
 	}
 	req.Header.Set("User-Agent", w.userAgent)
-	
+
 	resp, err = w.httpClient.Do(req)
 	if err != nil {
 		return ""
 	}
 	defer resp.Body.Close()
-	
+
 	var htmlResult struct {
 		Parse struct {
 			Text struct {
@@ -463,26 +456,26 @@ func (w *WikipediaClient) fetchDiscography(ctx context.Context, pageTitle string
 			} `json:"text"`
 		} `json:"parse"`
 	}
-	
+
 	if err := json.NewDecoder(resp.Body).Decode(&htmlResult); err != nil {
 		return ""
 	}
-	
+
 	htmlContent := htmlResult.Parse.Text.Content
-	
+
 	// Parse HTML like Python version
 	// Remove style blocks
 	styleRegex := regexp.MustCompile(`<style[^>]*>.*?</style>`)
 	htmlContent = styleRegex.ReplaceAllString(htmlContent, "")
-	
+
 	// Remove links but keep text
 	linkRegex := regexp.MustCompile(`<a[^>]*>([^<]*)</a>`)
 	htmlContent = linkRegex.ReplaceAllString(htmlContent, "$1")
-	
+
 	// Remove all other HTML tags
 	tagRegex := regexp.MustCompile(`<[^>]+>`)
 	htmlContent = tagRegex.ReplaceAllString(htmlContent, "")
-	
+
 	// Decode HTML entities
 	htmlContent = html.UnescapeString(htmlContent)
 
@@ -492,7 +485,7 @@ func (w *WikipediaClient) fetchDiscography(ctx context.Context, pageTitle string
 
 	// Try to parse albums from tables FIRST (for Morcheeba, Big Sugar, etc.)
 	albums := w.parseAlbumTable(htmlContent)
-	
+
 	// If no albums found in tables, try list format
 	if len(albums) == 0 {
 		albums = w.parseAlbumList(htmlContent)
@@ -519,28 +512,28 @@ func (w *WikipediaClient) fetchDiscography(ctx context.Context, pageTitle string
 // parseAlbumTable extracts albums from wikitable format
 func (w *WikipediaClient) parseAlbumTable(htmlContent string) []string {
 	var albums []string
-	
+
 	// Find table rows
 	// Pattern: <tr>...<td>Album Name</td>...<td>Year</td>...</tr>
 	rowRegex := regexp.MustCompile(`<tr[^>]*>(.*?)</tr>`)
 	rows := rowRegex.FindAllStringSubmatch(htmlContent, -1)
-	
+
 	for _, rowMatch := range rows {
 		row := rowMatch[1]
-		
+
 		// Skip header rows (contain <th> but no <td>)
 		if strings.Contains(row, "<th") && !strings.Contains(row, "<td") {
 			continue
 		}
-		
+
 		// Extract all cell contents
 		cellRegex := regexp.MustCompile(`<td[^>]*>(.*?)</td>`)
 		cells := cellRegex.FindAllStringSubmatch(row, -1)
-		
+
 		if len(cells) < 2 {
 			continue
 		}
-		
+
 		// First cell should be album name (may contain <i> tags)
 		albumCell := cells[0][1]
 		// Remove all HTML tags from album name
@@ -548,7 +541,7 @@ func (w *WikipediaClient) parseAlbumTable(htmlContent string) []string {
 		albumName := tagRegex.ReplaceAllString(albumCell, "")
 		albumName = html.UnescapeString(albumName)
 		albumName = strings.TrimSpace(albumName)
-		
+
 		// Look for year in other cells (usually 2nd or 3rd cell)
 		var year string
 		for i := 1; i < len(cells) && i < 4; i++ {
@@ -561,7 +554,7 @@ func (w *WikipediaClient) parseAlbumTable(htmlContent string) []string {
 				break
 			}
 		}
-		
+
 		// If we have both album name and year
 		if albumName != "" && year != "" && len(albumName) < 100 {
 			// Skip if album name looks like a header
@@ -572,14 +565,14 @@ func (w *WikipediaClient) parseAlbumTable(htmlContent string) []string {
 			albums = append(albums, fmt.Sprintf("%s (%s)", albumName, year))
 		}
 	}
-	
+
 	return albums
 }
 
 // parseAlbumList extracts albums from list format
 func (w *WikipediaClient) parseAlbumList(htmlContent string) []string {
 	var albums []string
-	
+
 	// Match album name followed by (YEAR), allowing trailing text like footnotes
 	albumRegex := regexp.MustCompile(`^(.+?)\s*\((\d{4})\)`)
 	lines := strings.Split(htmlContent, "\n")
@@ -614,7 +607,7 @@ func (w *WikipediaClient) parseAlbumList(htmlContent string) []string {
 			break
 		}
 	}
-	
+
 	return albums
 }
 
@@ -624,12 +617,12 @@ func (w *WikipediaClient) extractDiscographyLink(htmlContent string) string {
 	// Pattern: <a href="/wiki/Artist_discography">Artist discography</a>
 	linkRegex := regexp.MustCompile(`<a[^>]*href="/wiki/([^"]*discography[^"]*)"[^>]*>([^<]*discography[^<]*)</a>`)
 	matches := linkRegex.FindStringSubmatch(htmlContent)
-	
+
 	if len(matches) >= 3 {
 		// Return the link text (e.g., "Arctic Monkeys discography")
 		return matches[2]
 	}
-	
+
 	return ""
 }
 
@@ -766,7 +759,7 @@ func similarityScore(title, artist string) float64 {
 	if strings.HasPrefix(titleNorm, artistNorm) {
 		// Calculate length ratio
 		lengthRatio := float64(len(titleNorm)) / float64(len(artistNorm))
-		
+
 		// If title is more than 1.5x longer, it's probably a band name or different entity
 		if lengthRatio > 1.5 {
 			return 0.70 // Penalize
@@ -791,7 +784,7 @@ func similarityScore(title, artist string) float64 {
 
 	if score > 0.3 {
 		words := strings.Fields(titleNorm)
-		
+
 		// Check if artist name is contained in title words
 		artistFound := false
 		for _, word := range words {
@@ -805,7 +798,7 @@ func similarityScore(title, artist string) float64 {
 				break
 			}
 		}
-		
+
 		// Check for partial word matches
 		if !artistFound {
 			for _, word := range words {
@@ -834,14 +827,14 @@ func similarityScore(title, artist string) float64 {
 // normalizeArtistName normalizes artist name for comparison
 func normalizeArtistName(name string) string {
 	name = strings.ToLower(strings.TrimSpace(name))
-	
+
 	// Remove leading "the "
 	name = regexp.MustCompile(`^the\s+`).ReplaceAllString(name, "")
 	// Remove trailing ", the"
 	name = regexp.MustCompile(`,?\s+the$`).ReplaceAllString(name, "")
 	// Remove non-word characters
 	name = regexp.MustCompile(`[^\w\s]`).ReplaceAllString(name, "")
-	
+
 	return strings.TrimSpace(name)
 }
 
@@ -881,7 +874,7 @@ func (w *WikipediaClient) FetchDiscography(ctx context.Context, pageTitle string
 	// Get sections
 	// Wikipedia URLs need special escaping: spaces become underscores, but parentheses stay literal
 	wikiTitle := strings.ReplaceAll(pageTitle, " ", "_")
-	
+
 	u := fmt.Sprintf(
 		"https://en.wikipedia.org/w/api.php?action=parse&page=%s&prop=sections&format=json",
 		wikiTitle,
