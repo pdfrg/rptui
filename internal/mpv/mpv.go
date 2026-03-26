@@ -198,10 +198,31 @@ func (m *MPVBackend) IsRunning() bool {
 	return m.process.ProcessState == nil || !m.process.ProcessState.Exited()
 }
 
-// IsPaused checks if MPV is paused
+// IsPaused checks if MPV is paused (cached state)
 func (m *MPVBackend) IsPaused() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	return m.isPaused
+}
+
+// QueryPauseState queries MPV for actual pause state and syncs internal flag.
+// Use this to detect external pause changes (e.g. media keys via mpv-mpris).
+func (m *MPVBackend) QueryPauseState() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	cmd := IPCCommand{Command: []any{"get_property", "pause"}}
+	resp, err := m.sendIPCCommandLocked(cmd)
+	if err != nil {
+		return m.isPaused
+	}
+
+	if resp.Data != nil {
+		if paused, ok := resp.Data.(bool); ok {
+			m.isPaused = paused
+		}
+	}
+
 	return m.isPaused
 }
 
