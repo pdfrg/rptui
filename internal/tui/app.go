@@ -221,6 +221,9 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme) *Model {
 		viewport.WithHeight(15),
 	)
 	viewport.SoftWrap = true
+	viewport.Style = lipgloss.NewStyle().
+		Background(lipgloss.Color(theme.Background)).
+		Foreground(lipgloss.Color(theme.Foreground))
 
 	// Initialize help
 	help := help.New()
@@ -924,6 +927,9 @@ func (m Model) handleProgressTick(msg progressTickMsg) (tea.Model, tea.Cmd) {
 		m.playbackPos = pos
 	}
 
+	// Sync pause state with MPV (detect external changes e.g. media keys via mpris)
+	m.isPaused = m.mpvBackend.QueryPauseState()
+
 	// Update progress bar (0.0 to 1.0) - only if we got a valid position
 	if err == nil {
 		if cmd := m.nowPlayingWidget.UpdateProgress(pos.PercentPos / 100.0); cmd != nil {
@@ -1502,20 +1508,22 @@ func (m Model) loadImageCmd(url string) tea.Cmd {
 }
 
 // altView wraps content in a tea.View with AltScreen enabled
-func altView(s string) tea.View {
+func (m Model) altView(s string) tea.View {
 	v := tea.NewView(s)
 	v.AltScreen = true
+	v.BackgroundColor = lipgloss.Color(m.theme.Background)
+	v.ForegroundColor = lipgloss.Color(m.theme.Foreground)
 	return v
 }
 
 // View renders the TUI
 func (m Model) View() tea.View {
 	if m.err != nil {
-		return altView(fmt.Sprintf("Error: %v\n\nPress q to quit", m.err))
+		return m.altView(fmt.Sprintf("Error: %v\n\nPress q to quit", m.err))
 	}
 
 	if !m.initialized {
-		return altView("Loading...\n\nPress q to quit")
+		return m.altView("Loading...\n\nPress q to quit")
 	}
 
 	// If a modal is active, render it full-screen (like the Python app).
@@ -1560,7 +1568,7 @@ func (m Model) View() tea.View {
 				b.WriteString(leftPad + line + "\n")
 			}
 
-			return altView(b.String())
+			return m.altView(b.String())
 		}
 	}
 
@@ -1631,7 +1639,7 @@ func (m Model) View() tea.View {
 
 	b.WriteString(footer)
 
-	return altView(b.String())
+	return m.altView(b.String())
 }
 
 // renderAlbumArtCmd returns a tea.Cmd that sends the album art to the terminal
