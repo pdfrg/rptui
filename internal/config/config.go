@@ -30,16 +30,16 @@ var BitrateNames = map[int]string{
 // Config manages user configuration persistence
 type Config struct {
 	path            string
-	Channel         int    `toml:"channel"`
-	Bitrate         int    `toml:"bitrate"`
-	ShowAlbumArt    bool   `toml:"show_album_art"`
-	AlbumArtPath    string `toml:"album_art_path"`
-	CopyAlbumArt    bool   `toml:"copy_album_art"`
-	FavoritesDir    string `toml:"favorites_dir"`
-	MaxFavorites    int    `toml:"max_favorites"`
-	MinFavorites    int    `toml:"min_favorites"`
-	ShowSkipWarning bool   `toml:"show_skip_warning"`
-	ColorsFile      string `toml:"colors_file"`
+	Channel         int    `toml:"channel" comment:"default station for new sessions\nchanges made in app are saved to file and retained on restart\n0=Main, 1=Mellow, 2=Rock, 3=Global, 5=Beyond (default: 0)"`
+	Bitrate         int    `toml:"bitrate" comment:"1=64k AAC, 2=128k AAC, 3=320k AAC, 4=FLAC (default: 3)"`
+	ShowAlbumArt    bool   `toml:"show_album_art" comment:"display album art for each song\nuses the best supported image protocol with auto fallback\nkitty > iterm2 > sixel > unicode (default: true)"`
+	CopyAlbumArt    bool   `toml:"copy_album_art" comment:"save album art to file, useful for desktop/statusbar widgets (default: false)"`
+	AlbumArtPath    string `toml:"album_art_path" comment:"file path for album art copy, needed if copy_album_art is true (default: /tmp/cover.jpg)"`
+	FavoritesDir    string `toml:"favorites_dir" comment:"directory for favorites metadata and audio files (default: XDG_CACHE_HOME/rptui/favorites)"`
+	MaxFavorites    int    `toml:"max_favorites" comment:"maximum favorites to save, to limit disk use\nset to 999999 for effectively unlimited (default: 100)"`
+	MinFavorites    int    `toml:"min_favorites" comment:"minimum favorites to enable favorites mode\nautoplay favorites while awaiting RP API response for uninterrupted playback\nmust be <= max_favorites (default: 10)"`
+	ShowSkipWarning bool   `toml:"show_skip_warning" comment:"warn when skipping ahead of livestream without enough favorites\nset to false to disable (default: true)"`
+	ColorsFile      string `toml:"colors_file" comment:"custom colors.toml file path\nfallback order: omarchy current theme (live reload) > built-in Catppuccin Mocha (default: '')"`
 }
 
 // DefaultConfig returns a Config with default values
@@ -120,7 +120,10 @@ func (c *Config) Save() error {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	if err := os.WriteFile(c.path, data, 0644); err != nil {
+	header := []byte("# rptui configuration file\n\n")
+	output := append(header, data...)
+
+	if err := os.WriteFile(c.path, output, 0644); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
 

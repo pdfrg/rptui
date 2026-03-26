@@ -3,29 +3,27 @@ package models
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 )
 
 // Song represents a song with all its metadata
 type Song struct {
-	Title          string  `json:"title"`
-	Artist         string  `json:"artist"`
-	Album          string  `json:"album"`
-	Year           string  `json:"year"`
-	Rating         string  `json:"rating"`           // From get_block (average user rating)
-	ListenerRating string  `json:"listener_rating"`  // From nowplaying_list
-	CoverLarge     string  `json:"cover_large"`
-	CoverMedium    string  `json:"cover_medium"`
-	CoverSmall     string  `json:"cover_small"`
-	Duration       int64   `json:"duration"` // In milliseconds
-	EventID        int64   `json:"event_id"` // Unique identifier
-	PlayTime       int64   `json:"play_time"`// When song is scheduled to play (sched_time_millis)
-	GaplessURL     string  `json:"gapless_url"`
-	URL            string  `json:"url"`
-	IsCurrent      bool    `json:"is_current"`
-	IsFromFavorite bool    `json:"-"` // true if queued from favorites (not from API)
-	BlockID        int64   `json:"-"` // which block this song belongs to
+	Title          string `json:"title"`
+	Artist         string `json:"artist"`
+	Album          string `json:"album"`
+	Year           string `json:"year"`
+	Rating         string `json:"rating"`          // From get_block (average user rating)
+	ListenerRating string `json:"listener_rating"` // From nowplaying_list
+	CoverLarge     string `json:"cover_large"`
+	CoverMedium    string `json:"cover_medium"`
+	CoverSmall     string `json:"cover_small"`
+	Duration       int64  `json:"duration"`  // In milliseconds
+	EventID        int64  `json:"event_id"`  // Unique identifier
+	PlayTime       int64  `json:"play_time"` // When song is scheduled to play (sched_time_millis)
+	GaplessURL     string `json:"gapless_url"`
+	URL            string `json:"url"`
+	IsCurrent      bool   `json:"is_current"`
+	IsFromFavorite bool   `json:"-"` // true if queued from favorites (not from API)
+	BlockID        int64  `json:"-"` // which block this song belongs to
 }
 
 // NewSong creates a new Song from API data
@@ -116,24 +114,4 @@ func (s *Song) GetDurationFormatted() string {
 		return fmt.Sprintf("%02d:%02d:%02d", hours, minutes, seconds)
 	}
 	return fmt.Sprintf("%02d:%02d", minutes, seconds)
-}
-
-// IsFavorite checks if the song is in the favorites list
-func (s *Song) IsFavorite(favoritesDir string) bool {
-	filename := s.getCacheFilename(favoritesDir)
-	_, err := os.Stat(filename)
-	return err == nil
-}
-
-// IsBlocked checks if the song is in the blocklist
-func (s *Song) IsBlocked(blocklistDir string) bool {
-	filename := s.getCacheFilename(blocklistDir)
-	_, err := os.Stat(filename)
-	return err == nil
-}
-
-// getCacheFilename returns the filename for caching this song
-func (s *Song) getCacheFilename(dir string) string {
-	// Use event_id as unique identifier
-	return filepath.Join(dir, fmt.Sprintf("%d", s.EventID))
 }

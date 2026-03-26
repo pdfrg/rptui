@@ -1,0 +1,8 @@
+# Catppuccin Mocha - default built-in theme
+# Set colors_file = "/path/to/colors.toml" in config.toml to use
+
+background = "#1e1e2e"
+foreground = "#cdd6f4"
+accent = "#89b4fa"
+muted = "#6c7086"
+cursor = "#f5c2e7"

@@ -1,6 +1,9 @@
 # Binary
-rptui
+/rptui
 test_image
+testart
+rptui-image-in-process
+rptui-pre-image-render-change
 
 # Logs
 *.log

@@ -1,0 +1,84 @@
+# fixes.txt is for bugs, minor refinements to existing features
+
+scrobble support
+	last.fm, listenbrainz, or both
+
+get artist info from different site
+	wikipedia scraping difficult, no standardized page formats
+	scrobble site(s)?
+	include similar artists, top tracks, etc
+	provide clickable links -- possible in bubbletea?
+	prelim research
+		last.fm limits bio to 300 characters
+		musicbrainz is standard for official studio album lists but no bios
+		discogs has good bios and multiple image links
+		the audiodb website is pretty good
+			but api results are underwhelming
+			bio is good
+			can't get album lists or top tracks like website, just 1 result
+			images are good, artist thumb plus 4 fanarts
+
+visualizer
+	add as another view with "v"
+	switch visualizers with up/down (same way we scroll in views anyway)?
+	options
+		go-audio
+		what is cliamp using?
+
+crossfade on station changes
+	pseudo-crossfade (vol down, vol up)
+	apparently mpv doesn't support real crossfade?
+	others have used 2 mpv instances to create real crossfade effect
+	mpv --lavfi-complex='[aid1] [aid2] <filter> [ao]'
+	says to check ffmpeg libavfilter docs (see crossfade.txt for snippet)
+
+search and play/enqueue favorites directly
+	add search to manage modal?
+
+desktop notifications
+
+sleep timer and alarm
+	
+cache for offline listening (good for flights, etc)
+	different than favorites, though jukebox mode can run offline (I think)
+	possibly just launch from cli without running full tui
+		e.g. rptui --cache 2h
+		saves to ~/.cache/rptui/offline
+		would have to run for 2h then close
+		maybe print time remaining to the terminal
+		when you run rptui without connection, detect lack of internet, presence of offline cache
+			ask user if they want to run in offline mode
+		would need a cache manager
+			could just add to manage modal with faves and blocklist items
+
+add artist thumnail to artist info view
+	will need to be scrollable
+	will also need to clear when we open modals or toggle views
+	if scrolling not possible, could just fallback to "press <key> to view artist image(s)"
+		then open modal with artist thumb and possibly other images from wikipedia page
+		go-termimg has a gallery feature
+		artist images modal with "i"?
+		cache images
+			~/.cache/rptui/images/albumart ?
+			~/.cache/tptui/images/artistart ?
+
+live theme reloads
+	detect changes in Omarchy theme (and maybe custom theme?)	
+	
+implement command line switches (override config file)
+	size small (no album art, no playlist -- like toggle "v" to off) -s s or -s small
+	size medium (no playlist) -s m or -s medium
+	size large (default, show all) -s l or -s large
+	if run from launcher, can we open terminal of just that size?
+	if run from within terminal, no resize
+
+favorites "jukebox" mode -- queue all faves random and play, at end repeat all
+	--jukebox or -j
+	no API queries
+	jukebox_min_faves = 50 (setting in config file, not editable from app)
+	also add "j" hotkey for "Juke"
+		clears playlist, enters jukebox mode just like from command line
+	need to decide how to handle playlist
+		add all to playlist, but would then have to scroll
+		add a given number of songs, then when near end, add more, prune as needed, similar to normal mode
+	would need to show status jukebox mode or similar. is there a jukebox emoji?

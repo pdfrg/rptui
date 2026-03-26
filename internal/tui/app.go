@@ -27,6 +27,7 @@ import (
 	"rptui-bubbletea/internal/api"
 	"rptui-bubbletea/internal/cache"
 	"rptui-bubbletea/internal/config"
+	"rptui-bubbletea/internal/loginit"
 	"rptui-bubbletea/internal/models"
 	"rptui-bubbletea/internal/mpv"
 	"rptui-bubbletea/internal/tui/modals"
@@ -37,12 +38,7 @@ import (
 var logger *log.Logger
 
 func init() {
-	f, err := os.OpenFile("rptui-go.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err == nil {
-		logger = log.New(f, "[TUI] ", log.LstdFlags|log.Lshortfile)
-	} else {
-		logger = log.New(os.Stderr, "[TUI] ", log.LstdFlags|log.Lshortfile)
-	}
+	logger = loginit.InitLogger("[TUI] ")
 }
 
 // Bottom view mode constants
@@ -71,6 +67,16 @@ const (
 	ModalFavorites
 )
 
+// Connection retry constants
+const (
+	connStateConnected    = "connected"
+	connStateDisconnected = "disconnected"
+
+	retryInitialInterval = 5 * time.Second
+	retryMaxInterval     = 60 * time.Second
+	retryMultiplier      = 2
+)
+
 // Model represents the main TUI application model
 type Model struct {
 	// Configuration
@@ -93,9 +99,9 @@ type Model struct {
 	isPaused         bool
 	bottomViewMode   int
 	imageBase        string
-	favoriteCount    int  // cached count, updated on song change
 	imageCounter     int  // for unique image IDs
 	skipWarningShown bool // track if skip warning has been shown this session
+	mutedForBlocked  bool // MPV muted to silence a blocklisted last song
 
 	// Current song info
 	currentSong *models.Song
@@ -142,7 +148,15 @@ type Model struct {
 	height int
 
 	// Status
-	statusMsg string
+	statusMsg     string
+	statusIsError bool
+	statusSeq     int
+
+	// Connection monitoring
+	connState           string // "connected", "disconnected", "reconnecting"
+	consecutiveFailures int
+	retryInterval       time.Duration // current backoff interval
+	connErrorMsg        string        // persistent error message (no auto-clear)
 
 	// Error state
 	err error
@@ -322,14 +336,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.footerWidget.SetWidth(msg.Width)
 		m.nowPlayingWidget.SetWidth(40)
 
-		contentWidth := max(20, msg.Width-4)
+		contentWidth := msg.Width
 		contentHeight := max(5, msg.Height-15)
 
 		m.viewport.SetWidth(contentWidth)
 		m.viewport.SetHeight(contentHeight)
 		m.playlistWidget.SetSize(contentWidth, contentHeight)
 
-		return handle(m, nil)
+		return handle(m, renderAlbumArtAfterDelay())
 
 	case tea.KeyPressMsg:
 		if m.activeModal != ModalNone {
@@ -352,7 +366,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case modals.OptionsMsg:
 		m.activeModal = ModalNone
 		if msg.Closed {
-			return handle(m, nil)
+			return handle(m, renderAlbumArtAfterDelay())
 		}
 
 		// Apply toggle config changes (these don't require restart)
@@ -380,7 +394,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.config.Save()
 
 		if !needsRestart {
-			return handle(m, nil)
+			return handle(m, renderAlbumArtAfterDelay())
 		}
 
 		// Full restart: stop MPV, clear state, re-fetch fresh block
@@ -400,9 +414,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.albumArtStr = ""
 		m.initialized = false
 		m.connectedAt = time.Time{}
-		m.statusMsg = "Restarting..."
 
-		return handle(m, m.fetchBlockCmd)
+		return handle(m, tea.Batch(setStatus(&m, "Restarting...", false), m.fetchBlockCmd))
 
 	case modals.SkipWarningMsg:
 		m.activeModal = ModalNone
@@ -414,7 +427,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		return handle(m, nil)
+		return handle(m, renderAlbumArtAfterDelay())
 
 	case modals.FavoritesMsg:
 		m.activeModal = ModalNone
@@ -428,12 +441,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.playlistStartIdx = 0
 
 				if err := m.mpvBackend.Start([]string{song.GaplessURL}); err == nil {
-					m.statusMsg = "Playing from favorites: " + song.Title
-					return handle(m, m.songChangedCmds())
+					return handle(m, tea.Batch(setStatus(&m, "Playing favorite", false), m.songChangedCmds()))
 				}
 			}
 		}
-		return handle(m, nil)
+		return handle(m, renderAlbumArtAfterDelay())
 
 	case blockFetchedMsg:
 		return handle(m.handleBlockFetched(msg))
@@ -444,14 +456,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case pollTickMsg:
 		return handle(m.handlePollTick(msg))
 
+	case connRetryTickMsg:
+		return handle(m.handleConnRetryTick(msg))
+
 	case imageLoadedMsg:
 		return handle(m.handleImageLoaded(msg))
+
+	case renderAlbumArtMsg:
+		return handle(m, m.renderAlbumArtCmd())
 
 	case lyricsFetchedMsg:
 		return handle(m.handleLyricsFetched(msg))
 
 	case artistFetchedMsg:
 		return handle(m.handleArtistFetched(msg))
+
+	case statusClearMsg:
+		if msg.seq == m.statusSeq {
+			m.statusMsg = ""
+			m.statusIsError = false
+		}
+		return handle(m, nil)
 	}
 
 	return m, tea.Batch(cmds...)
@@ -469,17 +494,13 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// Play/Pause
 		if err := m.mpvBackend.TogglePause(); err == nil {
 			m.isPaused = !m.isPaused
-			if m.isPaused {
-				m.statusMsg = "Paused"
-			} else {
-				m.statusMsg = "Playing"
-			}
 		}
 		return m, nil
 
 	case "n":
-		// Skip next - show warning only once per session
-		if m.config.ShowSkipWarning && !m.skipWarningShown {
+		// Skip next - show warning only once per session (suppressed if favorites mode enabled)
+		favCount, _ := m.cacheManager.GetFavoriteCount()
+		if m.config.ShowSkipWarning && !m.skipWarningShown && favCount < m.config.MinFavorites {
 			m.skipWarningShown = true
 			m.activeModal = ModalSkipWarning
 			return m, clearKittyImagesCmd()
@@ -490,7 +511,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return m, m.songChangedCmds()
 			}
 		} else {
-			m.statusMsg = "No more songs in block"
+			return m, setStatus(&m, "No more songs in block", false)
 		}
 		return m, nil
 
@@ -504,7 +525,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		} else {
 			// Restart current song if at beginning
 			if err := m.mpvBackend.SeekToStart(); err == nil {
-				m.statusMsg = "Restarting song"
+				return m, setStatus(&m, "Restarting song", false)
 			}
 		}
 		return m, nil
@@ -512,7 +533,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		// Restart song
 		if err := m.mpvBackend.SeekToStart(); err == nil {
-			m.statusMsg = "Restarting song"
+			return m, setStatus(&m, "Restarting song", false)
 		}
 		return m, nil
 
@@ -542,9 +563,9 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		if err := m.mpvBackend.SeekRelative(delta); err == nil {
 			if delta > 0 {
-				m.statusMsg = fmt.Sprintf("Seek +%ds", int(delta))
+				return m, setStatus(&m, fmt.Sprintf("Seek +%ds", int(delta)), false)
 			} else {
-				m.statusMsg = fmt.Sprintf("Seek %ds", int(delta))
+				return m, setStatus(&m, fmt.Sprintf("Seek %ds", int(delta)), false)
 			}
 		}
 		return m, nil
@@ -552,52 +573,56 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "v":
 		// Toggle bottom view
 		m.bottomViewMode = (m.bottomViewMode + 1) % ViewModeCount
-		m.statusMsg = fmt.Sprintf("View: %s", bottomViewNames[m.bottomViewMode])
+		statusCmd := setStatus(&m, fmt.Sprintf("View: %s", bottomViewNames[m.bottomViewMode]), false)
 		m.updateBottomView()
 
 		// Fetch lyrics/artist if needed
 		if m.bottomViewMode == ViewLyrics || m.bottomViewMode == ViewSyncedLyrics {
 			if m.lyrics == "" && m.currentSong != nil {
-				return m, m.fetchLyricsCmd()
+				return m, tea.Batch(statusCmd, m.fetchLyricsCmd())
 			}
 		} else if m.bottomViewMode == ViewArtist {
 			if m.artistInfo == nil && m.currentSong != nil {
-				return m, m.fetchArtistCmd()
+				return m, tea.Batch(statusCmd, m.fetchArtistCmd())
 			}
 		}
-		return m, nil
+		return m, statusCmd
 
 	case "f":
 		// Toggle favorite
+		var statusCmd tea.Cmd
 		if m.currentSong != nil {
-			wasFavorite := m.cacheManager.IsFavorite(m.currentSong)
-			if _, err := m.cacheManager.ToggleFavorite(m.currentSong); err == nil {
-				if wasFavorite {
-					m.favoriteCount--
-					m.statusMsg = "Removed from favorites"
+			fileExt := m.rpAPI.GetFileExtension()
+			added, audioPath, err := m.cacheManager.ToggleFavorite(m.currentSong, fileExt)
+			if err == nil {
+				if added {
+					statusCmd = setStatus(&m, "Added to favorites", false)
+					if audioPath != "" {
+						m.cacheManager.DownloadFavorite(audioPath, m.currentSong.GaplessURL, m.currentSong.EventID)
+					}
 				} else {
-					m.favoriteCount++
-					m.statusMsg = "Added to favorites"
+					statusCmd = setStatus(&m, "Removed from favorites", false)
 				}
 				m.updatePlaylist()
 			}
 		}
-		return m, nil
+		return m, statusCmd
 
 	case "b":
 		// Toggle blocklist
+		var statusCmd tea.Cmd
 		if m.currentSong != nil {
 			wasBlocked := m.cacheManager.IsBlocked(m.currentSong)
 			if _, err := m.cacheManager.ToggleBlocklist(m.currentSong); err == nil {
 				if wasBlocked {
-					m.statusMsg = "Removed from blocklist"
+					statusCmd = setStatus(&m, "Removed from blocklist", false)
 				} else {
-					m.statusMsg = "Added to blocklist"
+					statusCmd = setStatus(&m, "Added to blocklist", false)
 				}
 				m.updatePlaylist()
 			}
 		}
-		return m, nil
+		return m, statusCmd
 
 	case "0", "1", "2", "3", "5":
 		// Station hotkeys
@@ -612,14 +637,13 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case "m":
 		// Manage favorites modal
-		m.favoritesModal = modals.NewFavorites(m.styles, m.cacheManager)
+		m.favoritesModal = modals.NewFavorites(m.styles, m.cacheManager, m.width, m.height)
 		m.activeModal = ModalFavorites
 		return m, clearKittyImagesCmd()
 
 	case "$":
 		// Open RP donate page
-		m.statusMsg = "Opening RP donate page..."
-		return m, openDonatePageCmd
+		return m, tea.Batch(setStatus(&m, "Opening RP donate page...", false), openDonatePageCmd)
 
 	case "up", "k":
 		// Scroll up in viewport
@@ -681,9 +705,12 @@ func (m Model) switchStation(channel int) (tea.Model, tea.Cmd) {
 	m.albumArtStr = ""
 	m.initialized = false
 	m.connectedAt = time.Time{}
-	m.statusMsg = fmt.Sprintf("Switching to %s...", stationName)
+	m.connState = ""
+	m.consecutiveFailures = 0
+	m.retryInterval = 0
+	m.connErrorMsg = ""
 
-	return m, m.fetchBlockCmd
+	return m, tea.Batch(setStatus(&m, fmt.Sprintf("Switching to %s...", stationName), false), m.fetchBlockCmd)
 }
 
 // handleBlockFetched handles the block fetched message
@@ -692,21 +719,68 @@ func (m Model) handleBlockFetched(msg blockFetchedMsg) (tea.Model, tea.Cmd) {
 		if !m.initialized {
 			// Fatal on startup — can't play without a block
 			m.err = msg.err
-			m.statusMsg = fmt.Sprintf("Error: %v", msg.err)
-			return m, nil
+			return m, setStatus(&m, fmt.Sprintf("Error: %v", msg.err), true)
 		}
-		// Already playing — log the error and keep polling for next block
-		logger.Printf("Block fetch error (retrying): %v", msg.err)
-		m.statusMsg = "Retrying next block..."
+
+		// Already playing — track failure and use exponential backoff
+		m.consecutiveFailures++
+
+		// Classify the error for user-facing message
+		errType := api.ClassifyConnError(msg.err)
+		var errLabel string
+		switch errType {
+		case api.ConnErrorNetwork:
+			errLabel = "No internet"
+		case api.ConnErrorTimeout:
+			errLabel = "RP timed out"
+		case api.ConnErrorServer:
+			errLabel = "RP unavailable"
+		default:
+			errLabel = "Connection error"
+		}
+
+		// Calculate backoff interval
+		if m.retryInterval == 0 {
+			m.retryInterval = retryInitialInterval
+		} else {
+			m.retryInterval = time.Duration(float64(m.retryInterval) * retryMultiplier)
+			if m.retryInterval > retryMaxInterval {
+				m.retryInterval = retryMaxInterval
+			}
+		}
+
+		m.connState = connStateDisconnected
+		m.connErrorMsg = fmt.Sprintf("⚠ %s • retrying in %ds...", errLabel, int(m.retryInterval.Seconds()))
 		m.pollingNextBlock = true
-		return m, nil
+
+		logger.Printf("Block fetch error #%d (%s), retry in %v: %v",
+			m.consecutiveFailures, errLabel, m.retryInterval, msg.err)
+
+		return m, tickConnRetryCmd(m.retryInterval)
+	}
+
+	// Success — was previously disconnected?
+	wasDisconnected := m.connState == connStateDisconnected
+	prevFailures := m.consecutiveFailures
+
+	// Reset connection state
+	m.consecutiveFailures = 0
+	m.retryInterval = 0
+	m.connState = connStateConnected
+	m.connErrorMsg = ""
+
+	// If was disconnected, prepare "Reconnected" message (auto-clears)
+	var reconnectedCmd tea.Cmd
+	if wasDisconnected {
+		logger.Printf("Connection restored after %d failed attempt(s)", prevFailures)
+		reconnectedCmd = setStatus(&m, "✓ Reconnected", false)
 	}
 
 	// Check for promo block (blockID == 0) — skip in all cases
 	if msg.blockID == 0 {
 		logger.Printf("Skipping promo block (blockID=0)")
 		if !m.initialized {
-			m.statusMsg = "Waiting for stream..."
+			return m, tea.Batch(setStatus(&m, "Waiting for stream...", false), m.fetchBlockCmd)
 		}
 		return m, m.fetchBlockCmd
 	}
@@ -780,11 +854,18 @@ func (m Model) handleBlockFetched(msg blockFetchedMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.songs = append(m.songs, msg.songs...)
+
+			// Unmute if we muted for a blocked song, and skip past it
+			if m.mutedForBlocked {
+				m.mpvBackend.SetMute(false)
+				m.mpvBackend.SkipNext()
+				m.mutedForBlocked = false
+				logger.Printf("Unmuted and skipped past blocklisted song")
+			}
 		}
 
 		m.imageBase = msg.imageBase
 		m.pollingNextBlock = false
-		m.statusMsg = "Playing"
 
 		m.updatePlaylist()
 
@@ -792,9 +873,9 @@ func (m Model) handleBlockFetched(msg blockFetchedMsg) (tea.Model, tea.Cmd) {
 
 		// If MPV was restarted, trigger song change UI update
 		if mpvWasStopped {
-			return m, m.songChangedCmds()
+			return m, tea.Batch(reconnectedCmd, m.songChangedCmds())
 		}
-		return m, nil
+		return m, reconnectedCmd
 	}
 
 	// First load (not initialized yet) — start MPV
@@ -804,8 +885,7 @@ func (m Model) handleBlockFetched(msg blockFetchedMsg) (tea.Model, tea.Cmd) {
 	}
 	if err := m.mpvBackend.Start(urls); err != nil {
 		m.err = fmt.Errorf("MPV error: %w", err)
-		m.statusMsg = fmt.Sprintf("Error: %v", err)
-		return m, nil
+		return m, setStatus(&m, fmt.Sprintf("Error: %v", err), true)
 	}
 
 	m.songs = msg.songs
@@ -816,7 +896,6 @@ func (m Model) handleBlockFetched(msg blockFetchedMsg) (tea.Model, tea.Cmd) {
 	m.isPlaying = true
 	m.pollingNextBlock = false
 	m.connectedAt = time.Now()
-	m.statusMsg = "Playing"
 	m.initialized = true
 
 	return m, m.songChangedCmds()
@@ -865,6 +944,26 @@ func (m Model) handleProgressTick(msg progressTickMsg) (tea.Model, tea.Cmd) {
 				logger.Printf("Auto-skipping blocklisted: %s", m.songs[m.currentSongIndex].Title)
 				if m.currentSongIndex < len(m.songs)-1 {
 					m.mpvBackend.SkipNext()
+				} else {
+					// Last song is blocked
+					favCount, _ := m.cacheManager.GetFavoriteCount()
+					if favCount >= m.config.MinFavorites {
+						// Queue a favorite and skip to it
+						if cmd := m.queueNextFavorite(); cmd != nil {
+							cmds = append(cmds, cmd)
+						}
+						m.mpvBackend.SkipNext()
+					} else {
+						// No favorites: mute, seek to 2 min remaining to trigger polling
+						m.mpvBackend.SetMute(true)
+						m.mutedForBlocked = true
+						songDur := float64(m.songs[m.currentSongIndex].Duration) / 1000.0
+						target := songDur - 120
+						if target > 0 {
+							m.mpvBackend.SeekRelative(target - m.playbackPos.TimePos)
+						}
+						logger.Printf("Muted and seeked blocklisted song to trigger polling")
+					}
 				}
 				return m, tea.Batch(cmds...)
 			}
@@ -916,16 +1015,22 @@ func (m Model) handlePollTick(msg pollTickMsg) (tea.Model, tea.Cmd) {
 	// Update clock display every 5 seconds (like Python's do_poll)
 	m.connectedAt = time.Now()
 
-	if m.mpvBackend.IsPaused() {
-		m.statusMsg = "Paused"
-	}
-
-	// If polling for next block, fetch it
-	if m.pollingNextBlock && !m.mpvBackend.IsPaused() {
+	// If polling for next block AND not in backoff, fetch it
+	if m.pollingNextBlock && !m.mpvBackend.IsPaused() && m.connState != connStateDisconnected {
 		cmds = append(cmds, m.fetchBlockCmd)
 	}
 
 	return m, tea.Batch(cmds...)
+}
+
+// handleConnRetryTick fires when the backoff interval expires — time to retry
+func (m Model) handleConnRetryTick(msg connRetryTickMsg) (tea.Model, tea.Cmd) {
+	if m.connState != connStateDisconnected {
+		return m, nil
+	}
+
+	logger.Printf("Connection retry #%d triggered", m.consecutiveFailures+1)
+	return m, m.fetchBlockCmd
 }
 
 // handleImageLoaded handles image loading completion
@@ -974,7 +1079,7 @@ func (m Model) handleImageLoaded(msg imageLoadedMsg) (tea.Model, tea.Cmd) {
 	tiImg := termimg.New(img).
 		Size(width, height).
 		Scale(termimg.ScaleFit).
-		Protocol(termimg.Kitty)
+		Protocol(termimg.Auto)
 
 	rendered, err := tiImg.Render()
 	if err != nil {
@@ -985,7 +1090,7 @@ func (m Model) handleImageLoaded(msg imageLoadedMsg) (tea.Model, tea.Cmd) {
 	logger.Printf("Album art loaded for: %s (len=%d)", m.currentSong.Title, len(rendered))
 	m.albumArtStr = rendered
 	m.albumArtLoaded = true
-	return m, nil
+	return m, renderAlbumArtAfterDelay()
 }
 
 // handleLyricsFetched handles lyrics fetch completion
@@ -996,6 +1101,9 @@ func (m Model) handleLyricsFetched(msg lyricsFetchedMsg) (tea.Model, tea.Cmd) {
 	}
 	if msg.err != nil {
 		m.lyrics = "Lyrics not found"
+		if m.bottomViewMode == ViewLyrics {
+			m.updateBottomView()
+		}
 		return m, nil
 	}
 
@@ -1016,6 +1124,10 @@ func (m Model) handleArtistFetched(msg artistFetchedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if msg.err != nil {
+		m.artistInfo = &api.ArtistInfo{Summary: "Artist info not found"}
+		if m.bottomViewMode == ViewArtist {
+			m.updateBottomView()
+		}
 		return m, nil
 	}
 
@@ -1062,9 +1174,6 @@ func (m *Model) prunePlaylist() {
 	m.songs = m.songs[pruneEnd:]
 	m.currentSongIndex -= pruneEnd
 	m.playlistStartIdx -= pruneEnd
-	if m.playlistStartIdx < 0 {
-		m.playlistStartIdx = 0
-	}
 	logger.Printf("Pruned %d old-block songs, currentIdx=%d, playlistStartIdx=%d", pruneEnd, m.currentSongIndex, m.playlistStartIdx)
 }
 
@@ -1188,7 +1297,6 @@ func (m *Model) songChangedCmds() tea.Cmd {
 
 	m.currentSong = m.songs[m.currentSongIndex]
 	m.playlistWidget.SetCursor(m.currentSongIndex)
-	m.statusMsg = "Now playing: " + m.currentSong.Title
 
 	// Clear stale data
 	m.lyrics = ""
@@ -1197,11 +1305,6 @@ func (m *Model) songChangedCmds() tea.Cmd {
 	m.albumArtStr = ""
 	m.albumArtLoaded = false
 	m.playbackPos = mpv.PlaybackPosition{}
-
-	// Update cached favorite count
-	if count, err := m.cacheManager.GetFavoriteCount(); err == nil {
-		m.favoriteCount = count
-	}
 
 	// Prune old-block songs, then update playlist and bottom view
 	m.prunePlaylist()
@@ -1236,7 +1339,8 @@ func (m *Model) checkAndQueueFavorite() tea.Cmd {
 	if !m.pollingNextBlock {
 		return nil
 	}
-	if m.favoriteCount < m.config.MinFavorites {
+	favCount, _ := m.cacheManager.GetFavoriteCount()
+	if favCount < m.config.MinFavorites {
 		return nil
 	}
 	if !m.mpvBackend.IsRunning() {
@@ -1265,8 +1369,7 @@ func (m *Model) checkAndQueueFavorite() tea.Cmd {
 func (m *Model) queueNextFavorite() tea.Cmd {
 	favorites, err := m.cacheManager.GetFavorites()
 	if err != nil || len(favorites) == 0 {
-		m.statusMsg = "No favorites available..."
-		return nil
+		return setStatus(m, "No favorites available...", false)
 	}
 
 	// Refill shuffled queue if empty
@@ -1289,8 +1392,7 @@ func (m *Model) queueNextFavorite() tea.Cmd {
 	// Append to MPV playlist
 	if err := m.mpvBackend.AppendToPlaylist([]string{song.GaplessURL}); err != nil {
 		logger.Printf("Failed to append favorite to playlist: %v", err)
-		m.statusMsg = fmt.Sprintf("Error queueing favorite: %v", err)
-		return nil
+		return setStatus(m, "Error queueing favorite", true)
 	}
 
 	// Append to song list (don't change currentSongIndex — let natural
@@ -1298,12 +1400,11 @@ func (m *Model) queueNextFavorite() tea.Cmd {
 	// actually starts playing the new track)
 	m.songs = append(m.songs, song)
 
-	m.statusMsg = fmt.Sprintf("★ Queued favorite: %s", song.Title)
 	logger.Printf("Appended favorite to playlist: %s", song.Title)
 
 	// Update playlist display to show the queued song
 	m.updatePlaylist()
-	return nil
+	return setStatus(m, "★ Queued favorite", false)
 }
 
 // fetchLyricsCmd fetches lyrics for the current song
@@ -1482,6 +1583,11 @@ func (m Model) View() tea.View {
 		m.cacheManager.IsFavorite(m.currentSong),
 		m.getSkipsAvailable(),
 		m.getPrevAvailable(),
+		m.statusMsg,
+		m.statusIsError,
+		m.connErrorMsg,
+		m.config.MinFavorites,
+		len(m.favoritesQueue),
 	)
 
 	// 3. Bottom Section (Playlist or other)
@@ -1499,7 +1605,7 @@ func (m Model) View() tea.View {
 	b.WriteString(header + "\n\n")
 
 	// Now-playing info
-	b.WriteString(nowPlayingView + "\n")
+	b.WriteString(nowPlayingView + "\n\n")
 
 	// Show spinner animation when waiting for new songs AND MPV has stopped (Python line 3242-3244)
 	// Only show when truly at end of content, not while still playing and polling for next block
@@ -1525,32 +1631,35 @@ func (m Model) View() tea.View {
 
 	b.WriteString(footer)
 
-	// 5. Album art positioned at upper right using cursor escape sequences.
-	//    Clear all previous Kitty images first to prevent stale art when
-	//    the new image has the same pixel dimensions as the previous one.
-	var artSuffix string
-	if m.config.ShowAlbumArt && m.albumArtLoaded && m.albumArtStr != "" {
-		// Recalculate dimensions for positioning (same formula as in handleImageLoaded)
-		artHeight := 16
-		artWidth := int(float64(artHeight) * m.cellRatio)
-		if artWidth < 10 {
-			artWidth = 10
-		}
-		// Position with 2-cell right padding
-		artCol := m.width - artWidth - 2
-		if artCol < 1 {
-			artCol = 1
-		}
-		clearStr := termimg.ClearAllString()
-		artSuffix = fmt.Sprintf("%s\x1b[s\x1b[2;%dH%s\x1b[u", clearStr, artCol, m.albumArtStr)
+	return altView(b.String())
+}
+
+// renderAlbumArtCmd returns a tea.Cmd that sends the album art to the terminal
+// via tea.Raw, bypassing the cell-based renderer which strips APC sequences.
+func (m Model) renderAlbumArtCmd() tea.Cmd {
+	if !m.config.ShowAlbumArt || !m.albumArtLoaded || m.albumArtStr == "" || m.activeModal != ModalNone {
+		return nil
 	}
 
-	return altView(b.String() + artSuffix)
+	artHeight := 16
+	artWidth := int(float64(artHeight) * m.cellRatio)
+	if artWidth < 10 {
+		artWidth = 10
+	}
+	artCol := m.width - artWidth - 2
+	if artCol < 1 {
+		artCol = 1
+	}
+
+	clearStr := termimg.ClearAllString()
+	raw := fmt.Sprintf("%s\x1b[s\x1b[3;%dH%s\x1b[u", clearStr, artCol, m.albumArtStr)
+	return tea.Raw(raw)
 }
 
 // getFavoriteCount returns the number of favorites
 func (m Model) getFavoriteCount() int {
-	return m.favoriteCount
+	count, _ := m.cacheManager.GetFavoriteCount()
+	return count
 }
 
 func (m Model) getSkipsAvailable() int {

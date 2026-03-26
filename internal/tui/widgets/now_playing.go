@@ -102,6 +102,11 @@ func (n NowPlaying) View(
 	isFavorite bool,
 	skipsAvailable int,
 	prevAvailable int,
+	statusMsg string,
+	statusIsError bool,
+	connErrorMsg string,
+	minFavorites int,
+	favoritesRemaining int,
 ) string {
 	if song == nil {
 		return " No song playing"
@@ -138,10 +143,25 @@ func (n NowPlaying) View(
 	if prevAvailable > 0 {
 		prevStr = fmt.Sprintf("%d", prevAvailable)
 	}
+	favStr := fmt.Sprintf("%s%s%s",
+		n.foregroundStyle.Render(fmt.Sprintf("%d", favoriteCount)),
+		n.mutedStyle.Render("/"),
+		n.mutedStyle.Render(fmt.Sprintf("%d", minFavorites)))
+	if favoriteCount >= minFavorites {
+		remaining := favoritesRemaining
+		if remaining == 0 {
+			remaining = favoriteCount
+		}
+		remainingStr := fmt.Sprintf("%s%s%s",
+			n.mutedStyle.Render("<"),
+			n.foregroundStyle.Render(fmt.Sprintf("%d", remaining)),
+			n.mutedStyle.Render(">"))
+		favStr += " ✅ " + remainingStr
+	}
 	navLine := fmt.Sprintf("%s %s  %s %s  ⭐ %s",
 		n.mutedStyle.Render("󰒮"), n.foregroundStyle.Render(prevStr),
 		n.mutedStyle.Render("󰒭"), n.foregroundStyle.Render(nextStr),
-		n.foregroundStyle.Render(fmt.Sprintf("%d", favoriteCount)))
+		favStr)
 
 	status := "Playing"
 	if isPaused {
@@ -151,7 +171,19 @@ func (n NowPlaying) View(
 	}
 	statusLine := fmt.Sprintf("%s %s %s", status, n.mutedStyle.Render("•"), n.mutedStyle.Render(configInfo))
 
-	connectedLine := n.mutedStyle.Render(fmt.Sprintf("Connected • %s", connectedTime.Format("15:04:05")))
+	var connectedLine string
+	if connErrorMsg != "" {
+		// Persistent connection error — always accent (error) color
+		connectedLine = n.accentStyle.Render(connErrorMsg)
+	} else if statusMsg != "" {
+		if statusIsError {
+			connectedLine = n.accentStyle.Render(statusMsg)
+		} else {
+			connectedLine = n.foregroundStyle.Render(statusMsg)
+		}
+	} else {
+		connectedLine = n.mutedStyle.Render(fmt.Sprintf("Connected • %s", connectedTime.Format("15:04:05")))
+	}
 
 	return fmt.Sprintf(" %s\n %s\n %s\n\n %s\n %s\n\n %s\n\n %s\n\n %s\n\n %s\n\n",
 		title, artist, album, progView, timeStr, ratingStr, navLine, statusLine, connectedLine)
