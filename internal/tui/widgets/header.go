@@ -9,9 +9,9 @@ import (
 
 // Header represents the top title bar
 type Header struct {
-	style  lipgloss.Style
-	width  int
-	title  string
+	style lipgloss.Style
+	width int
+	title string
 }
 
 // NewHeader creates a new Header widget
@@ -27,6 +27,11 @@ func (h *Header) SetWidth(width int) {
 	h.width = width
 }
 
+// UpdateStyles updates the header style with new theme colors
+func (h *Header) UpdateStyles(style lipgloss.Style) {
+	h.style = style
+}
+
 // View renders the header
 func (h Header) View() string {
 	if h.width <= 0 {
@@ -38,7 +43,7 @@ func (h Header) View() string {
 	if padding < 0 {
 		padding = 0
 	}
-	
+
 	spaces := strings.Repeat(" ", padding)
 	return h.style.Render(spaces + h.title + spaces)
 }

@@ -57,6 +57,12 @@ func (h *Footer) SetWidth(width int) {
 	h.width = width
 }
 
+// UpdateStyles updates the footer styles with new theme colors
+func (h *Footer) UpdateStyles(accentStyle, mutedStyle lipgloss.Style) {
+	h.accentStyle = accentStyle
+	h.mutedStyle = mutedStyle
+}
+
 // View renders the footer (two lines: controls + stations)
 func (h Footer) View() string {
 	renderLine := func(bindings []KeyBinding) string {

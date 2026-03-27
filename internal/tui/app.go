@@ -80,9 +80,10 @@ const (
 // Model represents the main TUI application model
 type Model struct {
 	// Configuration
-	config *config.Config
-	theme  *config.ColorTheme
-	styles *config.ThemeStyles
+	config       *config.Config
+	theme        *config.ColorTheme
+	styles       *config.ThemeStyles
+	themeWatcher *config.ThemeWatcher
 
 	// API Clients
 	rpAPI           *api.RadioParadiseAPI
@@ -184,6 +185,13 @@ type Model struct {
 func NewModel(cfg *config.Config, theme *config.ColorTheme) *Model {
 	styles := config.NewThemeStyles(theme)
 
+	themeWatcher := config.NewThemeWatcher(cfg.ColorsFile)
+	if err := themeWatcher.Start(); err != nil {
+		logger.Printf("Warning: failed to start theme watcher: %v", err)
+	} else {
+		logger.Printf("Theme watcher started successfully")
+	}
+
 	// Initialize terminal cell ratio for album art
 	features := termimg.QueryTerminalFeatures()
 	cellRatio := float64(features.FontHeight) / float64(features.FontWidth)
@@ -237,6 +245,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme) *Model {
 		config:           cfg,
 		theme:            theme,
 		styles:           styles,
+		themeWatcher:     themeWatcher,
 		rpAPI:            rpAPI,
 		lyricsClient:     lyricsClient,
 		wikipediaClient:  wikipediaClient,
@@ -258,12 +267,16 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme) *Model {
 
 // Init initializes the TUI model
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(
+	cmds := []tea.Cmd{
 		m.fetchBlockCmd,
 		tickProgressCmd(),
 		tickPollCmd(),
 		tea.RequestBackgroundColor,
-	)
+	}
+	if m.themeWatcher != nil {
+		cmds = append(cmds, watchThemeCmd(m.themeWatcher))
+	}
+	return tea.Batch(cmds...)
 }
 
 // fetchBlockCmd fetches a block from the API.
@@ -480,6 +493,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusIsError = false
 		}
 		return handle(m, nil)
+
+	case themeChangedMsg:
+		newTheme, err := config.LoadTheme(m.config.ColorsFile, m.config.Theme)
+		if err != nil {
+			return handle(m, watchThemeCmd(m.themeWatcher))
+		}
+		m.theme = newTheme
+		m.styles = config.NewThemeStyles(newTheme)
+
+		m.nowPlayingWidget.UpdateStyles(
+			m.styles.ForegroundStyle,
+			m.styles.AccentStyle,
+			m.styles.MutedStyle,
+			m.theme.Accent,
+			m.theme.Cursor,
+			m.theme.Background,
+		)
+		m.playlistWidget.UpdateStyles(m.styles)
+		m.headerWidget.UpdateStyles(m.styles.Header)
+		m.footerWidget.UpdateStyles(m.styles.AccentStyle, m.styles.MutedStyle)
+
+		m.viewport.Style = lipgloss.NewStyle().
+			Background(lipgloss.Color(m.theme.Background)).
+			Foreground(lipgloss.Color(m.theme.Foreground))
+		m.spinner.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Accent))
+
+		return m, watchThemeCmd(m.themeWatcher)
 	}
 
 	return m, tea.Batch(cmds...)
@@ -491,6 +531,9 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "q", "ctrl+c":
 		// Cleanup MPV before quitting
 		m.mpvBackend.Stop()
+		if m.themeWatcher != nil {
+			m.themeWatcher.Close()
+		}
 		return m, tea.Quit
 
 	case "space":
