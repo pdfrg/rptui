@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"rptui-bubbletea/internal/api"
+	"rptui-bubbletea/internal/config"
 	"rptui-bubbletea/internal/models"
 )
 
@@ -60,6 +61,11 @@ type connRetryTickMsg time.Time
 // The delay ensures the cell-based renderer has finished its redraw before
 // we send the Kitty graphics escape sequence via tea.Raw.
 type renderAlbumArtMsg struct{}
+
+// themeChangedMsg is sent when the theme file is modified on disk
+type themeChangedMsg struct {
+	path string
+}
 
 // Command functions
 
@@ -117,4 +123,12 @@ func tickConnRetryCmd(d time.Duration) tea.Cmd {
 	return tea.Tick(d, func(t time.Time) tea.Msg {
 		return connRetryTickMsg(t)
 	})
+}
+
+// watchThemeCmd returns a command that listens for theme file changes
+func watchThemeCmd(watcher *config.ThemeWatcher) tea.Cmd {
+	return func() tea.Msg {
+		path := <-watcher.Events()
+		return themeChangedMsg{path: path}
+	}
 }

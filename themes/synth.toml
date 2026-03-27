@@ -1,0 +1,8 @@
+# custom
+
+background = "#0d0221"
+foreground = "#f9f9f9"
+accent  = "#ff2a6d"
+cursor  = "#f9fd56"
+
+# use fallback for muted

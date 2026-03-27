@@ -19,7 +19,7 @@ func main() {
 	}
 
 	// Load theme
-	theme, err := config.LoadTheme(cfg.ColorsFile)
+	theme, err := config.LoadTheme(cfg.ColorsFile, cfg.Theme)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to load theme: %v\n", err)
 		theme = config.DefaultTheme()

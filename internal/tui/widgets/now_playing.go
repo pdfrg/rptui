@@ -79,6 +79,20 @@ func (n *NowPlaying) SetWidth(width int) {
 	n.progress.SetWidth(progWidth)
 }
 
+// UpdateStyles updates the widget styles with new theme colors
+func (n *NowPlaying) UpdateStyles(fgStyle, accentStyle, mutedStyle lipgloss.Style, accentColor, cursorColor, bgColor string) {
+	n.foregroundStyle = fgStyle
+	n.accentStyle = accentStyle
+	n.mutedStyle = mutedStyle
+	n.progress = progress.New(
+		progress.WithWidth(40),
+		progress.WithColors(lipgloss.Color(cursorColor), lipgloss.Color(accentColor)),
+		progress.WithoutPercentage(),
+		progress.WithFillCharacters('', ''),
+	)
+	n.progress.EmptyColor = lipgloss.Color(darkenColor(bgColor, 0.3))
+}
+
 // UpdateProgress updates the progress bar percent (0.0 to 1.0)
 func (n *NowPlaying) UpdateProgress(percent float64) tea.Cmd {
 	return n.progress.SetPercent(percent)

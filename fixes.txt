@@ -22,10 +22,3 @@ lrclib and wikipedia api processing needs further testing/improving
 		The Georgia Satellites
 		Lucho Bermudez (note: accent on u in Bermudez)
 
-copy default theme (catppucin mocha) to colors.toml so I can test built-in theme
-	and modify if desired
-	consider additional built in themes (for non Omarchy users)
-		would need theme setting and config then
-	
-
-	

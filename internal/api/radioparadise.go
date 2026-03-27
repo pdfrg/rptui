@@ -118,7 +118,7 @@ func (r *RadioParadiseAPI) GetNowPlaying(ctx context.Context) (*NowPlayingRespon
 
 // PlaylistResponse represents the /nowplaying_list_v2022 API response
 type PlaylistResponse struct {
-	Songs     []map[string]any `json:"songs"`
+	Songs     []map[string]any `json:"song"`
 	ImageBase string           `json:"image_base"`
 	Bitrate   string           `json:"bitrate"`
 	Channel   string           `json:"channel"`

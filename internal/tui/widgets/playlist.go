@@ -86,6 +86,21 @@ func (p *Playlist) SetSize(width, height int) {
 	})
 }
 
+// UpdateStyles updates the playlist styles with new theme colors
+func (p *Playlist) UpdateStyles(styles *config.ThemeStyles) {
+	p.styles = styles
+	headerBg := lightenColor(styles.Background, 0.30)
+	s := table.DefaultStyles()
+	s.Header = s.Header.
+		Bold(false).
+		Foreground(lipgloss.Color(styles.Muted)).
+		Background(lipgloss.Color(headerBg))
+	s.Selected = s.Selected.
+		Foreground(lipgloss.Color(styles.Cursor)).
+		Bold(true)
+	p.table.SetStyles(s)
+}
+
 // SetRows sets the rows of the playlist table
 func (p *Playlist) SetRows(rows []table.Row) {
 	p.table.SetRows(rows)
