@@ -298,6 +298,8 @@ var (
 	discogsNamedTagRegex      = regexp.MustCompile(`\[(a|r|l)=([^\]]+)\]`)
 	discogsURLTagRegex        = regexp.MustCompile(`\[url=[^\]]+\](.*?)\[/url\]`)
 	discogsBoldItalicTagRegex = regexp.MustCompile(`\[/?(?:b|i)\]`)
+	discogsUnderlineTagRegex  = regexp.MustCompile(`\[/?(?:u)\]`)
+	discogsCapitalTagRegex    = regexp.MustCompile(`\[[A-Z]=[^\]]*\]`)
 )
 
 // cleanDiscogsProfile removes Discogs wiki-style formatting from profile text.
@@ -323,6 +325,12 @@ func cleanDiscogsProfile(text string, resolveID func(string) string) string {
 
 	// [b], [/b], [i], [/i] → remove (strip bold/italic markers)
 	text = discogsBoldItalicTagRegex.ReplaceAllString(text, "")
+
+	// [u], [/u] → remove (strip underline markers)
+	text = discogsUnderlineTagRegex.ReplaceAllString(text, "")
+
+	// [A=stuff], [X=stuff] → remove (strip capital-letter tags)
+	text = discogsCapitalTagRegex.ReplaceAllString(text, "")
 
 	// Clean up whitespace artifacts
 	text = strings.TrimSpace(text)
