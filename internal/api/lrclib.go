@@ -25,25 +25,25 @@ func NewLRCLibClient() *LRCLibClient {
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
-		baseURL: "https://lrclib.net/api",
+		baseURL:   "https://lrclib.net/api",
 		userAgent: "rptui-go/1.0",
 	}
 }
 
 // LyricsResponse represents the LRCLib API response
 type LyricsResponse struct {
-	ID               int64   `json:"id"`
-	Name             string  `json:"name"`
-	TrackName        string  `json:"trackName"`
-	ArtistName       string  `json:"artistName"`
-	AlbumName        string  `json:"albumName"`
-	Duration         float64 `json:"duration"`
-	Instrumental     bool    `json:"instrumental"`
-	PlainLyrics      string  `json:"plainLyrics"`
-	SyncedLyrics     string  `json:"syncedLyrics"`
-	Lang             string  `json:"lang"`
-	IsRC             bool    `json:"isRc"`
-	SpotifyID        string  `json:"spotifyId"`
+	ID           int64   `json:"id"`
+	Name         string  `json:"name"`
+	TrackName    string  `json:"trackName"`
+	ArtistName   string  `json:"artistName"`
+	AlbumName    string  `json:"albumName"`
+	Duration     float64 `json:"duration"`
+	Instrumental bool    `json:"instrumental"`
+	PlainLyrics  string  `json:"plainLyrics"`
+	SyncedLyrics string  `json:"syncedLyrics"`
+	Lang         string  `json:"lang"`
+	IsRC         bool    `json:"isRc"`
+	SpotifyID    string  `json:"spotifyId"`
 }
 
 // GetLyrics fetches lyrics by artist and track name
@@ -99,7 +99,7 @@ func (l *LRCLibClient) GetLyricsByDuration(ctx context.Context, artist, track, a
 	logger.Printf("LRCLib Step 1: Original query with album")
 	if result, err := l.searchWithAlbum(ctx, artist, track, album); err == nil && result != nil {
 		logger.Printf("✓ LRCLib matched: original + album")
-		return l.selectBestByDuration(result, durationSec), nil
+		return l.selectBestByDuration(result, durationSec, album), nil
 	}
 
 	// Step 2: Original + Original (NO album) - filter by album score
@@ -122,7 +122,7 @@ func (l *LRCLibClient) GetLyricsByDuration(ctx context.Context, artist, track, a
 	logger.Printf("LRCLib Step 3: Cleaned query with album")
 	if result, err := l.searchWithAlbum(ctx, cleanArtist, cleanTrack, cleanAlbum); err == nil && result != nil {
 		logger.Printf("✓ LRCLib matched: cleaned + album")
-		return l.selectBestByDuration(result, durationSec), nil
+		return l.selectBestByDuration(result, durationSec, album), nil
 	}
 
 	// Step 4: Cleaned + Cleaned (NO album) - filter by album score ≥0.80
@@ -222,46 +222,83 @@ func (l *LRCLibClient) searchNoAlbum(ctx context.Context, artist, track string) 
 	return results, nil
 }
 
-// selectBestByDuration selects the best match from results based on duration
-// For synced lyrics: ±2 seconds; for plain lyrics: ±30 seconds
-func (l *LRCLibClient) selectBestByDuration(results []LyricsResponse, targetDuration int) *LyricsResponse {
+// selectBestByDuration selects the best match using 3-tier logic:
+// Tier 1: Synced lyrics + duration ±2s
+// Tier 2: Plain lyrics + matching album (any duration)
+// Tier 3: Any plain lyrics (fallback)
+func (l *LRCLibClient) selectBestByDuration(results []LyricsResponse, targetDuration int, targetAlbum string) *LyricsResponse {
 	if len(results) == 0 {
 		return nil
 	}
 
-	// If only one result, return it
-	if len(results) == 1 {
-		return &results[0]
-	}
-
-	// Find best match by duration
-	var bestSynced *LyricsResponse
-	var bestPlain *LyricsResponse
-	bestSyncedDiff := 2  // ±2 seconds for synced
-	bestPlainDiff := 30  // ±30 seconds for plain
-
+	// === Tier 1: Synced + duration ±2s ===
 	for _, r := range results {
-		rDuration := int(r.Duration)
-		diff := abs(rDuration - targetDuration)
-
-		// For SYNCED lyrics: need close duration match (±2 seconds)
-		if diff <= bestSyncedDiff {
-			bestSyncedDiff = diff
-			bestSynced = &r
+		if r.SyncedLyrics == "" {
+			continue
 		}
-
-		// For PLAIN lyrics: looser duration match (±30 seconds)
-		if diff <= bestPlainDiff {
-			bestPlainDiff = diff
-			bestPlain = &r
+		diff := abs(int(r.Duration) - targetDuration)
+		if diff <= 2 {
+			logger.Printf("  LRCLib TIER 1: Synced + exact duration match (diff=%ds)", diff)
+			return &r
 		}
 	}
 
-	// Prefer synced if available
-	if bestSynced != nil {
-		return bestSynced
+	// === Tier 2: Plain lyrics + matching album (any duration) ===
+	for _, r := range results {
+		if r.PlainLyrics == "" {
+			continue
+		}
+		if albumNamesMatch(r.AlbumName, targetAlbum) {
+			logger.Printf("  LRCLib TIER 2: Plain + album match album=%q", r.AlbumName)
+			return &r
+		}
 	}
-	return bestPlain
+
+	// === Tier 3: Any plain lyrics (fallback) ===
+	for _, r := range results {
+		if r.PlainLyrics != "" {
+			logger.Printf("  LRCLib TIER 3: Plain fallback album=%q", r.AlbumName)
+			return &r
+		}
+	}
+
+	return nil
+}
+
+// albumNamesMatch checks if two album names refer to the same album
+func albumNamesMatch(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	// Direct match (case-insensitive)
+	if strings.EqualFold(a, b) {
+		return true
+	}
+	// Normalized comparison
+	na := normalizeAlbumName(a)
+	nb := normalizeAlbumName(b)
+	if na == nb {
+		return true
+	}
+	// One contains the other
+	if len(na) > 3 && len(nb) > 3 {
+		if strings.Contains(na, nb) || strings.Contains(nb, na) {
+			return true
+		}
+	}
+	return false
+}
+
+// normalizeAlbumName removes brackets and normalizes for comparison
+func normalizeAlbumName(album string) string {
+	album = strings.ToLower(album)
+	album = strings.ReplaceAll(album, "[", "")
+	album = strings.ReplaceAll(album, "]", "")
+	album = strings.ReplaceAll(album, "(", "")
+	album = strings.ReplaceAll(album, ")", "")
+	album = strings.ReplaceAll(album, "-", " ")
+	album = strings.Join(strings.Fields(album), " ")
+	return strings.TrimSpace(album)
 }
 
 // filterByAlbum filters results by album name match score

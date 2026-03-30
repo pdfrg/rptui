@@ -3,8 +3,10 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"charm.land/lipgloss/v2"
 	"github.com/adrg/xdg"
@@ -18,6 +20,44 @@ type ColorTheme struct {
 	Accent     string `toml:"accent"`
 	Muted      string `toml:"muted"`
 	Cursor     string `toml:"cursor"`
+}
+
+// themeColorsToml is used for parsing the full colors.toml including palette colors
+type themeColorsToml struct {
+	Background string `toml:"background"`
+	Foreground string `toml:"foreground"`
+	Accent     string `toml:"accent"`
+	Muted      string `toml:"muted"`
+	Cursor     string `toml:"cursor"`
+	Color0     string `toml:"color0"`
+	Color1     string `toml:"color1"`
+	Color2     string `toml:"color2"`
+	Color3     string `toml:"color3"`
+	Color4     string `toml:"color4"`
+	Color5     string `toml:"color5"`
+	Color6     string `toml:"color6"`
+	Color7     string `toml:"color7"`
+	Color8     string `toml:"color8"`
+	Color9     string `toml:"color9"`
+	Color10    string `toml:"color10"`
+	Color11    string `toml:"color11"`
+	Color12    string `toml:"color12"`
+	Color13    string `toml:"color13"`
+	Color14    string `toml:"color14"`
+	Color15    string `toml:"color15"`
+}
+
+// palette returns color0-15 as a map, normalized to #hex
+func (t *themeColorsToml) palette() map[string]string {
+	norm := normalizeHex
+	return map[string]string{
+		"0": norm(t.Color0), "1": norm(t.Color1), "2": norm(t.Color2),
+		"3": norm(t.Color3), "4": norm(t.Color4), "5": norm(t.Color5),
+		"6": norm(t.Color6), "7": norm(t.Color7), "8": norm(t.Color8),
+		"9": norm(t.Color9), "10": norm(t.Color10), "11": norm(t.Color11),
+		"12": norm(t.Color12), "13": norm(t.Color13), "14": norm(t.Color14),
+		"15": norm(t.Color15),
+	}
 }
 
 // ThemeStyles contains parsed lipgloss styles for the application
@@ -144,19 +184,34 @@ func LoadTheme(colorsFile, themeName string) (*ColorTheme, error) {
 	return DefaultTheme(), nil
 }
 
-// loadThemeFromFile loads a theme from a TOML file
+// loadThemeFromFile loads a theme from a TOML file, applying color fixes
 func loadThemeFromFile(path string) (*ColorTheme, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read theme file: %w", err)
 	}
 
-	var theme ColorTheme
-	if err := toml.Unmarshal(data, &theme); err != nil {
+	var raw themeColorsToml
+	if err := toml.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("failed to parse theme TOML: %w", err)
 	}
 
-	// Validate and apply defaults for missing fields
+	norm := normalizeHex
+	theme := ColorTheme{
+		Background: norm(raw.Background),
+		Foreground: norm(raw.Foreground),
+		Accent:     norm(raw.Accent),
+		Cursor:     norm(raw.Cursor),
+	}
+
+	// Use color7 for muted, fallback to muted field
+	if raw.Color7 != "" {
+		theme.Muted = norm(raw.Color7)
+	} else {
+		theme.Muted = norm(raw.Muted)
+	}
+
+	// Apply defaults for missing fields
 	defaults := DefaultTheme()
 	if theme.Background == "" {
 		theme.Background = defaults.Background
@@ -164,11 +219,21 @@ func loadThemeFromFile(path string) (*ColorTheme, error) {
 	if theme.Foreground == "" {
 		theme.Foreground = defaults.Foreground
 	}
-	if theme.Accent == "" {
-		theme.Accent = defaults.Accent
-	}
 	if theme.Muted == "" {
 		theme.Muted = defaults.Muted
+	}
+
+	// Apply color fixes: ensure accent, cursor, and foreground are all visually distinct
+	palette := raw.palette()
+	theme.Accent, theme.Cursor = applyColorFixes(
+		theme.Foreground, theme.Background,
+		theme.Accent, theme.Cursor,
+		palette,
+	)
+
+	// Fallback accent/cursor to defaults if still empty
+	if theme.Accent == "" {
+		theme.Accent = defaults.Accent
 	}
 	if theme.Cursor == "" {
 		theme.Cursor = defaults.Cursor
@@ -197,4 +262,141 @@ func NewThemeStyles(theme *ColorTheme) *ThemeStyles {
 			Foreground(lipgloss.Color(theme.Accent)).
 			Bold(true),
 	}
+}
+
+// --- Color math helpers for theme color fixing ---
+
+func normalizeHex(s string) string {
+	s = strings.TrimSpace(s)
+	if strings.HasPrefix(s, "0x") {
+		return "#" + s[2:]
+	}
+	return s
+}
+
+func parseHexColor(s string) (r, g, b int, ok bool) {
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(s, "0x")
+	s = strings.TrimPrefix(s, "#")
+	if len(s) != 6 {
+		return 0, 0, 0, false
+	}
+	_, err := fmt.Sscanf(s, "%02x%02x%02x", &r, &g, &b)
+	return r, g, b, err == nil
+}
+
+func weightedDistance(h1, h2 string) float64 {
+	r1, g1, b1, ok1 := parseHexColor(h1)
+	r2, g2, b2, ok2 := parseHexColor(h2)
+	if !ok1 || !ok2 {
+		return -1
+	}
+	dr, dg, db := float64(r1-r2), float64(g1-g2), float64(b1-b2)
+	return math.Sqrt(0.299*dr*dr + 0.587*dg*dg + 0.114*db*db)
+}
+
+func strikingScore(hex string) float64 {
+	r, g, b, ok := parseHexColor(hex)
+	if !ok {
+		return 0
+	}
+	maxC := float64(max(r, g, b)) / 255.0
+	minC := float64(min(r, g, b)) / 255.0
+	var sat float64
+	if maxC > 0 {
+		sat = (maxC - minC) / maxC
+	}
+	return maxC * sat
+}
+
+func minDistBetween(hex string, list []string) float64 {
+	minD := -1.0
+	for _, other := range list {
+		if other == "" {
+			continue
+		}
+		d := weightedDistance(hex, other)
+		if minD < 0 || (d >= 0 && d < minD) {
+			minD = d
+		}
+	}
+	return minD
+}
+
+func isExcluded(hex string, exclude []string) bool {
+	for _, e := range exclude {
+		if strings.EqualFold(hex, e) {
+			return true
+		}
+	}
+	return false
+}
+
+// findReplacement picks from theme's color1-15 palette.
+// Candidate must not be in exclude and must be wD>30 from every mustDifferFrom color.
+// If preferStriking, picks most vivid; otherwise picks first available.
+func findReplacement(colors map[string]string, exclude, mustDifferFrom []string, preferStriking bool) string {
+	indices := []string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"}
+	var candidates []string
+	for _, idx := range indices {
+		c := colors[idx]
+		if c == "" || isExcluded(c, exclude) {
+			continue
+		}
+		if minDistBetween(c, mustDifferFrom) < 30 {
+			continue
+		}
+		candidates = append(candidates, c)
+	}
+	if len(candidates) == 0 {
+		return ""
+	}
+	if !preferStriking {
+		return candidates[0]
+	}
+	best, bestScore := "", -1.0
+	for _, c := range candidates {
+		if s := strikingScore(c); s > bestScore {
+			best, bestScore = c, s
+		}
+	}
+	return best
+}
+
+// applyColorFixes ensures accent, cursor, and foreground are all visually distinct.
+// Returns (fixedAccent, fixedCursor). Original values are kept if no fix is needed.
+//
+// Step 1: Cursor vs foreground — if too similar (wD<20), find replacement.
+// Step 2: Accent vs cursor — must always differ for rptui. If identical (wD<0.1), find replacement.
+// Step 3: Accent vs foreground — if too similar (wD<20), find striking replacement.
+func applyColorFixes(fg, bg, accent, cursor string, palette map[string]string) (string, string) {
+	curCursor := cursor
+	curAccent := accent
+	exclude := []string{fg, bg}
+
+	// Step 1: Cursor vs foreground (must be visibly different)
+	if cursor != "" && fg != "" && weightedDistance(cursor, fg) >= 0 && weightedDistance(cursor, fg) < 20 {
+		if fix := findReplacement(palette, exclude, []string{fg, cursor, accent}, false); fix != "" {
+			curCursor = fix
+			exclude = append(exclude, cursor, fix)
+		}
+	}
+
+	// Step 2: Accent vs cursor (must always differ in rptui)
+	if accent != "" && curCursor != "" && weightedDistance(accent, curCursor) >= 0 && weightedDistance(accent, curCursor) < 0.1 {
+		if fix := findReplacement(palette, exclude, []string{fg, curCursor}, true); fix != "" {
+			curAccent = fix
+			exclude = append(exclude, accent, fix)
+		}
+	}
+
+	// Step 3: Accent vs foreground (must be visibly different)
+	if accent != "" && fg != "" && curAccent == accent &&
+		weightedDistance(accent, fg) >= 0 && weightedDistance(accent, fg) < 20 {
+		if fix := findReplacement(palette, exclude, []string{fg, curCursor}, true); fix != "" {
+			curAccent = fix
+		}
+	}
+
+	return curAccent, curCursor
 }

@@ -1,24 +1,38 @@
 # problems or improvements of current features
 # roadmap.txt is for major new features or changes
 
-[hold on this item for wikipedia replacement with other artist info source, see: roadmap.txt]
-lrclib and wikipedia api processing needs further testing/improving
-	artist page identification issues
-		Gone Gone Beyond > returns "Gone" is a song by Irish rock band U2
-	discography parsing issues
-		The The
-			correctly shows all albums from 1981 to 2016
-			but then returns last line as "^ Roberts, David (2006)"
-		Manassas
-			only shows "^ Salaverri, Fernando (2005)"
-	no discography returned
-		Thievery Corporation
-		Medeski Martin & Wood
-		Cracker	
-		Tool
-		Camera Obscura
-		Blind Pilot
-		Puscifer
-		The Georgia Satellites
-		Lucho Bermudez (note: accent on u in Bermudez)
+artist info view and regular lyrics view
+	consider no refresh on song changes if user is in that view already
+	if reading lyrics or about the artist and not finished reading on song change
+		would likely prefer to finish reading and not have info disappear
+	would need to give hint "press "u" to update" to get lyrics/info for current song
+	synced lyrics OK to auto refresh
+		
+artist info view
+	a lot of discogs bios are poor
+		plus they have all the tags and IDs that require additional API queries
+	probably should use theaudiodb bio by default
+	which would mean bio: tadb, discography: mb, images: discogs
+		this would leave only wikipedia as the only fallback query
+		however, we shouldn't run the discogs ID resolution queries unless there is no tadb bio
+	need fallbacks per display item, not per site
+		currently if get a response from discogs for bio but no thumb, no thumb is shown
+		priority logic
+			bio: tadb > discogs (only run ID resolution API queries if no tadb bio) > wp
+			discography: mb > wp (needs parsing improvements, see above)
+			thumb: discogs > tadb > wp
+			gallery: discogs > tadb
+	discogs bios also contain
+		[u] underline? [/u] tags		
+		[A=stuff] capital letter tag
+	"source:" placed under discography suggests the discography is from source, when it's the bio
+		place "source:" attribution under bio
+		under studio albums give attribution "Source: musicbrainz"
+		under thumb "Source: discogs"
+
+artist image
+	now appears in artist info view to left with bio and discography to right
+	is supposed to be shown outside of viewport, not inside it
+	however, when scrolling viewport, image will scroll up 1 or 2 lines (but no more)		
+	increased padding from +3 to +5 to ensure there was no overlap, but behavior didn't change
 
