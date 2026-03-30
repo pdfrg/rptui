@@ -239,6 +239,10 @@ func loadThemeFromFile(path string) (*ColorTheme, error) {
 		theme.Cursor = defaults.Cursor
 	}
 
+	// Step 4: Muted validation — ensure muted is visually distinct from accent
+	// and not too saturated (some themes set color7 to a vivid color)
+	theme.Muted = applyMutedFix(theme.Accent, theme.Muted, palette)
+
 	return &theme, nil
 }
 
@@ -399,4 +403,126 @@ func applyColorFixes(fg, bg, accent, cursor string, palette map[string]string) (
 	}
 
 	return curAccent, curCursor
+}
+
+// saturation returns the saturation of an RGB color (0=gray, 1=fully saturated).
+func saturation(r, g, b int) float64 {
+	maxC := float64(max(r, g, b))
+	minC := float64(min(r, g, b))
+	if maxC == 0 {
+		return 0
+	}
+	return (maxC - minC) / maxC
+}
+
+// clampByte clamps an int to valid byte range [0, 255].
+func clampByte(v int) int {
+	if v < 0 {
+		return 0
+	}
+	if v > 255 {
+		return 255
+	}
+	return v
+}
+
+// desaturateToTarget desaturates a hex color to approximately targetSat
+// by blending each channel toward neutral gray (#808080).
+// Preserves hue direction and lightness character while reducing saturation.
+func desaturateToTarget(hex string, targetSat float64) string {
+	r, g, b, ok := parseHexColor(hex)
+	if !ok {
+		return hex
+	}
+	sat := saturation(r, g, b)
+	if sat <= targetSat {
+		return hex
+	}
+
+	maxC := float64(max(r, g, b))
+	minC := float64(min(r, g, b))
+
+	// Solve for blend factor where new_sat ≈ targetSat
+	// After blending toward #80 (128) by factor f:
+	//   sat' = (max-min)*(1-f) / (max*(1-f) + 128*f)
+	denom := (maxC - minC) - targetSat*maxC + 128*targetSat
+	if denom <= 0 {
+		return desaturateGray(hex, 0.8)
+	}
+	blend := ((maxC - minC) - targetSat*maxC) / denom
+	if blend < 0 {
+		blend = 0
+	}
+	if blend > 0.9 {
+		blend = 0.9
+	}
+	return desaturateGray(hex, blend)
+}
+
+func desaturateGray(hex string, blendFactor float64) string {
+	r, g, b, ok := parseHexColor(hex)
+	if !ok {
+		return hex
+	}
+	nr := int(math.Round(float64(r)*(1-blendFactor) + 128*blendFactor))
+	ng := int(math.Round(float64(g)*(1-blendFactor) + 128*blendFactor))
+	nb := int(math.Round(float64(b)*(1-blendFactor) + 128*blendFactor))
+	return fmt.Sprintf("#%02x%02x%02x", clampByte(nr), clampByte(ng), clampByte(nb))
+}
+
+// applyMutedFix validates the muted color and fixes it if:
+//  1. It's too similar to accent (weightedDistance < 30)
+//  2. It's too saturated for a muted color (saturation > 0.35)
+//
+// Fix strategy (in order):
+//  1. Try color8 if it's desaturated (sat<0.35) and distinct from accent
+//  2. Desaturate color7 to target saturation 0.25 (preserves hue/character)
+//  3. Fall back to built-in default muted
+func applyMutedFix(accent, muted string, palette map[string]string) string {
+	if muted == "" {
+		return muted
+	}
+
+	r, g, b, ok := parseHexColor(muted)
+	if !ok {
+		return muted
+	}
+
+	muSat := saturation(r, g, b)
+	muDist := -1.0
+	if accent != "" {
+		muDist = weightedDistance(accent, muted)
+	}
+
+	needsFix := false
+	if accent != "" && muDist >= 0 && muDist < 30 {
+		needsFix = true
+	} else if muSat > 0.35 {
+		needsFix = true
+	}
+
+	if !needsFix {
+		return muted
+	}
+
+	// Try color8 first
+	c8 := palette["8"]
+	if c8 != "" {
+		r8, g8, b8, ok8 := parseHexColor(c8)
+		if ok8 {
+			c8sat := saturation(r8, g8, b8)
+			if c8sat < 0.35 && (accent == "" || weightedDistance(accent, c8) >= 30) {
+				return c8
+			}
+		}
+	}
+
+	// Desaturate color7 to target saturation 0.25
+	desat := desaturateToTarget(muted, 0.25)
+	if desat != muted {
+		return desat
+	}
+
+	// Last resort: built-in default
+	return DefaultTheme().Muted
 }
