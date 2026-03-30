@@ -48,8 +48,11 @@ type ThemeInfo struct {
 	CursorDist  float64
 	AccentRatio float64
 	CursorRatio float64
+	MutedDist   float64 // distance from accent to muted
+	MutedSat    float64 // saturation of muted (color7)
 	FixAccent   string
 	FixCursor   string
+	FixMuted    string
 	// Theme's own ANSI palette (color1-6) for fallbacks
 	Colors map[string]string
 }
@@ -181,6 +184,74 @@ func isExcluded(hex string, exclude []string) bool {
 	return false
 }
 
+func saturation(r, g, b int) float64 {
+	maxC := float64(max(r, g, b))
+	minC := float64(min(r, g, b))
+	if maxC == 0 {
+		return 0
+	}
+	return (maxC - minC) / maxC
+}
+
+func clamp(v int) int {
+	if v < 0 {
+		return 0
+	}
+	if v > 255 {
+		return 255
+	}
+	return v
+}
+
+func toHex(r, g, b int) string {
+	return fmt.Sprintf("#%02x%02x%02x", clamp(r), clamp(g), clamp(b))
+}
+
+// desaturateToTarget desaturates a hex color to approximately targetSat
+// by blending each channel toward neutral gray (#808080).
+// Preserves hue direction and lightness character while reducing saturation.
+func desaturateToTarget(hex string, targetSat float64) string {
+	r, g, b, ok := parseHex(hex)
+	if !ok {
+		return hex
+	}
+	sat := saturation(r, g, b)
+	if sat <= targetSat {
+		return hex
+	}
+
+	maxC := float64(max(r, g, b))
+	minC := float64(min(r, g, b))
+
+	// Solve for blend factor b where new_sat ≈ targetSat
+	// After blending toward #80 (128) by factor f:
+	//   max' = max*(1-f) + 128*f, min' = min*(1-f) + 128*f
+	//   sat' = (max'-min') / max' = (max-min)*(1-f) / (max*(1-f) + 128*f)
+	denom := (maxC - minC) - targetSat*maxC + 128*targetSat
+	if denom <= 0 {
+		return desaturateGray(hex, 0.8)
+	}
+	blend := ((maxC - minC) - targetSat*maxC) / denom
+	if blend < 0 {
+		blend = 0
+	}
+	if blend > 0.9 {
+		blend = 0.9
+	}
+	return desaturateGray(hex, blend)
+}
+
+func desaturateGray(hex string, blendFactor float64) string {
+	r, g, b, ok := parseHex(hex)
+	if !ok {
+		return hex
+	}
+	nr := int(math.Round(float64(r)*(1-blendFactor) + 128*blendFactor))
+	ng := int(math.Round(float64(g)*(1-blendFactor) + 128*blendFactor))
+	nb := int(math.Round(float64(b)*(1-blendFactor) + 128*blendFactor))
+	return toHex(nr, ng, nb)
+}
+
 // padVW pads a rendered string to target visual width
 func padVW(rendered string, target int) string {
 	vw := lipgloss.Width(rendered)
@@ -223,7 +294,7 @@ func renderColorLine(label, hex string) string {
 
 // buildThemeLines returns all lines for one theme (each ends with \n)
 func buildThemeLines(t ThemeInfo) string {
-	hasFix := t.FixAccent != "" || t.FixCursor != ""
+	hasFix := t.FixAccent != "" || t.FixCursor != "" || t.FixMuted != ""
 
 	var b strings.Builder
 
@@ -235,7 +306,7 @@ func buildThemeLines(t ThemeInfo) string {
 		{"bg", t.Background, ""},
 		{"fg", t.Foreground, ""},
 		{"ac", t.Accent, t.FixAccent},
-		{"mu", t.Muted, ""},
+		{"mu", t.Muted, t.FixMuted},
 		{"cu", t.Cursor, t.FixCursor},
 	}
 
@@ -244,6 +315,9 @@ func buildThemeLines(t ThemeInfo) string {
 	if t.Foreground != "" {
 		metrics = fmt.Sprintf("  ac wD=%.0f cR=%.2f  cu wD=%.0f cR=%.2f",
 			t.AccentDist, t.AccentRatio, t.CursorDist, t.CursorRatio)
+		if t.Muted != "" {
+			metrics += fmt.Sprintf("  mu wD=%.0f sat=%.2f", t.MutedDist, t.MutedSat)
+		}
 	}
 
 	for _, r := range rows {
@@ -358,6 +432,61 @@ func main() {
 				}
 			}
 		}
+
+		// Step 4: Muted validation (accent vs muted + saturation check)
+		curMuted := info.Muted
+		if info.Muted != "" {
+			// Compute muted metrics
+			if info.Muted != "" {
+				r7, g7, b7, ok7 := parseHex(info.Muted)
+				if ok7 {
+					info.MutedSat = saturation(r7, g7, b7)
+				}
+			}
+			if info.Accent != "" {
+				info.MutedDist = weightedDist(info.Accent, info.Muted)
+			}
+
+			needsFix := false
+			reason := ""
+
+			if info.Accent != "" && info.MutedDist >= 0 && info.MutedDist < 30 {
+				needsFix = true
+				reason = "too close to accent"
+			} else if info.MutedSat > 0.35 {
+				needsFix = true
+				reason = "too saturated"
+			}
+
+			if needsFix {
+				// Try color8 first
+				c8 := info.Colors["8"]
+				c8ok := false
+				if c8 != "" {
+					r8, g8, b8, ok8 := parseHex(c8)
+					if ok8 {
+						c8sat := saturation(r8, g8, b8)
+						if c8sat < 0.35 && (info.Accent == "" || weightedDist(info.Accent, c8) >= 30) {
+							info.FixMuted = c8
+							curMuted = c8
+							c8ok = true
+						}
+					}
+				}
+
+				if !c8ok {
+					// Desaturate color7 to target saturation 0.25
+					desat := desaturateToTarget(info.Muted, 0.25)
+					if desat != info.Muted {
+						info.FixMuted = desat
+						curMuted = desat
+					}
+				}
+
+				_ = reason
+				_ = curMuted
+			}
+		}
 		themes = append(themes, info)
 	}
 
@@ -368,7 +497,7 @@ func main() {
 	}
 
 	// Summary
-	var fixed, accFix, curFix int
+	var fixed, accFix, curFix, muFix int
 	for _, t := range themes {
 		if t.FixAccent != "" {
 			accFix++
@@ -376,10 +505,13 @@ func main() {
 		if t.FixCursor != "" {
 			curFix++
 		}
-		if t.FixAccent != "" || t.FixCursor != "" {
+		if t.FixMuted != "" {
+			muFix++
+		}
+		if t.FixAccent != "" || t.FixCursor != "" || t.FixMuted != "" {
 			fixed++
 		}
 	}
-	fmt.Printf("Summary: %d themes, %d would be modified (acc:%d cur:%d)\n",
-		len(themes), fixed, accFix, curFix)
+	fmt.Printf("Summary: %d themes, %d would be modified (acc:%d cur:%d mu:%d)\n",
+		len(themes), fixed, accFix, curFix, muFix)
 }
