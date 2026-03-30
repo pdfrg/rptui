@@ -1,38 +1,25 @@
 # problems or improvements of current features
 # roadmap.txt is for major new features or changes
 
-artist info view and regular lyrics view
-	consider no refresh on song changes if user is in that view already
-	if reading lyrics or about the artist and not finished reading on song change
-		would likely prefer to finish reading and not have info disappear
-	would need to give hint "press "u" to update" to get lyrics/info for current song
-	synced lyrics OK to auto refresh
-		
-artist info view
-	a lot of discogs bios are poor
-		plus they have all the tags and IDs that require additional API queries
-	probably should use theaudiodb bio by default
-	which would mean bio: tadb, discography: mb, images: discogs
-		this would leave only wikipedia as the only fallback query
-		however, we shouldn't run the discogs ID resolution queries unless there is no tadb bio
-	need fallbacks per display item, not per site
-		currently if get a response from discogs for bio but no thumb, no thumb is shown
-		priority logic
-			bio: tadb > discogs (only run ID resolution API queries if no tadb bio) > wp
-			discography: mb > wp (needs parsing improvements, see above)
-			thumb: discogs > tadb > wp
-			gallery: discogs > tadb
-	discogs bios also contain
-		[u] underline? [/u] tags		
-		[A=stuff] capital letter tag
-	"source:" placed under discography suggests the discography is from source, when it's the bio
-		place "source:" attribution under bio
-		under studio albums give attribution "Source: musicbrainz"
-		under thumb "Source: discogs"
-
-artist image
+artist image (minor visual glitch, not high priority)
 	now appears in artist info view to left with bio and discography to right
 	is supposed to be shown outside of viewport, not inside it
 	however, when scrolling viewport, image will scroll up 1 or 2 lines (but no more)		
 	increased padding from +3 to +5 to ensure there was no overlap, but behavior didn't change
+	not fixed with ZIndex=1
 
+omarchy/colors.toml parsing
+	refer to test program at cmd/test_threshold
+	rare theme where "muted" ends up being a bright color AND is similar to "accent"
+		only one of my themes seems to have this issue: aetheria
+		in footer, keys are "accent" and hints are "muted", so we need them to be very different
+	many themes don't have a defined muted color which I think we map from color 7 (light gray)
+		but this is OK, because we have a good fallback
+	possible solutions
+		find other color in omarchy theme or colors.toml that is actually a muted color and different than accent
+			challenge -- how to define this programmatically
+		just fallback to usual light gray fallback
+
+plain lyrics view
+	need 2 more characters of left padding/indentation
+	

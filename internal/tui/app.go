@@ -131,12 +131,23 @@ type Model struct {
 	favoritesQueue       []cache.CachedSong
 	lastFavoriteQueuedAt time.Time
 
-	// Bottom view content
+	// Bottom view content (displayed to user)
 	lyrics       string
 	syncedLyrics []api.SyncedLyric
 	artistInfo   *models.ArtistInfo
 	artistStatus string                        // current loading status for artist view
 	artistCache  map[string]*models.ArtistInfo // keyed by lowercase artist name
+
+	// Pending content (fetched for current song, not yet shown).
+	// User presses 'u' to update displayed content from pending.
+	// Synced lyrics bypass this — they always auto-update.
+	pendingLyrics          string
+	pendingArtistInfo      *models.ArtistInfo
+	pendingEventID         int64  // eventID the pending data belongs to
+	pendingArtistArtStr    string // pending rendered artist thumbnail
+	pendingArtistArtLoaded bool
+	pendingArtistArtWidth  int
+	pendingArtistArtHeight int
 
 	// Bubbles components
 	viewport    viewport.Model
@@ -458,8 +469,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.syncedLyrics = nil
 		m.artistInfo = nil
 		m.artistStatus = ""
+		m.pendingLyrics = ""
+		m.pendingArtistInfo = nil
+		m.pendingEventID = 0
+		m.pendingArtistArtStr = ""
+		m.pendingArtistArtLoaded = false
+		m.pendingArtistArtWidth = 0
+		m.pendingArtistArtHeight = 0
 		m.albumArtLoaded = false
 		m.albumArtStr = ""
+		m.artistArtStr = ""
+		m.artistArtLoaded = false
+		m.artistArtEventID = 0
 		m.initialized = false
 		m.connectedAt = time.Time{}
 
@@ -668,17 +689,27 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		prevMode := m.bottomViewMode
 		m.bottomViewMode = (m.bottomViewMode + 1) % ViewModeCount
 		statusCmd := setStatus(&m, fmt.Sprintf("View: %s", bottomViewNames[m.bottomViewMode]), false)
-		m.updateBottomView()
 
 		var cmds []tea.Cmd
 		cmds = append(cmds, statusCmd)
+
+		// When leaving lyrics or artist view, apply any pending updates
+		// so both views are current next time they're entered.
+		if prevMode == ViewLyrics || prevMode == ViewArtist {
+			if m.hasPendingUpdate() {
+				m.applyPendingUpdate()
+				if m.pendingArtistArtLoaded && m.bottomViewMode == ViewArtist {
+					cmds = append(cmds, renderArtistArtAfterDelay())
+				}
+			}
+		}
 
 		// Clear artist image when leaving artist view
 		if prevMode == ViewArtist && m.bottomViewMode != ViewArtist {
 			cmds = append(cmds, clearKittyImagesCmd(), renderAlbumArtAfterDelay())
 		}
 
-		// Fetch lyrics/artist if needed
+		// Fetch lyrics/artist if needed when entering those views
 		if m.bottomViewMode == ViewLyrics || m.bottomViewMode == ViewSyncedLyrics {
 			if m.lyrics == "" && m.currentSong != nil {
 				cmds = append(cmds, m.fetchLyricsCmd())
@@ -687,12 +718,26 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if m.artistInfo == nil && m.currentSong != nil {
 				cmds = append(cmds, m.fetchArtistCmd())
 			}
-			// Re-render artist thumbnail if already loaded
 			if m.artistArtLoaded && m.artistArtStr != "" {
 				cmds = append(cmds, renderArtistArtAfterDelay())
 			}
 		}
+
+		m.updateBottomView()
 		return m, tea.Batch(cmds...)
+
+	case "u":
+		// Update displayed lyrics/artist info from pending
+		if m.hasPendingUpdate() {
+			hadPendingArt := m.pendingArtistArtLoaded
+			m.applyPendingUpdate()
+			var cmd tea.Cmd
+			if hadPendingArt && m.bottomViewMode == ViewArtist {
+				cmd = renderArtistArtAfterDelay()
+			}
+			return m, tea.Batch(cmd, setStatus(&m, "Updated to current song", false))
+		}
+		return m, nil
 
 	case "f":
 		// Toggle favorite
@@ -808,8 +853,18 @@ func (m Model) switchStation(channel int) (tea.Model, tea.Cmd) {
 	m.syncedLyrics = nil
 	m.artistInfo = nil
 	m.artistStatus = ""
+	m.pendingLyrics = ""
+	m.pendingArtistInfo = nil
+	m.pendingEventID = 0
+	m.pendingArtistArtStr = ""
+	m.pendingArtistArtLoaded = false
+	m.pendingArtistArtWidth = 0
+	m.pendingArtistArtHeight = 0
 	m.albumArtLoaded = false
 	m.albumArtStr = ""
+	m.artistArtStr = ""
+	m.artistArtLoaded = false
+	m.artistArtEventID = 0
 	m.initialized = false
 	m.connectedAt = time.Time{}
 	m.connState = ""
@@ -1203,22 +1258,39 @@ func (m Model) handleImageLoaded(msg imageLoadedMsg) (tea.Model, tea.Cmd) {
 	return m, renderAlbumArtAfterDelay()
 }
 
-// handleLyricsFetched handles lyrics fetch completion
+// handleLyricsFetched handles lyrics fetch completion.
+// Synced lyrics always auto-update.  Plain lyrics go to a pending slot
+// so the user can finish reading before pressing 'u' to update.
 func (m Model) handleLyricsFetched(msg lyricsFetchedMsg) (tea.Model, tea.Cmd) {
 	// Discard stale result from a previous song
 	if m.currentSong == nil || msg.eventID != m.currentSong.EventID {
 		return m, nil
 	}
+
+	// Synced lyrics always go straight to display (time-based)
+	m.syncedLyrics = msg.synced
+
 	if msg.err != nil {
-		m.lyrics = "Lyrics not found"
+		m.pendingLyrics = "Lyrics not found"
+		m.pendingEventID = msg.eventID
+		// Auto-display if nothing showing yet
+		if m.lyrics == "" {
+			m.lyrics = m.pendingLyrics
+		}
 		if m.bottomViewMode == ViewLyrics {
 			m.updateBottomView()
 		}
 		return m, nil
 	}
 
-	m.lyrics = msg.plain
-	m.syncedLyrics = msg.synced
+	// Store plain lyrics in pending
+	m.pendingLyrics = msg.plain
+	m.pendingEventID = msg.eventID
+
+	// Auto-display if nothing showing yet
+	if m.lyrics == "" {
+		m.lyrics = m.pendingLyrics
+	}
 
 	if m.bottomViewMode == ViewLyrics || m.bottomViewMode == ViewSyncedLyrics {
 		m.updateBottomView()
@@ -1227,7 +1299,9 @@ func (m Model) handleLyricsFetched(msg lyricsFetchedMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleArtistFetched handles artist info fetch completion
+// handleArtistFetched handles artist info fetch completion.
+// Artist info goes to a pending slot so the user can finish reading
+// before pressing 'u' to update.
 func (m Model) handleArtistFetched(msg artistFetchedMsg) (tea.Model, tea.Cmd) {
 	// Discard stale result from a previous song
 	if m.currentSong == nil || msg.eventID != m.currentSong.EventID {
@@ -1237,21 +1311,33 @@ func (m Model) handleArtistFetched(msg artistFetchedMsg) (tea.Model, tea.Cmd) {
 	m.artistStatus = ""
 
 	if msg.err != nil {
-		m.artistInfo = &models.ArtistInfo{Bio: "Artist info not found"}
+		m.pendingArtistInfo = &models.ArtistInfo{Bio: "Artist info not found"}
+		m.pendingEventID = msg.eventID
+		// Auto-display if nothing showing yet
+		if m.artistInfo == nil {
+			m.artistInfo = m.pendingArtistInfo
+		}
 		if m.bottomViewMode == ViewArtist {
 			m.updateBottomView()
 		}
 		return m, nil
 	}
 
-	m.artistInfo = msg.info
+	// Store in pending
+	m.pendingArtistInfo = msg.info
+	m.pendingEventID = msg.eventID
 
-	// Cache by artist name
-	if m.artistInfo != nil && m.currentSong != nil {
+	// Always update the artist cache (for next time this artist plays)
+	if msg.info != nil && m.currentSong != nil {
 		if m.artistCache == nil {
 			m.artistCache = make(map[string]*models.ArtistInfo)
 		}
-		m.artistCache[strings.ToLower(m.currentSong.Artist)] = m.artistInfo
+		m.artistCache[strings.ToLower(m.currentSong.Artist)] = msg.info
+	}
+
+	// Auto-display if nothing showing yet
+	if m.artistInfo == nil {
+		m.artistInfo = m.pendingArtistInfo
 	}
 
 	if m.bottomViewMode == ViewArtist {
@@ -1260,8 +1346,8 @@ func (m Model) handleArtistFetched(msg artistFetchedMsg) (tea.Model, tea.Cmd) {
 
 	// Start downloading artist thumbnail if available
 	var cmd tea.Cmd
-	if m.artistInfo != nil && m.artistInfo.ThumbnailURL != "" {
-		cmd = m.loadArtistImageCmd(m.artistInfo.ThumbnailURL)
+	if msg.info != nil && msg.info.ThumbnailURL != "" {
+		cmd = m.loadArtistImageCmd(msg.info.ThumbnailURL)
 	}
 
 	return m, cmd
@@ -1333,6 +1419,53 @@ func (m *Model) updatePlaylist() {
 	m.playlistWidget.SetCursor(m.currentSongIndex)
 }
 
+// hasPendingUpdate returns true if there is pending data for the current
+// song that differs from what is currently displayed.
+func (m *Model) hasPendingUpdate() bool {
+	if m.currentSong == nil || m.pendingEventID != m.currentSong.EventID {
+		return false
+	}
+	if m.bottomViewMode == ViewLyrics {
+		return m.pendingLyrics != "" && m.pendingLyrics != m.lyrics
+	}
+	if m.bottomViewMode == ViewArtist {
+		hasInfo := m.pendingArtistInfo != nil && m.pendingArtistInfo != m.artistInfo
+		hasArt := m.pendingArtistArtLoaded
+		return hasInfo || hasArt
+	}
+	return false
+}
+
+// applyPendingUpdate copies pending data into the displayed fields and
+// refreshes the current view.  Called when the user presses 'u'.
+func (m *Model) applyPendingUpdate() {
+	if m.currentSong == nil || m.pendingEventID != m.currentSong.EventID {
+		return
+	}
+	if m.pendingLyrics != "" {
+		m.lyrics = m.pendingLyrics
+	}
+	if m.pendingArtistInfo != nil {
+		m.artistInfo = m.pendingArtistInfo
+		// Cache by artist name
+		if m.artistCache == nil {
+			m.artistCache = make(map[string]*models.ArtistInfo)
+		}
+		m.artistCache[strings.ToLower(m.currentSong.Artist)] = m.artistInfo
+	}
+	if m.pendingArtistArtLoaded {
+		m.artistArtStr = m.pendingArtistArtStr
+		m.artistArtLoaded = true
+		m.artistArtEventID = m.pendingEventID
+		m.artistArtWidth = m.pendingArtistArtWidth
+		m.artistArtHeight = m.pendingArtistArtHeight
+		// Clear pending art after applying
+		m.pendingArtistArtStr = ""
+		m.pendingArtistArtLoaded = false
+	}
+	m.updateBottomView()
+}
+
 // updateBottomView updates the viewport content based on current mode
 func (m *Model) updateBottomView() {
 	var content string
@@ -1347,8 +1480,10 @@ func (m *Model) updateBottomView() {
 		if m.lyrics == "" {
 			content = "Loading lyrics..."
 		} else {
-			// Pad with many newlines so viewport scrolls to blank space at bottom
 			content = m.lyrics + strings.Repeat("\n", 10)
+			if m.hasPendingUpdate() {
+				content += "\n  \x1b[3m(press 'u' to update)\x1b[0m"
+			}
 		}
 
 	case ViewSyncedLyrics:
@@ -1410,6 +1545,9 @@ func (m *Model) updateBottomView() {
 			var lines []string
 			if m.artistInfo.Bio != "" {
 				lines = append(lines, m.artistInfo.Bio)
+				if m.artistInfo.BioSource != "" {
+					lines = append(lines, "Source: "+m.artistInfo.BioSource)
+				}
 			} else {
 				lines = append(lines, "No biography available.")
 			}
@@ -1420,10 +1558,17 @@ func (m *Model) updateBottomView() {
 				for _, line := range discoLines {
 					lines = append(lines, "  "+line)
 				}
+				if m.artistInfo.DiscoSource != "" {
+					lines = append(lines, "Source: "+m.artistInfo.DiscoSource)
+				}
 			}
-			if m.artistInfo.Source != "" {
+			if m.artistInfo.ThumbSource != "" {
 				lines = append(lines, "")
-				lines = append(lines, "Source: "+m.artistInfo.Source)
+				lines = append(lines, "thumb: "+m.artistInfo.ThumbSource)
+			}
+			if m.hasPendingUpdate() {
+				lines = append(lines, "")
+				lines = append(lines, "  (press 'u' to update)")
 			}
 			// Pad with many newlines so viewport scrolls to blank space at bottom
 			content = strings.Join(lines, "\n") + strings.Repeat("\n", 10)
@@ -1457,36 +1602,55 @@ func (m *Model) songChangedCmds() tea.Cmd {
 	m.currentSong = m.songs[m.currentSongIndex]
 	m.playlistWidget.SetCursor(m.currentSongIndex)
 
-	// Clear stale data (but keep artist if same artist)
-	m.lyrics = ""
+	// Clear synced lyrics (time-based, always refresh)
 	m.syncedLyrics = nil
 	m.albumArtStr = ""
 	m.albumArtLoaded = false
-	m.artistArtStr = ""
-	m.artistArtLoaded = false
-	m.artistArtEventID = 0
+	// Don't clear m.artistArtStr — keep displayed artist thumbnail
 	m.playbackPos = mpv.PlaybackPosition{}
 
-	// Check artist cache
+	// Clear pending data for the new song
+	m.pendingLyrics = ""
+	m.pendingArtistInfo = nil
+	m.pendingEventID = 0
+	m.pendingArtistArtStr = ""
+	m.pendingArtistArtLoaded = false
+	m.pendingArtistArtWidth = 0
+	m.pendingArtistArtHeight = 0
+
+	// Only hold displayed content for the view the user is currently in.
+	// If we're not in that view, clear stale data so the view shows
+	// current song info when the user next enters it.
+	if m.bottomViewMode != ViewLyrics {
+		m.lyrics = ""
+	}
+	if m.bottomViewMode != ViewArtist {
+		m.artistInfo = nil
+		m.artistArtStr = ""
+		m.artistArtLoaded = false
+		m.artistArtEventID = 0
+	}
+
+	// Check artist cache — put in pending, not display
 	m.artistStatus = ""
 	artistKey := strings.ToLower(m.currentSong.Artist)
 	if m.artistCache != nil {
 		if cached, ok := m.artistCache[artistKey]; ok {
-			m.artistInfo = cached
-		} else {
-			m.artistInfo = nil
+			m.pendingArtistInfo = cached
+			m.pendingEventID = m.currentSong.EventID
 		}
-	} else {
-		m.artistInfo = nil
 	}
 
-	// Restore cached artist thumbnail if available
+	// Restore cached artist thumbnail to pending
 	if m.artistArtCache != nil {
 		if cached, ok := m.artistArtCache[artistKey]; ok {
-			m.artistArtStr = cached.rendered
-			m.artistArtLoaded = true
-			m.artistArtWidth = cached.width
-			m.artistArtHeight = cached.height
+			m.pendingArtistArtStr = cached.rendered
+			m.pendingArtistArtLoaded = true
+			m.pendingArtistArtWidth = cached.width
+			m.pendingArtistArtHeight = cached.height
+			if m.pendingEventID == 0 && m.currentSong != nil {
+				m.pendingEventID = m.currentSong.EventID
+			}
 		}
 	}
 
@@ -1631,10 +1795,16 @@ func (m Model) fetchLyricsCmd() tea.Cmd {
 	}
 }
 
-// fetchArtistCmd fetches artist info with cascading fallback:
-// 1. Discogs (bio) + MusicBrainz (discography)
-// 2. TheAudioDB (bio + fan art)
-// 3. Wikipedia (summary + discography)
+// fetchArtistCmd fetches artist info with per-item fallback:
+//
+//	bio:        tadb > discogs > wikipedia
+//	discography: musicbrainz > wikipedia
+//	thumb:      discogs > tadb > wikipedia
+//	gallery:    discogs > tadb
+//
+// TADB and MusicBrainz run in parallel first (fast, no ID resolution).
+// Discogs only runs if bio is still missing (avoids expensive ID resolution).
+// Wikipedia is the final fallback for bio/thumb/discography.
 func (m Model) fetchArtistCmd() tea.Cmd {
 	if m.currentSong == nil {
 		return nil
@@ -1659,115 +1829,134 @@ func (m Model) fetchArtistCmd() tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		sendStatus := func(status string) {
-			// Best-effort: status messages are informational only
-			logger.Printf("Artist fetch status: %s - %s", song.Artist, status)
+		info := &models.ArtistInfo{}
+
+		// --- Phase 1: TADB + MusicBrainz in parallel ---
+		logger.Printf("Artist fetch: phase 1 (TADB + MB) for %s", song.Artist)
+
+		type tadbResult struct {
+			artist *api.TADBArtist
+			err    error
+		}
+		type mbResult struct {
+			albums []api.MBAlbum
+			err    error
 		}
 
-		// --- Layer 1: Discogs bio + MusicBrainz discography ---
-		sendStatus("Searching Discogs...")
-		var info *models.ArtistInfo
+		tadbCh := make(chan tadbResult, 1)
+		mbCh := make(chan mbResult, 1)
 
-		discogsArtist, err := discogsClient.SearchArtist(ctx, song.Artist)
-		if err != nil {
-			logger.Printf("Discogs error for %s: %v", song.Artist, err)
+		go func() {
+			a, e := tadbClient.SearchArtist(ctx, song.Artist)
+			tadbCh <- tadbResult{a, e}
+		}()
+		go func() {
+			a, e := mbClient.GetDiscography(ctx, song.Artist)
+			mbCh <- mbResult{a, e}
+		}()
+
+		tadb := <-tadbCh
+		mb := <-mbCh
+
+		// Process TADB — bio, thumb, gallery
+		if tadb.err != nil {
+			logger.Printf("TheAudioDB error for %s: %v", song.Artist, tadb.err)
 		}
-
-		if discogsArtist != nil && discogsArtist.Profile != "" {
-			info = &models.ArtistInfo{
-				Bio:          discogsArtist.Profile,
-				Source:       "discogs",
-				ThumbnailURL: discogsArtist.PrimaryImage,
-				GalleryURLs:  discogsArtist.GalleryURLs,
+		if tadb.artist != nil {
+			if tadb.artist.Bio != "" {
+				info.Bio = tadb.artist.Bio
+				info.BioSource = "theaudiodb"
+			}
+			if tadb.artist.Thumb != "" {
+				info.ThumbnailURL = tadb.artist.Thumb
+				info.ThumbSource = "theaudiodb"
+			}
+			if len(tadb.artist.FanArts) > 0 {
+				info.GalleryURLs = tadb.artist.FanArts
+				info.GallerySource = "theaudiodb"
 			}
 		}
 
-		// Always try MusicBrainz for discography (unless we already have Wikipedia fallback)
-		sendStatus("Fetching discography...")
-		albums, err := mbClient.GetDiscography(ctx, song.Artist)
-		if err != nil {
-			logger.Printf("MusicBrainz error for %s: %v", song.Artist, err)
+		// Process MusicBrainz — discography
+		if mb.err != nil {
+			logger.Printf("MusicBrainz error for %s: %v", song.Artist, mb.err)
 		}
-
-		var discoBuilder strings.Builder
-		if len(albums) > 0 {
-			for _, a := range albums {
+		if len(mb.albums) > 0 {
+			var discoBuilder strings.Builder
+			for _, a := range mb.albums {
 				if a.Year != "" {
 					discoBuilder.WriteString(fmt.Sprintf("%s (%s)\n", a.Title, a.Year))
 				} else {
 					discoBuilder.WriteString(a.Title + "\n")
 				}
 			}
-		}
-
-		// If Discogs gave us a bio, we're done (attach MB discography)
-		if info != nil {
 			info.Discography = strings.TrimSpace(discoBuilder.String())
-			if info.ThumbnailURL == "" {
-				logger.Printf("Discogs returned no images for %s (auth configured: %v)", song.Artist, discogsClient.HasAuth())
+			info.DiscoSource = "musicbrainz"
+		}
+
+		// --- Phase 2: Discogs (only if bio still missing — skips ID resolution) ---
+		if info.Bio == "" {
+			logger.Printf("Artist fetch: phase 2 (Discogs) for %s", song.Artist)
+			discogsArtist, err := discogsClient.SearchArtist(ctx, song.Artist)
+			if err != nil {
+				logger.Printf("Discogs error for %s: %v", song.Artist, err)
 			}
-			logger.Printf("Artist info from Discogs: %s", song.Artist)
-			return artistFetchedMsg{eventID: song.EventID, info: info}
-		}
-
-		// --- Layer 2: TheAudioDB ---
-		sendStatus("Trying TheAudioDB...")
-		tadbArtist, err := tadbClient.SearchArtist(ctx, song.Artist)
-		if err != nil {
-			logger.Printf("TheAudioDB error for %s: %v", song.Artist, err)
-		}
-
-		if tadbArtist != nil && tadbArtist.Bio != "" {
-			info = &models.ArtistInfo{
-				Bio:          tadbArtist.Bio,
-				Source:       "theaudiodb",
-				ThumbnailURL: tadbArtist.Thumb,
-				GalleryURLs:  tadbArtist.FanArts,
-				Discography:  strings.TrimSpace(discoBuilder.String()),
+			if discogsArtist != nil {
+				if discogsArtist.Profile != "" {
+					info.Bio = discogsArtist.Profile
+					info.BioSource = "discogs"
+				}
+				// Thumb: discogs > tadb
+				if discogsArtist.PrimaryImage != "" && info.ThumbnailURL == "" {
+					info.ThumbnailURL = discogsArtist.PrimaryImage
+					info.ThumbSource = "discogs"
+				}
+				// Gallery: discogs > tadb
+				if len(discogsArtist.GalleryURLs) > 0 && len(info.GalleryURLs) == 0 {
+					info.GalleryURLs = discogsArtist.GalleryURLs
+					info.GallerySource = "discogs"
+				}
 			}
-			logger.Printf("Artist info from TheAudioDB: %s", song.Artist)
-			return artistFetchedMsg{eventID: song.EventID, info: info}
 		}
 
-		// --- Layer 3: Wikipedia ---
-		sendStatus("Trying Wikipedia...")
-		wikiInfo, err := wikiClient.FindArtist(ctx, song.Artist)
-		if err != nil {
-			logger.Printf("Wikipedia error for %s: %v", song.Artist, err)
-		}
-
-		if wikiInfo != nil {
-			// Convert from api.ArtistInfo to models.ArtistInfo
-			disco := wikiInfo.Discography
-			if disco == "" {
-				disco = strings.TrimSpace(discoBuilder.String())
+		// --- Phase 3: Wikipedia (final fallback for remaining fields) ---
+		if info.Bio == "" || info.ThumbnailURL == "" || info.Discography == "" {
+			logger.Printf("Artist fetch: phase 3 (Wikipedia) for %s", song.Artist)
+			wikiInfo, err := wikiClient.FindArtist(ctx, song.Artist)
+			if err != nil {
+				logger.Printf("Wikipedia error for %s: %v", song.Artist, err)
 			}
-			info = &models.ArtistInfo{
-				Bio:          wikiInfo.Summary,
-				Source:       "wikipedia",
-				ThumbnailURL: wikiInfo.ThumbnailURL,
-				PageURL:      wikiInfo.PageURL,
-				Discography:  disco,
+			if wikiInfo != nil {
+				if info.Bio == "" && wikiInfo.Summary != "" {
+					info.Bio = wikiInfo.Summary
+					info.BioSource = "wikipedia"
+					info.PageURL = wikiInfo.PageURL
+				}
+				if info.ThumbnailURL == "" && wikiInfo.ThumbnailURL != "" {
+					info.ThumbnailURL = wikiInfo.ThumbnailURL
+					info.ThumbSource = "wikipedia"
+				}
+				if info.Discography == "" && wikiInfo.Discography != "" {
+					info.Discography = wikiInfo.Discography
+					info.DiscoSource = "wikipedia"
+				}
 			}
-			logger.Printf("Artist info from Wikipedia: %s", song.Artist)
-			return artistFetchedMsg{eventID: song.EventID, info: info}
 		}
 
-		// --- Nothing found ---
-		// Still return discography if we have it
-		disco := strings.TrimSpace(discoBuilder.String())
-		if disco != "" {
-			info = &models.ArtistInfo{
-				Bio:         "No biography found.",
-				Source:      "musicbrainz",
-				Discography: disco,
-			}
-			logger.Printf("Artist info from MusicBrainz only: %s", song.Artist)
-			return artistFetchedMsg{eventID: song.EventID, info: info}
+		// --- Final fallback ---
+		if info.Bio == "" {
+			info.Bio = "No biography found."
 		}
 
-		logger.Printf("No artist info found for: %s", song.Artist)
-		return artistFetchedMsg{eventID: song.EventID, err: fmt.Errorf("artist not found")}
+		hasData := info.BioSource != "" || info.DiscoSource != "" || info.ThumbSource != ""
+		if !hasData {
+			logger.Printf("No artist info found for: %s", song.Artist)
+			return artistFetchedMsg{eventID: song.EventID, err: fmt.Errorf("artist not found")}
+		}
+
+		logger.Printf("Artist info for %s: bio=%s disco=%s thumb=%s gallery=%s",
+			song.Artist, info.BioSource, info.DiscoSource, info.ThumbSource, info.GallerySource)
+		return artistFetchedMsg{eventID: song.EventID, info: info}
 	}
 }
 
@@ -1872,7 +2061,8 @@ func (m Model) handleArtistImageLoaded(msg artistImageLoadedMsg) (tea.Model, tea
 	tiImg := termimg.New(img).
 		Size(displayWidth, displayHeight).
 		Scale(termimg.ScaleFit).
-		Protocol(termimg.Auto)
+		Protocol(termimg.Auto).
+		ZIndex(1)
 
 	rendered, err := tiImg.Render()
 	if err != nil {
@@ -1881,13 +2071,8 @@ func (m Model) handleArtistImageLoaded(msg artistImageLoadedMsg) (tea.Model, tea
 	}
 
 	logger.Printf("Artist thumbnail loaded (len=%d)", len(rendered))
-	m.artistArtStr = rendered
-	m.artistArtLoaded = true
-	m.artistArtEventID = msg.eventID
-	m.artistArtWidth = displayWidth
-	m.artistArtHeight = displayHeight
 
-	// Cache by artist name
+	// Always cache by artist name
 	if m.currentSong != nil {
 		if m.artistArtCache == nil {
 			m.artistArtCache = make(map[string]artistArtCacheEntry)
@@ -1898,6 +2083,27 @@ func (m Model) handleArtistImageLoaded(msg artistImageLoadedMsg) (tea.Model, tea
 			height:   displayHeight,
 		}
 	}
+
+	// Route to pending or display based on what's currently shown
+	if m.artistArtStr != "" && m.artistArtEventID != msg.eventID {
+		// Display already has art for a different song — stash in pending
+		m.pendingArtistArtStr = rendered
+		m.pendingArtistArtLoaded = true
+		m.pendingArtistArtWidth = displayWidth
+		m.pendingArtistArtHeight = displayHeight
+		m.pendingEventID = msg.eventID
+		if m.bottomViewMode == ViewArtist {
+			m.updateBottomView() // show "press 'u' to update" hint
+		}
+		return m, nil
+	}
+
+	// Nothing displayed yet (or same event) — auto-show
+	m.artistArtStr = rendered
+	m.artistArtLoaded = true
+	m.artistArtEventID = msg.eventID
+	m.artistArtWidth = displayWidth
+	m.artistArtHeight = displayHeight
 
 	// Update the bottom view (viewport width changes when image loads)
 	if m.bottomViewMode == ViewArtist {
