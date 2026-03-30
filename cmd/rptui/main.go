@@ -36,7 +36,7 @@ func main() {
 	}
 
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Radio Paradise is commercial-free and relies on listener donations.")
+	fmt.Fprintln(os.Stderr, "Radio Paradise programming is human-curated and commercial-free.")
 	fmt.Fprintln(os.Stderr, "Please consider supporting RP by visiting their website:")
 	fmt.Fprintln(os.Stderr, "https://radioparadise.com/donate")
 }

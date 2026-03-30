@@ -1,0 +1,1326 @@
+Channel 0: 20 songs
+Channel 1: 20 songs
+Channel 2: 20 songs
+Channel 3: 20 songs
+Channel 5: 20 songs
+Testing 100 artists
+
+[1/100] AHI
+  Found section: Discography (index 1)
+  No albums parsed from list format
+  Page: AHI (musician)
+  URL:  https://en.wikipedia.org/wiki/AHI_(musician)
+  Desc: Canadian singer-songwriter
+  Summary: YES (298 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/Ahi_smiles_backstage_on_Mandy_Moore_tour.jpg/330px-Ahi_smiles_backstage_on_Mandy_Moore_tour.jpg
+  Discog section: Discography
+  Discography: NO (0 albums)
+
+[2/100] Abaji
+  Found section: Discography (index 7)
+  No albums parsed from list format
+  Page: Abaji (musician)
+  URL:  https://en.wikipedia.org/wiki/Abaji_(musician)
+  Desc: Lebanese singer and composer (born 1958)
+  Summary: YES (76 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/d/d2/Photo3_Studio_avril_2020.jpg/330px-Photo3_Studio_avril_2020.jpg
+  Discog section: Discography
+  Discography: NO (0 albums)
+
+[3/100] Absolutely
+  Found section: Discography (index 3)
+  Parsed 7 albums from table
+  Page: Absolutely Free (band)
+  URL:  https://en.wikipedia.org/wiki/Absolutely_Free_(band)
+  Desc: Canadian indie rock band
+  Summary: YES (227 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/1/13/Abfreepressbanner.jpg/330px-Abfreepressbanner.jpg
+  Discog section: Discography
+  Discography: YES (7 albums)
+    UFO/Glass Tassel (2012)
+    On The Beach/Clothed Woman, Sitting (2013)
+    Absolutely Free. (2014)
+    The Sun Ain't Gonna Shine (Anymore) (2017)
+    Geneva Freeport (2019)
+    ... (2 more)
+
+[4/100] Alfa Mist
+  Found section: Discography (index 2)
+  Parsed 11 albums from table
+  Page: Alfa Mist
+  URL:  https://en.wikipedia.org/wiki/Alfa_Mist
+  Desc: British musician
+  Summary: YES (333 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/a/af/Alfa_Mist%2C_Maassilo_Rotterdam_20_november_2022_-_Alfa_Mist_%2852514291025%29.jpg/330px-Alfa_Mist%2C_Maassilo_Rotterdam_20_november_2022_-_Alfa_Mist_%2852514291025%29.jpg
+  Discog section: Discography
+  Discography: YES (11 albums)
+    Antiphon (2017)
+    Structuralism (2019)
+    Epoch (with Emmavie) (2014)
+    Bring Backs (2021)
+    Variables (2023)
+    ... (6 more)
+
+[5/100] Anenon
+
+[6/100] Anna Domino
+  Found section: Selected discography (index 4)
+  No albums parsed from list format
+  Page: Anna Domino
+  URL:  https://en.wikipedia.org/wiki/Anna_Domino
+  Desc: American singer-songwriter (born 1955)
+  Summary: YES (425 chars)
+  Thumb:   NO
+  Discog section: Selected discography
+  Discography: NO (0 albums)
+
+[7/100] Antonio Sánchez
+  Found section: Discography (index 4)
+  No albums parsed from list format
+  Page: Antonio Sánchez (drummer)
+  URL:  https://en.wikipedia.org/wiki/Antonio_S%C3%A1nchez_(drummer)
+  Desc: Mexican jazz drummer (born 1971)
+  Summary: YES (453 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Antonio_S%C3%A1nchez_%26_Migration%2C_LantarenVenster_Rotterdam_11_januari_2019_-_Antonio_S%C3%A1nchez_%2851437432070%29.jpg/330px-Antonio_S%C3%A1nchez_%26_Migration%2C_LantarenVenster_Rotterdam_11_januari_2019_-_Antonio_S%C3%A1nchez_%2851437432070%29.jpg
+  Discog section: Discography
+  Discography: NO (0 albums)
+
+[8/100] Avishai Cohen
+  Found section: Discography (index 3)
+  Parsed 13 albums from list
+  Page: Avishai Rosen
+  URL:  https://en.wikipedia.org/wiki/Avishai_Rosen
+  Desc: Israeli Jewish singer-songwriter
+  Summary: YES (323 chars)
+  Thumb:   NO
+  Discog section: Discography
+  Discography: YES (13 albums)
+    Ten Li Siman ("Give Me a Sign") (2011)
+    Mi She'ani Achshav ("Who I Am Now") (2016)
+    "Yoter" ("More") (2012)
+    "Ani Rotzeh La'uf" ("I Want to Fly") (2012)
+    "Yoter" (a cappella version) (2013)
+    ... (8 more)
+
+[9/100] Bab L'Bluz
+  Found section: Discography (index 3)
+  Parsed 2 albums from table
+  Page: Bab L' Bluz
+  URL:  https://en.wikipedia.org/wiki/Bab_L'_Bluz
+  Desc: Moroccan-French rock band
+  Summary: YES (493 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/e/ec/Bab_L%27_Bluz_credit_Sabra_Belmokadem..jpg/330px-Bab_L%27_Bluz_credit_Sabra_Belmokadem..jpg
+  Discog section: Discography
+  Discography: YES (2 albums)
+    Nayda! (2020)
+    Swaken (2024)
+
+[10/100] Bardino
+
+[11/100] Black Dub
+
+[12/100] Black Rebel Motorcycle Club
+  Found section: Discography (index 10)
+  Parsed 8 albums from list
+  Page: Black Rebel Motorcycle Club
+  URL:  https://en.wikipedia.org/wiki/Black_Rebel_Motorcycle_Club
+  Desc: American rock band
+  Summary: YES (238 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/1/11/BRMC_at_The_Fillmore_2013.jpg/330px-BRMC_at_The_Fillmore_2013.jpg
+  Discog section: Discography
+  Discography: YES (8 albums)
+    B.R.M.C. (2001)
+    Take Them On, On Your Own (2003)
+    Howl (2005)
+    Baby 81 (2007)
+    The Effects of 333 (2008)
+    ... (3 more)
+
+[13/100] Bob Marley
+  Found section: Discography (index 20)
+  Parsed 13 albums from list
+  Page: Bob Marley
+  URL:  https://en.wikipedia.org/wiki/Bob_Marley
+  Desc: Jamaican singer, songwriter and guitarist (1945–1981)
+  Summary: YES (673 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/2/2d/Bob_Marley_1976_press_photo.jpg/330px-Bob_Marley_1976_press_photo.jpg
+  Discog section: Discography
+  Discography: YES (13 albums)
+    The Wailing Wailers (1965)
+    Soul Rebels (1970)
+    Soul Revolution Part II (1971)
+    The Best of the Wailers (1971)
+    Catch a Fire (1973)
+    ... (8 more)
+
+[14/100] Brad Mehldau
+  Found section: Discography (index 12)
+  No albums parsed from list format
+  Page: Brad Mehldau
+  URL:  https://en.wikipedia.org/wiki/Brad_Mehldau
+  Desc: American jazz musician (born 1970)
+  Summary: YES (79 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/2/28/Brad_Mehldau.jpg/330px-Brad_Mehldau.jpg
+  Discog section: Discography
+  Discography: NO (0 albums)
+
+[15/100] Calexico
+  Found section: Discography (index 9)
+  Parsed 20 albums from list
+  Page: Calexico (band)
+  URL:  https://en.wikipedia.org/wiki/Calexico_(band)
+  Desc: American rock band
+  Summary: YES (536 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/0/0b/Calexico_ZMF_2016_IMGP7499.jpg/330px-Calexico_ZMF_2016_IMGP7499.jpg
+  Discog section: Discography
+  Discography: YES (20 albums)
+    Spoke (1996)
+    The Black Light (1998)
+    Hot Rail (2000)
+    Garden Ruin (2006)
+    Carried to Dust (2008)
+    ... (15 more)
+
+[16/100] Carla Bruni
+  Found section: Discography (index 13)
+  No albums parsed from list format
+  Page: Carla Bruni
+  URL:  https://en.wikipedia.org/wiki/Carla_Bruni
+  Desc: Italian-French musician and model (born 1967)
+  Summary: YES (206 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/1/1e/Carla_Cannes_2021.jpg/330px-Carla_Cannes_2021.jpg
+  Discog section: Discography
+  Discography: NO (0 albums)
+
+[17/100] Casualties of Cool
+
+[18/100] Charif Magarbane
+
+[19/100] Chico César
+  No discog section found. Available sections:
+    [1] Early years and career (level 2)
+    [2] Albums (level 2)
+    [3] References (level 2)
+    [4] External links (level 2)
+  Page: Chico César
+  URL:  https://en.wikipedia.org/wiki/Chico_C%C3%A9sar
+  Desc: Brazilian musician (born 1964)
+  Summary: YES (66 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/8/8b/Chico_C%C3%A9sar_2013.jpg/330px-Chico_C%C3%A9sar_2013.jpg
+  Discography: NO (0 albums)
+
+[20/100] Chorus of Tribes
+
+[21/100] Constantinople, Kiya Tabassian
+
+[22/100] Cream
+  Found section: Discography (index 14)
+  Parsed 4 albums from list
+  Page: Cream (band)
+  URL:  https://en.wikipedia.org/wiki/Cream_(band)
+  Desc: 1960s British rock supergroup
+  Summary: YES (468 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/5/58/Cream_Clapton_Bruce_Baker_1960s.jpg/330px-Cream_Clapton_Bruce_Baker_1960s.jpg
+  Discog section: Discography
+  Discography: YES (4 albums)
+    Fresh Cream (1966)
+    Disraeli Gears (1967)
+    Wheels of Fire (1968)
+    Goodbye (1969)
+
+[23/100] DakhaBrakha
+  Found section: Discography (index 3)
+  Parsed 8 albums from list
+  Page: DakhaBrakha
+  URL:  https://en.wikipedia.org/wiki/DakhaBrakha
+  Desc: Ukrainian folk music group
+  Summary: YES (223 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/5/50/DakhaBrakha_in_Lviv.JPG/330px-DakhaBrakha_in_Lviv.JPG
+  Discog section: Discography
+  Discography: YES (8 albums)
+    Na dobranich (На добраніч, 'Goodnight') (2005)
+    Yahudky (Ягудки) (2007)
+    Na mezhi (На межі) (2009)
+    Light (2010)
+    Khmeleva project (Хмелева project) (2012)
+    ... (3 more)
+
+[24/100] Darlingside
+  Found section: Discography (index 3)
+  Parsed 10 albums from list
+  Page: Darlingside
+  URL:  https://en.wikipedia.org/wiki/Darlingside
+  Desc: American indie folk band
+  Summary: YES (368 chars)
+  Thumb:   NO
+  Discog section: Discography
+  Discography: YES (10 albums)
+    EP 1 (2010)
+    Pilot Machines (2012)
+    Woodstock (with Heather Maloney) (2014)
+    Birds Say (2015)
+    Whippoorwill (2016)
+    ... (5 more)
+
+[25/100] Donald Byrd
+  Found section: Discography (index 4)
+  Parsed 50 albums from table
+  Page: Donald Byrd
+  URL:  https://en.wikipedia.org/wiki/Donald_Byrd
+  Desc: American jazz trumpeter (1932–2013)
+  Summary: YES (380 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/2/22/Donald_Byrd.jpg/330px-Donald_Byrd.jpg
+  Discog section: Discography
+  Discography: YES (50 albums)
+    1955-08 (1956)
+    1955-09 (1956)
+    1955-12 (1956)
+    1956-05 (1957)
+    1956-08 (1957)
+    ... (45 more)
+
+[26/100] Echo
+  No discog section found. Available sections:
+    [1] Background and release (level 2)
+    [2] Composition (level 2)
+    [3] Critical reception (level 2)
+    [4] Track listing (level 2)
+    [5] Personnel (level 2)
+    [6] Musicians (level 3)
+    [7] Technical (level 3)
+    [8] Charts (level 2)
+    [9] Weekly charts (level 3)
+    [10] Monthly charts (level 3)
+    [11] Year-end charts (level 3)
+    [12] Certifications (level 2)
+    [13] References (level 2)
+  Page: Echo (EP)
+  URL:  https://en.wikipedia.org/wiki/Echo_(EP)
+  Desc: 2025 EP by Jin
+  Summary: YES (121 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/en/2/27/Jin_Echo_EP_Cover.jpg
+  Discography: NO (0 albums)
+
+[27/100] Eels
+  Found section: Discography (index 15)
+  Parsed 17 albums from list
+  Page: Eels (band)
+  URL:  https://en.wikipedia.org/wiki/Eels_(band)
+  Desc: American indie rock band
+  Summary: YES (472 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/4/48/Eels_at_Birmingham_Town_Hall_26Feb2008.jpg/330px-Eels_at_Birmingham_Town_Hall_26Feb2008.jpg
+  Discog section: Discography
+  Discography: YES (17 albums)
+    A Man Called E (1992)
+    Broken Toy Shop (1993)
+    Beautiful Freak (1996)
+    Electro-Shock Blues (1998)
+    Daisies of the Galaxy (2000)
+    ... (12 more)
+
+[28/100] FKJ
+
+[29/100] Father John Misty
+  Found section: Discography (index 12)
+  Parsed 17 albums from list
+  Page: Father John Misty
+  URL:  https://en.wikipedia.org/wiki/Father_John_Misty
+  Desc: American musician (born 1981)
+  Summary: YES (168 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/4/40/Father_John_Misty_Piknik_i_Parken_2017_%28213349%29.jpg/330px-Father_John_Misty_Piknik_i_Parken_2017_%28213349%29.jpg
+  Discog section: Discography
+  Discography: YES (17 albums)
+    Untitled No. 1 (2003)
+    I Will Return (2004)
+    Long May You Run, J. Tillman (2006)
+    Minor Works (2006)
+    Cancer and Delirium (2007)
+    ... (12 more)
+
+[30/100] Fleetwood Mac
+  Found section: Discography (index 16)
+  Parsed 16 albums from list
+  Page: Fleetwood Mac
+  URL:  https://en.wikipedia.org/wiki/Fleetwood_Mac
+  Desc: British and American rock band
+  Summary: YES (438 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/f/fe/Fleetwood_Mac_Billboard_1977.jpg/330px-Fleetwood_Mac_Billboard_1977.jpg
+  Discog section: Discography
+  Discography: YES (16 albums)
+    Mr. Wonderful (1968)
+    Then Play On (1969)
+    Kiln House (1970)
+    Future Games (1971)
+    Bare Trees (1972)
+    ... (11 more)
+
+[31/100] Gianni Brezzo
+
+[32/100] Gipsy Kings
+  Found section: Discography (index 7)
+  Parsed 14 albums from list
+  Page: Gipsy Kings
+  URL:  https://en.wikipedia.org/wiki/Gipsy_Kings
+  Desc: French flamenco, salsa, and pop group
+  Summary: YES (284 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/0/04/Gipsy_Kings_%28ZMF_2016%29_jm17802.jpg/330px-Gipsy_Kings_%28ZMF_2016%29_jm17802.jpg
+  Discog section: Discography
+  Discography: YES (14 albums)
+    Allegria (1982)
+    Luna de Fuego (1983)
+    Gipsy Kings (1987)
+    Mosaïque (1989)
+    Este Mundo (1991)
+    ... (9 more)
+
+[33/100] Gorillaz
+  Found section: Discography (index 16)
+  Parsed 9 albums from list
+  Page: Gorillaz
+  URL:  https://en.wikipedia.org/wiki/Gorillaz
+  Desc: British virtual band
+  Summary: YES (469 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/en/thumb/c/c6/Gorillaz_family.jpg/330px-Gorillaz_family.jpg
+  Discog section: Discography
+  Discography: YES (9 albums)
+    Gorillaz (2001)
+    Demon Days (2005)
+    Plastic Beach (2010)
+    The Fall (2010)
+    Humanz (2017)
+    ... (4 more)
+
+[34/100] Gretel
+  No discog section found. Available sections:
+    [1] History (level 2)
+    [2] Awards and nominations (level 2)
+    [3] References (level 2)
+  Page: Gretel Hänlyn
+  URL:  https://en.wikipedia.org/wiki/Gretel_H%C3%A4nlyn
+  Desc: English singer-songwriter
+  Summary: YES (106 chars)
+  Thumb:   NO
+  Discography: NO (0 albums)
+
+[35/100] Hariprasad Chaurasia
+
+[36/100] Houssam Jaafar
+
+[37/100] Jake Shimabukuro
+  No discog section found. Available sections:
+    [1] Career (level 2)
+    [2] Early training and career as a band member (level 3)
+    [3] Solo career (level 3)
+    [4] Signing with Sony Japan (level 4)
+    [5] Breakout success (level 4)
+    [6] 2011 to present (level 4)
+    [7] Media appearances (level 2)
+    [8] Instruments (level 2)
+    [9] Charity (level 2)
+    [10] Personal life (level 2)
+    [11] Awards (level 2)
+    [12] Na Hoku Hanohano Awards (level 3)
+    [13] Hawaii Music Awards (level 3)
+    [14] CDs (level 2)
+    [15] DVDs (level 2)
+    [16] Books (level 2)
+    [17] Notes (level 2)
+    [18] References (level 2)
+    [19] External links (level 2)
+  Page: Jake Shimabukuro
+  URL:  https://en.wikipedia.org/wiki/Jake_Shimabukuro
+  Desc: American musician (born 1976)
+  Summary: YES (423 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/f/fc/Jake_Shimabukuro.jpg/330px-Jake_Shimabukuro.jpg
+  Discography: NO (0 albums)
+
+[38/100] Jeff Talmadge
+
+[39/100] Jet
+  Found section: Discography (index 14)
+  Parsed 3 albums from list
+  Page: Jet (band)
+  URL:  https://en.wikipedia.org/wiki/Jet_(band)
+  Desc: Australian rock band
+  Summary: YES (512 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/Cw.jet.001.jpg/330px-Cw.jet.001.jpg
+  Discog section: Discography
+  Discography: YES (3 albums)
+    Get Born (2003)
+    Shine On (2006)
+    Shaka Rock (2009)
+
+[40/100] John Cale & Brian Eno
+  Found section: Discography (index 14)
+  Parsed 20 albums from list
+  Page: John Cale
+  URL:  https://en.wikipedia.org/wiki/John_Cale
+  Desc: Welsh musician (born 1942)
+  Summary: YES (305 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/John_Cale_%2849386834383%29.jpg/330px-John_Cale_%2849386834383%29.jpg
+  Discog section: Discography
+  Discography: YES (20 albums)
+    The Velvet Underground & Nico (1967)
+    White Light/White Heat (1968)
+    Vintage Violence (1970)
+    The Academy in Peril (1972)
+    Paris 1919 (1973)
+    ... (15 more)
+
+[41/100] Jon Hopkins
+  Found section: Discography (index 16)
+  Parsed 8 albums from list
+  Page: Jon Hopkins
+  URL:  https://en.wikipedia.org/wiki/Jon_Hopkins
+  Desc: English electronic musician and producer (born 1979)
+  Summary: YES (228 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/2/2b/Jon_Hopkins_Rockefeller_2018_213943.jpg/330px-Jon_Hopkins_Rockefeller_2018_213943.jpg
+  Discog section: Discography
+  Discography: YES (8 albums)
+    Opalescent (2001)
+    Contact Note (2004)
+    Insides (2009)
+    Immunity (2013)
+    Singularity (2018)
+    ... (3 more)
+
+[42/100] Joni Mitchell
+  Found section: Discography (index 25)
+  Parsed 19 albums from list
+  Page: Joni Mitchell
+  URL:  https://en.wikipedia.org/wiki/Joni_Mitchell
+  Desc: Canadian and American singer-songwriter (born 1943)
+  Summary: YES (685 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/9/97/Joni_Mitchell_2021_Kennedy_Center_Honors_%28cropped%29.jpg/330px-Joni_Mitchell_2021_Kennedy_Center_Honors_%28cropped%29.jpg
+  Discog section: Discography
+  Discography: YES (19 albums)
+    Song to a Seagull (1968)
+    Clouds (1969)
+    Ladies of the Canyon (1970)
+    Blue (1971)
+    For the Roses (1972)
+    ... (14 more)
+
+[43/100] KAU
+  No discog section found. Available sections:
+    [1] References (level 2)
+  Page: Kaus (surname)
+  URL:  https://en.wikipedia.org/wiki/Kaus_(surname)
+  Desc: Family name
+  Summary: YES (654 chars)
+  Thumb:   NO
+  Discography: NO (0 albums)
+
+[44/100] Kessoncoda
+
+[45/100] Kings of Leon
+  Found section: Discography (index 12)
+  Parsed 9 albums from list
+  Page: Kings of Leon
+  URL:  https://en.wikipedia.org/wiki/Kings_of_Leon
+  Desc: American rock band
+  Summary: YES (183 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/3/3e/KingsLeonSilverstne040724_%28100_of_112%29_%2853838004823%29.jpg/330px-KingsLeonSilverstne040724_%28100_of_112%29_%2853838004823%29.jpg
+  Discog section: Discography
+  Discography: YES (9 albums)
+    Youth & Young Manhood (2003)
+    Aha Shake Heartbreak (2004)
+    Because of the Times (2007)
+    Only by the Night (2008)
+    Come Around Sundown (2010)
+    ... (4 more)
+
+[46/100] Labrinth
+  Found section: Discography (index 8)
+  Parsed 7 albums from list
+  Page: Labrinth
+  URL:  https://en.wikipedia.org/wiki/Labrinth
+  Desc: British singer (born 1989)
+  Summary: YES (528 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/4/4a/Labrinth_portrait_%28cropped%29.jpg/330px-Labrinth_portrait_%28cropped%29.jpg
+  Discog section: Discography
+  Discography: YES (7 albums)
+    Electronic Earth (2012)
+    Imagination & the Misfit Kid (2019)
+    Ends & Begins (2023)
+    Cosmic Opera: Act I (2026)
+    Euphoria (Original Score from the HBO Series) (2019)
+    ... (2 more)
+
+[47/100] Laufey
+  Found section: Discography (index 9)
+  Parsed 3 albums from list
+  Page: Laufey (singer)
+  URL:  https://en.wikipedia.org/wiki/Laufey_(singer)
+  Desc: Icelandic singer (born 1999)
+  Summary: YES (387 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/0/06/Laufey_ReithHumphreys1.jpg/330px-Laufey_ReithHumphreys1.jpg
+  Discog section: Discography
+  Discography: YES (3 albums)
+    Everything I Know About Love (2022)
+    Bewitched (2023)
+    A Matter of Time (2025)
+
+[48/100] Led Zeppelin
+  Found section: Discography (index 17)
+  Parsed 9 albums from list
+  Page: Led Zeppelin
+  URL:  https://en.wikipedia.org/wiki/Led_Zeppelin
+  Desc: English rock band (1968–1980)
+  Summary: YES (511 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/6/63/Led_Zeppelin_-_promotional_image_%281971%29.jpg/330px-Led_Zeppelin_-_promotional_image_%281971%29.jpg
+  Discog section: Discography
+  Discography: YES (9 albums)
+    Led Zeppelin (1969)
+    Led Zeppelin II (1969)
+    Led Zeppelin III (1970)
+    Untitled album (1971)
+    Houses of the Holy (1973)
+    ... (4 more)
+
+[49/100] Ledward Kaapana
+  No discog section found. Available sections:
+    [1] Early life (level 2)
+    [2] Professional career (level 2)
+    [3] Quotes (level 2)
+    [4] Awards (level 2)
+    [5] References (level 2)
+    [6] External links (level 2)
+  Page: Ledward Kaapana
+  URL:  https://en.wikipedia.org/wiki/Ledward_Kaapana
+  Desc: American musician (b. 1948)
+  Summary: YES (459 chars)
+  Thumb:   NO
+  Discography: NO (0 albums)
+
+[50/100] MGMT
+  Found section: Discography (index 16)
+  Parsed 5 albums from list
+  Page: MGMT
+  URL:  https://en.wikipedia.org/wiki/MGMT
+  Desc: American rock band
+  Summary: YES (473 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/b/b2/MGMT_Osheaga_%28cropped%29.jpg/330px-MGMT_Osheaga_%28cropped%29.jpg
+  Discog section: Discography
+  Discography: YES (5 albums)
+    Oracular Spectacular (2007)
+    Congratulations (2010)
+    MGMT (2013)
+    Little Dark Age (2018)
+    Loss of Life (2024)
+
+[51/100] Maajo, Waina
+
+[52/100] Mari Froes, Trinix
+
+[53/100] Mazzy Star
+  Found section: Discography (index 14)
+  Parsed 4 albums from list
+  Page: Mazzy Star
+  URL:  https://en.wikipedia.org/wiki/Mazzy_Star
+  Desc: American alternative rock band
+  Summary: YES (233 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/b/bc/Mazzy_Star.jpg/330px-Mazzy_Star.jpg
+  Discog section: Discography
+  Discography: YES (4 albums)
+    She Hangs Brightly (1990)
+    So Tonight That I Might See (1993)
+    Among My Swan (1996)
+    Seasons of Your Day (2013)
+
+[54/100] Michel Petrucciani, Anthony Jackson & Steve Gadd
+  Found section: Discography (index 7)
+  No albums parsed from list format
+  Page: Michel Petrucciani
+  URL:  https://en.wikipedia.org/wiki/Michel_Petrucciani
+  Desc: French jazz pianist
+  Summary: YES (293 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/en/thumb/a/ad/Michel_Petrucciani.jpg/330px-Michel_Petrucciani.jpg
+  Discog section: Discography
+  Discography: NO (0 albums)
+
+[55/100] My Morning Jacket
+  Found section: Discography (index 10)
+  Parsed 10 albums from list
+  Page: My Morning Jacket
+  URL:  https://en.wikipedia.org/wiki/My_Morning_Jacket
+  Desc: American rock band
+  Summary: YES (414 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/My_Morning_Jacket%2C_2015.jpg/330px-My_Morning_Jacket%2C_2015.jpg
+  Discog section: Discography
+  Discography: YES (10 albums)
+    The Tennessee Fire (1999)
+    At Dawn (2001)
+    It Still Moves (2003)
+    Z (2005)
+    Evil Urges (2008)
+    ... (5 more)
+
+[56/100] Natacha Atlas
+  Found section: Discography (index 6)
+  No albums parsed from list format
+  Page: Natacha Atlas
+  URL:  https://en.wikipedia.org/wiki/Natacha_Atlas
+  Desc: Egyptian-Belgian singer
+  Summary: YES (262 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/7/79/Natacha_Atlas_2008_Budapest.jpg/330px-Natacha_Atlas_2008_Budapest.jpg
+  Discog section: Discography
+  Discography: NO (0 albums)
+
+[57/100] Nicole McCabe
+
+[58/100] Nine Inch Nails
+  Found section: Discography (index 28)
+  Parsed 15 albums from list
+  Page: Nine Inch Nails
+  URL:  https://en.wikipedia.org/wiki/Nine_Inch_Nails
+  Desc: American industrial rock band
+  Summary: YES (634 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/Nine_Inch_Nails_-_20.06.2022_-_O2_Apollo_Manchester.jpg/330px-Nine_Inch_Nails_-_20.06.2022_-_O2_Apollo_Manchester.jpg
+  Discog section: Discography
+  Discography: YES (15 albums)
+    Pretty Hate Machine (1989)
+    Broken (1992)
+    The Downward Spiral (1994)
+    The Fragile (1999)
+    With Teeth (2005)
+    ... (10 more)
+
+[59/100] Organic Pulse Ensemble
+
+[60/100] Over the Rhine
+  Found section: Discography (index 7)
+  No albums parsed from list format
+  Page: Over the Rhine (band)
+  URL:  https://en.wikipedia.org/wiki/Over_the_Rhine_(band)
+  Desc: American folk band
+  Summary: YES (153 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/2/2a/Over_the_Rhine_%28band%29.jpg/330px-Over_the_Rhine_%28band%29.jpg
+  Discog section: Discography
+  Discography: NO (0 albums)
+
+[61/100] Patty Griffin
+  Found section: Discography (index 5)
+  Parsed 33 albums from table
+  Page: Patty Griffin
+  URL:  https://en.wikipedia.org/wiki/Patty_Griffin
+  Desc: American singer-songwriter and musician
+  Summary: YES (363 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/a/ad/Patty_Griffin_performing_at_Paramount_Theatre_in_Austin%2C_Texas_on_19_Dec_2025.png/330px-Patty_Griffin_performing_at_Paramount_Theatre_in_Austin%2C_Texas_on_19_Dec_2025.png
+  Discog section: Discography
+  Discography: YES (33 albums)
+    Living with Ghosts (1996)
+    Flaming Red (1998)
+    1000 Kisses (2002)
+    Impossible Dream (2004)
+    Children Running Through (2007)
+    ... (28 more)
+
+[62/100] Peter Doran
+  Found section: Discography (index 14)
+  Parsed 11 albums from list
+  Page: Peter Gabriel
+  URL:  https://en.wikipedia.org/wiki/Peter_Gabriel
+  Desc: British musician (born 1950)
+  Summary: YES (674 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/4/42/PeterGabrielO2190623_%2870_of_86%29_%2852987432346%29_%28cropped%29.jpg/330px-PeterGabrielO2190623_%2870_of_86%29_%2852987432346%29_%28cropped%29.jpg
+  Discog section: Discography
+  Discography: YES (11 albums)
+    So (1986)
+    Us (1992)
+    Up (2002)
+    Scratch My Back (2010)
+    New Blood (2011)
+    ... (6 more)
+
+[63/100] Phish
+  Found section: Studio discography (index 20)
+  Parsed 16 albums from list
+  Page: Phish
+  URL:  https://en.wikipedia.org/wiki/Phish
+  Desc: American rock band
+  Summary: YES (402 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/f/f7/Phish_Hartford_06.18.10_%284840368445%29.jpg/330px-Phish_Hartford_06.18.10_%284840368445%29.jpg
+  Discog section: Studio discography
+  Discography: YES (16 albums)
+    Junta (1989)
+    Lawn Boy (1990)
+    A Picture of Nectar (1992)
+    Rift (1993)
+    Hoist (1994)
+    ... (11 more)
+
+[64/100] Pink Floyd
+  Found section: Discography (index 42)
+  Parsed 15 albums from list
+  Page: Pink Floyd
+  URL:  https://en.wikipedia.org/wiki/Pink_Floyd
+  Desc: English rock band
+  Summary: YES (435 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/en/d/d6/Pink_Floyd_-_all_members.jpg
+  Discog section: Discography
+  Discography: YES (15 albums)
+    The Piper at the Gates of Dawn (1967)
+    A Saucerful of Secrets (1968)
+    More (1969)
+    Ummagumma (1969)
+    Atom Heart Mother (1970)
+    ... (10 more)
+
+[65/100] Portico Quartet
+  Found section: Discography (index 6)
+  Parsed 8 albums from list
+  Page: Portico Quartet
+  URL:  https://en.wikipedia.org/wiki/Portico_Quartet
+  Desc: British musical group
+  Summary: YES (295 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/f/fd/Duncan_Bellamy_IMG_9305.jpg/330px-Duncan_Bellamy_IMG_9305.jpg
+  Discog section: Discography
+  Discography: YES (8 albums)
+    Knee-Deep in the North Sea (2007)
+    Isla (2009)
+    Portico Quartet (2012)
+    Live/Remix (2013)
+    Art in the Age of Automation (2017)
+    ... (3 more)
+
+[66/100] Ramsey
+  Found section: Discography (index 6)
+  Parsed 2 albums from table
+  Page: Jay Ramsey
+  URL:  https://en.wikipedia.org/wiki/Jay_Ramsey
+  Desc: American singer-songwriter
+  Summary: YES (557 chars)
+  Thumb:   NO
+  Discog section: Discography
+  Discography: YES (2 albums)
+    The Festivals (2091)
+    Elvis Now (LP, Album, RE) (2007)
+
+[67/100] Ray LaMontagne
+  Found section: Discography (index 15)
+  Parsed 9 albums from list
+  Page: Ray LaMontagne
+  URL:  https://en.wikipedia.org/wiki/Ray_LaMontagne
+  Desc: American singer-songwriter
+  Summary: YES (388 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/0/08/Ray_Lamontagne6.jpg
+  Discog section: Discography
+  Discography: YES (9 albums)
+    Trouble (2004)
+    Till the Sun Turns Black (2006)
+    Gossip in the Grain (2008)
+    God Willin' & the Creek Don't Rise (2010)
+    Supernova (2014)
+    ... (4 more)
+
+[68/100] Ross Daly
+  Found section: Discography (index 2)
+  Parsed 20 albums from list
+  Page: Ross Daly
+  URL:  https://en.wikipedia.org/wiki/Ross_Daly
+  Desc: Musical artist
+  Summary: YES (153 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Ross_Daly.jpg/330px-Ross_Daly.jpg
+  Discog section: Discography
+  Discography: YES (20 albums)
+    Oneirou Topi (1982)
+    Lavyrinthos (1984)
+    Ross Daly (1986)
+    Anadysi (1987)
+    Elefthero Simio (1989)
+    ... (15 more)
+
+[69/100] Sam Burton
+  Found section: Discography (index 11)
+  Parsed 2 albums from list
+  Page: Sam Hunt
+  URL:  https://en.wikipedia.org/wiki/Sam_Hunt
+  Desc: American singer and songwriter (born 1984)
+  Summary: YES (253 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/d/d1/Sam_Hunt_at_C2C_Festival_2014.png/330px-Sam_Hunt_at_C2C_Festival_2014.png
+  Discog section: Discography
+  Discography: YES (2 albums)
+    Montevallo (2014)
+    Southside (2020)
+
+[70/100] Sam Phillips
+  No discog section found. Available sections:
+    [1] Early life (level 2)
+    [2] The Memphis Recording Service and Sun Records (level 2)
+    [3] Elvis Presley, Johnny Cash, Jerry Lee Lewis, Carl Perkins, Roy Orbison (level 2)
+    [4] WHER (level 2)
+    [5] Other business interests (level 2)
+    [6] Accolades (level 2)
+    [7] Later years and death (level 2)
+    [8] Notable portrayals (level 2)
+    [9] References (level 2)
+    [10] Bibliography (level 2)
+    [11] External links (level 2)
+  Page: Sam Phillips
+  URL:  https://en.wikipedia.org/wiki/Sam_Phillips
+  Desc: American disc jockey, songwriter and record producer (1923–2003)
+  Summary: YES (438 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/en/4/4e/Sam_Phillips.jpg
+  Discography: NO (0 albums)
+
+[71/100] Samba de Coco Raízes de Arcoverde
+
+[72/100] Shabaka and the Ancestors
+  Found section: Discography (index 4)
+  No albums parsed from list format
+  Page: Shabaka Hutchings
+  URL:  https://en.wikipedia.org/wiki/Shabaka_Hutchings
+  Desc: British jazz musician, composer and bandleader (born 1984)
+  Summary: YES (499 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/0/0e/Shabaka_Hutchings_Sons_of_Kemet_Oslo_Jazzfestival_2018_%28223102%29.jpg/330px-Shabaka_Hutchings_Sons_of_Kemet_Oslo_Jazzfestival_2018_%28223102%29.jpg
+  Discog section: Discography
+  Discography: NO (0 albums)
+
+[73/100] Sophie Hunger
+  Found section: Discography (index 3)
+  Parsed 11 albums from table
+  Page: Sophie Hunger
+  URL:  https://en.wikipedia.org/wiki/Sophie_Hunger
+  Desc: Swiss musician and composer (born 1983)
+  Summary: YES (124 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/e/eb/Sophie_Hunger_am_Haldern_Pop_Festival_2019_-_11_-_Foto_Alexander_Kellner.jpg/330px-Sophie_Hunger_am_Haldern_Pop_Festival_2019_-_11_-_Foto_Alexander_Kellner.jpg
+  Discog section: Discography
+  Discography: YES (11 albums)
+    Sketches on Sea (2006)
+    Monday's Ghost (2008)
+    2010 (1983)
+    The Danger of Light (2012)
+    Supermoon (2015)
+    ... (6 more)
+
+[74/100] Stereophonics
+  Found section: Discography (index 13)
+  Parsed 13 albums from list
+  Page: Stereophonics
+  URL:  https://en.wikipedia.org/wiki/Stereophonics
+  Desc: Welsh rock band
+  Summary: YES (532 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/Stereophonics_gig_O2_Arena_2013_MMB_09.jpg/330px-Stereophonics_gig_O2_Arena_2013_MMB_09.jpg
+  Discog section: Discography
+  Discography: YES (13 albums)
+    Word Gets Around (1997)
+    Performance and Cocktails (1999)
+    Just Enough Education to Perform (2001)
+    You Gotta Go There to Come Back (2003)
+    Language. Sex. Violence. Other? (2005)
+    ... (8 more)
+
+[75/100] Steve Earle
+  Found section: Discography (index 8)
+  Parsed 20 albums from list
+  Page: Steve Earle
+  URL:  https://en.wikipedia.org/wiki/Steve_Earle
+  Desc: American country, rock, and folk singer-songwriter (born 1955)
+  Summary: YES (126 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/8/82/20180705-Rudolstadt-Festival-Steve_Earle-and-the-Dukes-4821_%28cropped%29.jpg/330px-20180705-Rudolstadt-Festival-Steve_Earle-and-the-Dukes-4821_%28cropped%29.jpg
+  Discog section: Discography
+  Discography: YES (20 albums)
+    Guitar Town (1986)
+    Exit 0 (1987)
+    Copperhead Road (1988)
+    The Hard Way (1990)
+    Train a Comin' (1995)
+    ... (15 more)
+
+[76/100] Sun Ra
+  Found section: Discography (index 23)
+  No albums parsed from list format
+  Page: Sun Ra
+  URL:  https://en.wikipedia.org/wiki/Sun_Ra
+  Desc: American jazz composer and bandleader (1914–1993)
+  Summary: YES (326 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/5/59/Sun_Ra_%281973_publicity_photo_-_Impulse_ABC_Dunhill%29.jpg/330px-Sun_Ra_%281973_publicity_photo_-_Impulse_ABC_Dunhill%29.jpg
+  Discog section: Discography
+  Discography: NO (0 albums)
+
+[77/100] Sylvaine
+  No discog section found. Available sections:
+    [1] Life and work (level 2)
+    [2] Awards and distinctions (level 2)
+    [3] References (level 2)
+  Page: Sylvaine Neveu
+  URL:  https://en.wikipedia.org/wiki/Sylvaine_Neveu
+  Desc: French chemist (born 1968)
+  Summary: YES (155 chars)
+  Thumb:   NO
+  Discography: NO (0 albums)
+
+[78/100] Terry Hall & Mushtaq
+  Found section: Discography (index 14)
+  No albums parsed from list format
+  Page: Terry Hall (singer)
+  URL:  https://en.wikipedia.org/wiki/Terry_Hall_(singer)
+  Desc: British singer (1959–2022)
+  Summary: YES (224 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/f/f4/Terry_Hall_CC_%28Paul_Clarke%29.jpg/330px-Terry_Hall_CC_%28Paul_Clarke%29.jpg
+  Discog section: Discography
+  Discography: NO (0 albums)
+
+[79/100] The Allman Brothers Band
+  Found section: Discography (index 15)
+  Parsed 11 albums from list
+  Page: The Allman Brothers Band
+  URL:  https://en.wikipedia.org/wiki/The_Allman_Brothers_Band
+  Desc: American rock band
+  Summary: YES (417 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/7/7a/Allman_Brothers_Band_1969.jpg/330px-Allman_Brothers_Band_1969.jpg
+  Discog section: Discography
+  Discography: YES (11 albums)
+    The Allman Brothers Band (1969)
+    Idlewild South (1970)
+    Brothers and Sisters (1973)
+    Win, Lose or Draw (1975)
+    Enlightened Rogues (1979)
+    ... (6 more)
+
+[80/100] The Black Crowes
+  Found section: Discography (index 11)
+  Parsed 11 albums from list
+  Page: The Black Crowes
+  URL:  https://en.wikipedia.org/wiki/The_Black_Crowes
+  Desc: American rock band
+  Summary: YES (827 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/5/58/Black_crowes-Newport.jpg/330px-Black_crowes-Newport.jpg
+  Discog section: Discography
+  Discography: YES (11 albums)
+    Shake Your Money Maker (1990)
+    The Southern Harmony and Musical Companion (1992)
+    Amorica (1994)
+    Three Snakes and One Charm (1996)
+    By Your Side (1999)
+    ... (6 more)
+
+[81/100] The High Violets
+  Found section: Discography (index 2)
+  No albums parsed from list format
+  Page: The High Violets
+  URL:  https://en.wikipedia.org/wiki/The_High_Violets
+  Desc: American dream pop band
+  Summary: YES (85 chars)
+  Thumb:   NO
+  Discog section: Discography
+  Discography: NO (0 albums)
+
+[82/100] The Knack
+  Found section: Discography (index 8)
+  Parsed 7 albums from list
+  Page: The Knack
+  URL:  https://en.wikipedia.org/wiki/The_Knack
+  Desc: American band
+  Summary: YES (461 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/en/9/9f/The_Knack_press_photo.jpg
+  Discog section: Discography
+  Discography: YES (7 albums)
+    Get the Knack (1979)
+    ...But the Little Girls Understand (1980)
+    Round Trip (1981)
+    Serious Fun (1991)
+    Zoom (1998)
+    ... (2 more)
+
+[83/100] The Lumineers
+  Found section: Discography (index 11)
+  Parsed 5 albums from list
+  Page: The Lumineers
+  URL:  https://en.wikipedia.org/wiki/The_Lumineers
+  Desc: American indie folk band
+  Summary: YES (698 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/0/02/The_Lumineers_performing_at_Wrigley_Field_in_2022.jpg/330px-The_Lumineers_performing_at_Wrigley_Field_in_2022.jpg
+  Discog section: Discography
+  Discography: YES (5 albums)
+    The Lumineers (2012)
+    Cleopatra (2016)
+    III (2019)
+    Brightside (2022)
+    Automatic (2025)
+
+[84/100] The Ocean Blue
+  Found section: Discography (index 6)
+  Parsed 19 albums from table
+  Page: The Ocean Blue
+  URL:  https://en.wikipedia.org/wiki/The_Ocean_Blue
+  Desc: American indie pop band
+  Summary: YES (252 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/The_Ocean_Blue.jpg/330px-The_Ocean_Blue.jpg
+  Discog section: Discography
+  Discography: YES (19 albums)
+    The Ocean Blue
+    Label: Sire Records (1989)
+    Cerulean
+    Label: Sire Records (1991)
+    Beneath the Rhythm and Sound
+    ... (22 more)
+
+[85/100] The Pineapple Thief
+  Found section: Discography (index 5)
+  Parsed 20 albums from list
+  Page: The Pineapple Thief
+  URL:  https://en.wikipedia.org/wiki/The_Pineapple_Thief
+  Desc: British progressive rock band
+  Summary: YES (348 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/1/14/20190227_Batschkapp_Frankfurt_051_Pineapple_Thief.jpg/330px-20190227_Batschkapp_Frankfurt_051_Pineapple_Thief.jpg
+  Discog section: Discography
+  Discography: YES (20 albums)
+    Abducting the Unicorn (1999)
+    137 (2002)
+    Variations on a Dream (2003)
+    10 Stories Down (2005)
+    Little Man (2006)
+    ... (15 more)
+
+[86/100] The Smashing Pumpkins
+  Found section: Discography (index 16)
+  Parsed 13 albums from list
+  Page: The Smashing Pumpkins
+  URL:  https://en.wikipedia.org/wiki/The_Smashing_Pumpkins
+  Desc: American alternative rock band
+  Summary: YES (657 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/2/20/The_Smashing_Pumpkins_-_2019158213436_2019-06-07_Rock_am_Ring_-_2115_-_AK8I7465.jpg/330px-The_Smashing_Pumpkins_-_2019158213436_2019-06-07_Rock_am_Ring_-_2115_-_AK8I7465.jpg
+  Discog section: Discography
+  Discography: YES (13 albums)
+    Gish (1991)
+    Siamese Dream (1993)
+    Mellon Collie and the Infinite Sadness (1995)
+    Adore (1998)
+    Machina/The Machines of God (2000)
+    ... (8 more)
+
+[87/100] The Stooges
+  Found section: Discography (index 15)
+  Parsed 5 albums from list
+  Page: The Stooges
+  URL:  https://en.wikipedia.org/wiki/The_Stooges
+  Desc: American punk rock band
+  Summary: YES (412 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/1/16/Iggy_and_The_Stooges_-_4572393187.jpg/330px-Iggy_and_The_Stooges_-_4572393187.jpg
+  Discog section: Discography
+  Discography: YES (5 albums)
+    The Stooges (1969)
+    Fun House (1970)
+    Raw Power (1973)
+    The Weirdness (2007)
+    Ready to Die (2013)
+
+[88/100] The Third Mind
+
+[89/100] Throwing Muses
+  Found section: Discography (index 7)
+  Parsed 5 albums from table
+  Page: Throwing Muses
+  URL:  https://en.wikipedia.org/wiki/Throwing_Muses
+  Desc: American alternative rock band
+  Summary: YES (202 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/Throwing_Muses_in_San_Francisco%2C_February_28%2C_2014.jpg/330px-Throwing_Muses_in_San_Francisco%2C_February_28%2C_2014.jpg
+  Discog section: Discography
+  Discography: YES (5 albums)
+    "Dizzy" (1989)
+    "Counting Backwards" (1991)
+    "Firepile" (1992)
+    "Bright Yellow Gun" (1995)
+    "Shark" (1996)
+
+[90/100] Tiken Jah Fakoly
+  Found section: Discography (index 4)
+  No albums parsed from list format
+  Page: Tiken Jah Fakoly
+  URL:  https://en.wikipedia.org/wiki/Tiken_Jah_Fakoly
+  Desc: Ivorian reggae singer (born 1968)
+  Summary: YES (115 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/4/49/Tiken_Jah_Fakoly.jpg/330px-Tiken_Jah_Fakoly.jpg
+  Discog section: Discography
+  Discography: NO (0 albums)
+
+[91/100] Tom Waits
+  Found section: Discography (index 17)
+  Parsed 18 albums from list
+  Page: Tom Waits
+  URL:  https://en.wikipedia.org/wiki/Tom_Waits
+  Desc: American singer, songwriter, composer and actor (born 1949)
+  Summary: YES (859 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/TomWaits-byPhilipRomano3.jpg/330px-TomWaits-byPhilipRomano3.jpg
+  Discog section: Discography
+  Discography: YES (18 albums)
+    Closing Time (1973)
+    The Heart of Saturday Night (1974)
+    Nighthawks at the Diner (1975)
+    Small Change (1976)
+    Foreign Affairs (1977)
+    ... (13 more)
+
+[92/100] Toumani Diabate
+  Found section: Discography (index 2)
+  Parsed 19 albums from list
+  Page: Toumani Diabaté
+  URL:  https://en.wikipedia.org/wiki/Toumani_Diabat%C3%A9
+  Desc: Malian musician (1965–2024)
+  Summary: YES (415 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/8/82/Toumani_Diabat%C3%A9.jpg/330px-Toumani_Diabat%C3%A9.jpg
+  Discog section: Discography
+  Discography: YES (19 albums)
+    Kaira (1988)
+    Songhai (with Ketama and Danny Thompson) (1988)
+    Shake the Whole World (with Symmetric Orchestra) (1992)
+    Songhai 2 (with Ketama, Danny Thompson, and José Soto) (1994)
+    Djelika (1995)
+    ... (14 more)
+
+[93/100] Tracy Chapman
+  Found section: Discography (index 6)
+  Parsed 8 albums from list
+  Page: Tracy Chapman
+  URL:  https://en.wikipedia.org/wiki/Tracy_Chapman
+  Desc: American singer-songwriter (born 1964)
+  Summary: YES (679 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Tracy_Chapman_3.jpg/330px-Tracy_Chapman_3.jpg
+  Discog section: Discography
+  Discography: YES (8 albums)
+    Tracy Chapman (1988)
+    Crossroads (1989)
+    Matters of the Heart (1992)
+    New Beginning (1995)
+    Telling Stories (2000)
+    ... (3 more)
+
+[94/100] Vieux Farka Touré
+  Found section: Discography (index 4)
+  Parsed 12 albums from list
+  Page: Vieux Farka Touré
+  URL:  https://en.wikipedia.org/wiki/Vieux_Farka_Tour%C3%A9
+  Desc: Malian musician (born 1981)
+  Summary: YES (124 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/Vieux_Farka_Tour%C3%A9_-_2023_%2853478750938%29.jpg/330px-Vieux_Farka_Tour%C3%A9_-_2023_%2853478750938%29.jpg
+  Discog section: Discography
+  Discography: YES (12 albums)
+    Vieux Farka Touré (2006)
+    Vieux Farka Touré Remixed: UFOs Over Bamako (2008)
+    Fondo (2009)
+    LIVE (2010)
+    The Secret (2011)
+    ... (7 more)
+
+[95/100] Widespread Panic
+  Found section: Discography (index 15)
+  No albums parsed from list format
+  Page: Widespread Panic
+  URL:  https://en.wikipedia.org/wiki/Widespread_Panic
+  Desc: American rock band
+  Summary: YES (437 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/6/69/Widespread_Panic_Red_Rocks_Amphitheatre_6-24-2010.jpg/330px-Widespread_Panic_Red_Rocks_Amphitheatre_6-24-2010.jpg
+  Discog section: Discography
+  Discography: NO (0 albums)
+
+[96/100] Yukino Matsuura
+
+[97/100] Yungchen Lhamo
+  Found section: Discography (index 2)
+  Parsed 7 albums from table
+  Page: Yungchen Lhamo
+  URL:  https://en.wikipedia.org/wiki/Yungchen_Lhamo
+  Desc: Tibetan singer-songwriter
+  Summary: YES (196 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/Yungchen_Lhamo_Concert_in_New_Zealand.jpg/330px-Yungchen_Lhamo_Concert_in_New_Zealand.jpg
+  Discog section: Discography
+  Discography: YES (7 albums)
+    Tibetan Prayer (1995)
+    Tibet, Tibet (1996)
+    Coming Home (1998)
+    Ama (2006)
+    Tayatha with Anton Batagov (2013)
+    ... (2 more)
+
+[98/100] Yusef Lateef
+  Found section: Discography (index 5)
+  No albums parsed from list format
+  Page: Yusef Lateef
+  URL:  https://en.wikipedia.org/wiki/Yusef_Lateef
+  Desc: American jazz musician (1920–2013)
+  Summary: YES (145 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/f/f9/Yusef_Lateef.jpg/330px-Yusef_Lateef.jpg
+  Discog section: Discography
+  Discography: NO (0 albums)
+
+[99/100] alt-J
+  Found section: Discography (index 13)
+  Parsed 4 albums from list
+  Page: Alt-J
+  URL:  https://en.wikipedia.org/wiki/Alt-J
+  Desc: English indie rock band
+  Summary: YES (203 chars)
+  Thumb:   YES https://upload.wikimedia.org/wikipedia/commons/thumb/7/7e/Alt-J_%40_Bonnaroo_2018.jpg/330px-Alt-J_%40_Bonnaroo_2018.jpg
+  Discog section: Discography
+  Discography: YES (4 albums)
+    An Awesome Wave (2012)
+    This Is All Yours (2014)
+    Relaxer (2017)
+    The Dream (2022)
+
+[100/100] oreglo
+
+
+================================================================================
+SUMMARY
+================================================================================
+
+Total artists: 100
+Found:         79 (79%)
+Direct hit:    57 (57%)
+Has summary:   79 (79%)
+Has thumb:     70 (70%)
+Has discog:    55 (55%)
+
+No discography SECTION found (8):
+  - Sylvaine
+  - Echo
+  - Sam Phillips
+  - Ledward Kaapana
+  - Jake Shimabukuro
+  - Chico César
+  - Gretel
+  - KAU
+
+Discography section found but NO albums parsed (16):
+  - Brad Mehldau
+  - Tiken Jah Fakoly
+  - Widespread Panic
+  - AHI
+  - Natacha Atlas
+  - Terry Hall & Mushtaq
+  - Anna Domino
+  - Michel Petrucciani, Anthony Jackson & Steve Gadd
+  - Sun Ra
+  - The High Violets
+  - Over the Rhine
+  - Yusef Lateef
+  - Abaji
+  - Antonio Sánchez
+  - Carla Bruni
+  - Shabaka and the Ancestors
+
+Not found on Wikipedia (21):
+  - Nicole McCabe
+  - Houssam Jaafar
+  - Jeff Talmadge
+  - Kessoncoda
+  - Samba de Coco Raízes de Arcoverde
+  - Bardino
+  - Maajo, Waina
+  - Yukino Matsuura
+  - oreglo
+  - Mari Froes, Trinix
+  - The Third Mind
+  - Constantinople, Kiya Tabassian
+  - Casualties of Cool
+  - Hariprasad Chaurasia
+  - Gianni Brezzo
+  - Anenon
+  - Black Dub
+  - FKJ
+  - Organic Pulse Ensemble
+  - Chorus of Tribes
+  - Charif Magarbane

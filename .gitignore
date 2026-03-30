@@ -13,3 +13,6 @@ rptui-pre-image-render-change
 
 # Test files
 test_*.go
+
+# Secrets
+discogs.txt

@@ -10,7 +10,9 @@ import (
 	"net/url"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"rptui-bubbletea/internal/loginit"
@@ -36,16 +38,63 @@ type ArtistInfo struct {
 type WikipediaClient struct {
 	httpClient *http.Client
 	userAgent  string
+	lastCall   time.Time
+	mu         sync.Mutex
 }
+
+const wikiMinDelay = 1 * time.Second
 
 // NewWikipediaClient creates a new Wikipedia API client
 func NewWikipediaClient() *WikipediaClient {
 	return &WikipediaClient{
 		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout: 15 * time.Second,
 		},
-		userAgent: "rptui-go/1.0",
+		userAgent: "rptui-go/1.0 (https://github.com/user/rptui)",
 	}
+}
+
+// wikiGet makes a rate-limited GET request, handling 429 retries.
+func (w *WikipediaClient) wikiGet(ctx context.Context, urlStr string) (*http.Response, error) {
+	w.mu.Lock()
+	elapsed := time.Since(w.lastCall)
+	if elapsed < wikiMinDelay {
+		time.Sleep(wikiMinDelay - elapsed)
+	}
+	w.lastCall = time.Now()
+	w.mu.Unlock()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", urlStr, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", w.userAgent)
+
+	resp, err := w.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode == http.StatusTooManyRequests {
+		retryAfter := 5 * time.Second
+		if ra := resp.Header.Get("Retry-After"); ra != "" {
+			if secs, err := strconv.Atoi(ra); err == nil {
+				retryAfter = time.Duration(secs) * time.Second
+			}
+		}
+		logger.Printf("Rate limited (429), waiting %v", retryAfter)
+		resp.Body.Close()
+		time.Sleep(retryAfter)
+
+		req2, err := http.NewRequestWithContext(ctx, "GET", urlStr, nil)
+		if err != nil {
+			return nil, err
+		}
+		req2.Header.Set("User-Agent", w.userAgent)
+		return w.httpClient.Do(req2)
+	}
+
+	return resp, nil
 }
 
 // MusicianKeywords for identifying musician pages
@@ -62,6 +111,8 @@ var musicianKeywords = []string{
 	"rock band",
 	"pop band",
 	"heavy metal",
+	"metal band",
+	"metal solo",
 	"hip hop",
 	"r&b",
 	"country singer",
@@ -79,6 +130,16 @@ var musicianKeywords = []string{
 	"duo",
 	"group",
 	"vocalist",
+	"guitarist",
+	"drummer",
+	"bassist",
+	"violinist",
+	"saxophonist",
+	"flautist",
+	"cellist",
+	"percussionist",
+	"trumpeter",
+	"harmonica",
 }
 
 // AlbumIndicators for filtering out album pages
@@ -147,31 +208,24 @@ func (w *WikipediaClient) FindArtist(ctx context.Context, artistName string) (*A
 	}
 	if err == nil && directSummary != nil {
 		logger.Printf("Direct summary: Title=%s, Desc=%s", directSummary.Title, directSummary.Description)
-		logger.Printf("Is musician: %v", w.isMusicianPage(directSummary))
 	}
 
+	var directResult *ArtistInfo
 	if err == nil && directSummary != nil && w.isMusicianPage(directSummary) {
 		logger.Printf("Found artist via direct summary: %s", directSummary.Title)
-
-		// Fetch discography section
-		discography := w.fetchDiscography(ctx, directSummary.Title)
-
-		return &ArtistInfo{
+		directResult = &ArtistInfo{
 			Summary:      cleanWikiText(directSummary.Extract),
 			PageTitle:    directSummary.Title,
 			PageURL:      directSummary.ContentUrls.Desktop.Page,
 			ThumbnailURL: directSummary.Thumbnail.Source,
-			Discography:  discography,
-		}, nil
+		}
 	}
 
-	logger.Printf("Direct summary failed for %s, trying search...", artistName)
-
-	// Search with various queries
-	// Order: exact name first, then qualified searches
-	// This ensures exact matches are found before qualified ones
+	// Always search - even if we have a direct hit, a disambiguated variant
+	// (e.g., "Sam Phillips (musician)") might have discography when the
+	// direct match doesn't.
 	searchQueries := []string{
-		artistName, // Try exact name FIRST
+		artistName,
 		fmt.Sprintf("%s musician", artistName),
 		fmt.Sprintf("%s singer", artistName),
 		fmt.Sprintf("%s band", artistName),
@@ -179,10 +233,11 @@ func (w *WikipediaClient) FindArtist(ctx context.Context, artistName string) (*A
 	}
 
 	allResults := make(map[string]bool)
-	var results []struct {
+	type scoredResult struct {
 		title string
 		score float64
 	}
+	var results []scoredResult
 
 	for _, query := range searchQueries {
 		logger.Printf("Searching: %s", query)
@@ -199,7 +254,6 @@ func (w *WikipediaClient) FindArtist(ctx context.Context, artistName string) (*A
 			}
 			allResults[r.Title] = true
 
-			// Skip disambiguation and discography pages
 			if strings.Contains(strings.ToLower(r.Title), "disambiguation") {
 				continue
 			}
@@ -209,24 +263,25 @@ func (w *WikipediaClient) FindArtist(ctx context.Context, artistName string) (*A
 
 			score := similarityScore(r.Title, artistName)
 			logger.Printf("  Result: %s (score=%.2f)", r.Title, score)
-			if score > 0.3 {
-				results = append(results, struct {
-					title string
-					score float64
-				}{r.Title, score})
+			if score > 0.9 {
+				results = append(results, scoredResult{r.Title, score})
 			}
 		}
 	}
 
 	logger.Printf("Total unique results: %d", len(results))
 
-	// Sort by score descending
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].score > results[j].score
 	})
 
-	// Check top results for musician pages
+	// Check search results - if we have a direct hit, look for one with discography
 	for _, r := range results {
+		// Skip if same as direct hit
+		if directResult != nil && r.title == directResult.PageTitle {
+			continue
+		}
+
 		logger.Printf("Checking: %s (score=%.2f)", r.title, r.score)
 		summary, err := w.getSummary(ctx, r.title)
 		if err != nil {
@@ -239,26 +294,49 @@ func (w *WikipediaClient) FindArtist(ctx context.Context, artistName string) (*A
 		}
 		logger.Printf("  Summary: Title=%s, Desc=%s", summary.Title, summary.Description)
 
-		if w.isMusicianPage(summary) {
-			logger.Printf("Found artist via search: %s (score=%.2f)", summary.Title, r.score)
-
-			// Fetch discography section
-			discography := w.fetchDiscography(ctx, summary.Title)
-
-			return &ArtistInfo{
-				Summary:      cleanWikiText(summary.Extract),
-				PageTitle:    summary.Title,
-				PageURL:      summary.ContentUrls.Desktop.Page,
-				ThumbnailURL: summary.Thumbnail.Source,
-				Discography:  discography,
-			}, nil
-		} else {
+		if !w.isMusicianPage(summary) {
 			logger.Printf("  Not a musician page")
+			continue
 		}
+
+		// If we already have a direct hit, check if this candidate has discography
+		if directResult != nil && directResult.Discography == "" {
+			discog := w.fetchDiscography(ctx, summary.Title)
+			if discog != "" {
+				logger.Printf("  Replacing direct hit - found discography: %s", summary.Title)
+				directResult.PageTitle = summary.Title
+				directResult.PageURL = summary.ContentUrls.Desktop.Page
+				directResult.Summary = cleanWikiText(summary.Extract)
+				directResult.ThumbnailURL = summary.Thumbnail.Source
+				directResult.Discography = discog
+				return directResult, nil
+			}
+			logger.Printf("  No discography either, skipping")
+			continue
+		}
+
+		// No direct hit - accept first musician match
+		logger.Printf("Found artist via search: %s (score=%.2f)", summary.Title, r.score)
+		discog := w.fetchDiscography(ctx, summary.Title)
+		return &ArtistInfo{
+			Summary:      cleanWikiText(summary.Extract),
+			PageTitle:    summary.Title,
+			PageURL:      summary.ContentUrls.Desktop.Page,
+			ThumbnailURL: summary.Thumbnail.Source,
+			Discography:  discog,
+		}, nil
+	}
+
+	// If we had a direct hit but search didn't find anything better, use it
+	if directResult != nil {
+		if directResult.Discography == "" {
+			directResult.Discography = w.fetchDiscography(ctx, directResult.PageTitle)
+		}
+		return directResult, nil
 	}
 
 	logger.Printf("Artist not found: %s", artistName)
-	return nil, nil // Not found
+	return nil, nil
 }
 
 // searchWikipedia searches Wikipedia API
@@ -266,19 +344,12 @@ func (w *WikipediaClient) searchWikipedia(ctx context.Context, query string) ([]
 	Title   string
 	Snippet string
 }, error) {
-	// For search API, we need proper URL encoding
 	u := fmt.Sprintf(
 		"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=%s&format=json",
 		url.QueryEscape(query),
 	)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", w.userAgent)
-
-	resp, err := w.httpClient.Do(req)
+	resp, err := w.wikiGet(ctx, u)
 	if err != nil {
 		return nil, err
 	}
@@ -309,27 +380,21 @@ func (w *WikipediaClient) searchWikipedia(ctx context.Context, query string) ([]
 
 // getSummary gets Wikipedia page summary
 func (w *WikipediaClient) getSummary(ctx context.Context, title string) (*SummaryResponse, error) {
-	// Wikipedia URLs need special escaping: spaces become underscores, but parentheses stay literal
-	// This matches Python's urllib.parse.quote behavior
-	wikiTitle := strings.ReplaceAll(title, " ", "_")
-
+	wikiTitle := url.QueryEscape(strings.ReplaceAll(title, " ", "_"))
 	u := fmt.Sprintf(
 		"https://en.wikipedia.org/api/rest_v1/page/summary/%s",
 		wikiTitle,
 	)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", w.userAgent)
-
-	resp, err := w.httpClient.Do(req)
+	resp, err := w.wikiGet(ctx, u)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
@@ -344,30 +409,22 @@ func (w *WikipediaClient) getSummary(ctx context.Context, title string) (*Summar
 
 // cleanWikiText removes Wikipedia markup from text
 func cleanWikiText(text string) string {
-	// Remove bold/italic markers like ''' and ''
 	text = strings.ReplaceAll(text, "'''", "")
 	text = strings.ReplaceAll(text, "''", "")
 
-	// Remove [[link|text]] style links, keep text
 	linkRegex := regexp.MustCompile(`\[\[[^\]]*\|([^\]]*)\]\]`)
 	text = linkRegex.ReplaceAllString(text, "$1")
 
-	// Remove [[link]] style links, keep link name
 	linkRegex2 := regexp.MustCompile(`\[\[([^\]]*)\]\]`)
 	text = linkRegex2.ReplaceAllString(text, "$1")
 
-	// Remove <ref>...</ref> tags
 	refRegex := regexp.MustCompile(`<ref[^>]*>.*?</ref>`)
 	text = refRegex.ReplaceAllString(text, "")
 
-	// Remove {{...}} templates
 	templateRegex := regexp.MustCompile(`\{\{[^}]*\}\}`)
 	text = templateRegex.ReplaceAllString(text, "")
 
-	// Decode HTML entities
 	text = html.UnescapeString(text)
-
-	// Clean up extra whitespace
 	text = strings.TrimSpace(text)
 	text = regexp.MustCompile(`\s+`).ReplaceAllString(text, " ")
 
@@ -376,22 +433,14 @@ func cleanWikiText(text string) string {
 
 // fetchDiscography fetches studio albums from Wikipedia article
 func (w *WikipediaClient) fetchDiscography(ctx context.Context, pageTitle string) string {
-	// First get sections to find discography/studio albums section index
-	// Wikipedia URLs need special escaping: spaces become underscores, but parentheses stay literal
-	wikiTitle := strings.ReplaceAll(pageTitle, " ", "_")
+	wikiTitle := url.QueryEscape(strings.ReplaceAll(pageTitle, " ", "_"))
 
 	u := fmt.Sprintf(
 		"https://en.wikipedia.org/w/api.php?action=parse&page=%s&prop=sections&format=json",
 		wikiTitle,
 	)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return ""
-	}
-	req.Header.Set("User-Agent", w.userAgent)
-
-	resp, err := w.httpClient.Do(req)
+	resp, err := w.wikiGet(ctx, u)
 	if err != nil {
 		return ""
 	}
@@ -410,40 +459,46 @@ func (w *WikipediaClient) fetchDiscography(ctx context.Context, pageTitle string
 		return ""
 	}
 
-	// Find studio albums or discography section
+	// Find section - priority: discography > studio album(s) > albums > cds
+	// Skip "upcoming", "future", "compilation", "live album", "EPs", "singles" subsections
 	var targetIndex string
 	for _, s := range sectionsResult.Parse.Sections {
 		lineLower := strings.ToLower(s.Line)
-		if strings.Contains(lineLower, "studio album") {
-			targetIndex = s.Index
-			break
+		if strings.Contains(lineLower, "upcoming") || strings.Contains(lineLower, "future") {
+			continue
 		}
-		if targetIndex == "" && strings.Contains(lineLower, "discography") {
+		if strings.Contains(lineLower, "compilation") || strings.Contains(lineLower, "live album") ||
+			strings.Contains(lineLower, "EPs") || strings.Contains(lineLower, "singles") {
+			continue
+		}
+		if strings.Contains(lineLower, "discography") && targetIndex == "" {
+			targetIndex = s.Index
+		}
+		if strings.Contains(lineLower, "studio album") && targetIndex == "" {
+			targetIndex = s.Index
+		}
+		if lineLower == "albums" && targetIndex == "" {
+			targetIndex = s.Index
+		}
+		if lineLower == "cds" && targetIndex == "" {
 			targetIndex = s.Index
 		}
 	}
 
 	if targetIndex == "" {
-		logger.Printf("fetchDiscography: No discography/studio albums section found for %s", pageTitle)
+		logger.Printf("fetchDiscography: No discography section found for %s", pageTitle)
 		return ""
 	}
 
 	logger.Printf("fetchDiscography: Found section index %s for %s", targetIndex, pageTitle)
 
-	// Fetch section HTML content
 	u = fmt.Sprintf(
 		"https://en.wikipedia.org/w/api.php?action=parse&page=%s&section=%s&prop=text&format=json",
 		wikiTitle,
 		url.QueryEscape(targetIndex),
 	)
 
-	req, err = http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return ""
-	}
-	req.Header.Set("User-Agent", w.userAgent)
-
-	resp, err = w.httpClient.Do(req)
+	resp, err = w.wikiGet(ctx, u)
 	if err != nil {
 		return ""
 	}
@@ -462,42 +517,14 @@ func (w *WikipediaClient) fetchDiscography(ctx context.Context, pageTitle string
 	}
 
 	htmlContent := htmlResult.Parse.Text.Content
+	cleaned := cleanHTML(htmlContent)
 
-	// Parse HTML like Python version
-	// Remove style blocks
-	styleRegex := regexp.MustCompile(`<style[^>]*>.*?</style>`)
-	htmlContent = styleRegex.ReplaceAllString(htmlContent, "")
+	// Try table parsing first (on raw HTML for structure)
+	albums := parseAlbumTable(htmlContent)
 
-	// Remove links but keep text
-	linkRegex := regexp.MustCompile(`<a[^>]*>([^<]*)</a>`)
-	htmlContent = linkRegex.ReplaceAllString(htmlContent, "$1")
-
-	// Remove all other HTML tags
-	tagRegex := regexp.MustCompile(`<[^>]+>`)
-	htmlContent = tagRegex.ReplaceAllString(htmlContent, "")
-
-	// Decode HTML entities
-	htmlContent = html.UnescapeString(htmlContent)
-
-	// Remove citation numbers
-	citeRegex := regexp.MustCompile(`\[\d+\]`)
-	htmlContent = citeRegex.ReplaceAllString(htmlContent, "")
-
-	// Try to parse albums from tables FIRST (for Morcheeba, Big Sugar, etc.)
-	albums := w.parseAlbumTable(htmlContent)
-
-	// If no albums found in tables, try list format
+	// Fallback to list parsing (on cleaned text)
 	if len(albums) == 0 {
-		albums = w.parseAlbumList(htmlContent)
-	}
-
-	// If still no albums, check if there's a link to a separate discography article
-	if len(albums) == 0 {
-		discogLink := w.extractDiscographyLink(htmlContent)
-		if discogLink != "" {
-			logger.Printf("fetchDiscography: Found separate discography article: %s", discogLink)
-			return fmt.Sprintf("See: %s", discogLink)
-		}
+		albums = parseAlbumList(cleaned)
 	}
 
 	if len(albums) == 0 {
@@ -510,56 +537,59 @@ func (w *WikipediaClient) fetchDiscography(ctx context.Context, pageTitle string
 }
 
 // parseAlbumTable extracts albums from wikitable format
-func (w *WikipediaClient) parseAlbumTable(htmlContent string) []string {
+func parseAlbumTable(htmlContent string) []string {
 	var albums []string
 
-	// Find table rows
-	// Pattern: <tr>...<td>Album Name</td>...<td>Year</td>...</tr>
-	rowRegex := regexp.MustCompile(`<tr[^>]*>(.*?)</tr>`)
+	rowRegex := regexp.MustCompile(`(?s)<tr[^>]*>(.*?)</tr>`)
 	rows := rowRegex.FindAllStringSubmatch(htmlContent, -1)
+
+	citationRegex := regexp.MustCompile(`\[\d+\]`)
+	tagRegex := regexp.MustCompile(`(?s)<[^>]+>`)
+	yearRegex := regexp.MustCompile(`\b(19\d{2}|20\d{2})\b`)
 
 	for _, rowMatch := range rows {
 		row := rowMatch[1]
 
-		// Skip header rows (contain <th> but no <td>)
 		if strings.Contains(row, "<th") && !strings.Contains(row, "<td") {
 			continue
 		}
 
-		// Extract all cell contents
-		cellRegex := regexp.MustCompile(`<td[^>]*>(.*?)</td>`)
+		// Extract ALL cells (both <th> and <td>) - Wikipedia uses <th> for row headers
+		cellRegex := regexp.MustCompile(`(?s)<(th|td)[^>]*>(.*?)</(?:th|td)>`)
 		cells := cellRegex.FindAllStringSubmatch(row, -1)
 
 		if len(cells) < 2 {
 			continue
 		}
 
-		// First cell should be album name (may contain <i> tags)
-		albumCell := cells[0][1]
-		// Remove all HTML tags from album name
-		tagRegex := regexp.MustCompile(`<[^>]+>`)
-		albumName := tagRegex.ReplaceAllString(albumCell, "")
-		albumName = html.UnescapeString(albumName)
-		albumName = strings.TrimSpace(albumName)
+		cell0Text := strings.TrimSpace(tagRegex.ReplaceAllString(cells[0][2], ""))
+		cell0Text = html.UnescapeString(citationRegex.ReplaceAllString(cell0Text, ""))
+		cell1Text := strings.TrimSpace(tagRegex.ReplaceAllString(cells[1][2], ""))
+		cell1Text = html.UnescapeString(citationRegex.ReplaceAllString(cell1Text, ""))
 
-		// Look for year in other cells (usually 2nd or 3rd cell)
-		var year string
-		for i := 1; i < len(cells) && i < 4; i++ {
-			cellContent := cells[i][1]
-			// Look for 4-digit year
-			yearRegex := regexp.MustCompile(`\b(19\d{2}|20\d{2})\b`)
-			yearMatch := yearRegex.FindStringSubmatch(cellContent)
-			if len(yearMatch) >= 2 {
-				year = yearMatch[1]
-				break
+		var albumName, year string
+
+		cell0IsYear := yearRegex.MatchString(cell0Text) && len(cell0Text) <= 6
+		cell1IsYear := yearRegex.MatchString(cell1Text) && len(cell1Text) <= 6
+
+		if cell0IsYear && !cell1IsYear {
+			year = yearRegex.FindString(cell0Text)
+			albumName = cell1Text
+		} else {
+			albumName = cell0Text
+			for i := 1; i < len(cells) && i < 4; i++ {
+				cellText := tagRegex.ReplaceAllString(cells[i][2], "")
+				yearMatch := yearRegex.FindString(cellText)
+				if yearMatch != "" {
+					year = yearMatch
+					break
+				}
 			}
 		}
 
-		// If we have both album name and year
 		if albumName != "" && year != "" && len(albumName) < 100 {
-			// Skip if album name looks like a header
-			if strings.Contains(strings.ToLower(albumName), "title") ||
-				strings.Contains(strings.ToLower(albumName), "album") && strings.Contains(strings.ToLower(albumName), "details") {
+			lower := strings.ToLower(albumName)
+			if strings.Contains(lower, "title") || strings.Contains(lower, "album details") {
 				continue
 			}
 			albums = append(albums, fmt.Sprintf("%s (%s)", albumName, year))
@@ -570,60 +600,154 @@ func (w *WikipediaClient) parseAlbumTable(htmlContent string) []string {
 }
 
 // parseAlbumList extracts albums from list format
-func (w *WikipediaClient) parseAlbumList(htmlContent string) []string {
+func parseAlbumList(cleaned string) []string {
 	var albums []string
 
-	// Match album name followed by (YEAR), allowing trailing text like footnotes
-	albumRegex := regexp.MustCompile(`^(.+?)\s*\((\d{4})\)`)
-	lines := strings.Split(htmlContent, "\n")
+	albumPattern := regexp.MustCompile(`^(.+?)\s*\((\d{4})\)`)
+	albumLabelYearPattern := regexp.MustCompile(`^(.+?)\s*\([^)]*,\s*(\d{4})\)`)
+	yearOnlyPattern := regexp.MustCompile(`^\s*(\d{4})\s*$`)
+	citationRegex := regexp.MustCompile(`\[\d+\]`)
+
+	skipWords := map[string]bool{
+		"title": true, "album details": true, "peak": true,
+		"studio album": true, "studio albums": true, "discography": true,
+		"chart": true, "released": true, "label": true,
+	}
+
+	lines := strings.Split(cleaned, "\n")
+	var prevLine string
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		if strings.Contains(strings.ToLower(line), "studio album") {
+		lineLower := strings.ToLower(line)
+
+		if skipWords[lineLower] {
 			continue
 		}
-		if strings.Contains(strings.ToLower(line), "discography") {
+		if strings.HasPrefix(line, "^ ") {
+			prevLine = ""
 			continue
 		}
-		if strings.Contains(strings.ToLower(line), "chart") {
+		if line == "—" || regexp.MustCompile(`^\d{1,3}$`).MatchString(line) {
 			continue
 		}
 
-		matches := albumRegex.FindStringSubmatch(line)
+		// Strip citation markers
+		line = citationRegex.ReplaceAllString(line, "")
+
+		// Try "Name (Year)" pattern
+		matches := albumPattern.FindStringSubmatch(line)
 		if len(matches) >= 3 {
 			albumName := strings.TrimSpace(matches[1])
 			year := matches[2]
-			// Clean up pipe in album names
 			if idx := strings.Index(albumName, "|"); idx >= 0 {
 				albumName = albumName[idx+1:]
 			}
 			albums = append(albums, fmt.Sprintf("%s (%s)", albumName, year))
+			prevLine = ""
+			if len(albums) >= 20 {
+				break
+			}
+			continue
 		}
 
-		if len(albums) >= 15 {
-			break
+		// Try "Name (Label, Year)" format
+		matches = albumLabelYearPattern.FindStringSubmatch(line)
+		if len(matches) >= 3 {
+			albumName := strings.TrimSpace(matches[1])
+			year := matches[2]
+			albums = append(albums, fmt.Sprintf("%s (%s)", albumName, year))
+			prevLine = ""
+			if len(albums) >= 20 {
+				break
+			}
+			continue
 		}
+
+		// Try "Year: Album Name" format
+		yearColonPattern := regexp.MustCompile(`^\s*(\d{4})\s*:\s*(.+)$`)
+		if m := yearColonPattern.FindStringSubmatch(line); len(m) >= 3 {
+			year := m[1]
+			albumName := strings.TrimSpace(m[2])
+			if idx := strings.Index(albumName, "("); idx > 0 {
+				albumName = strings.TrimSpace(albumName[:idx])
+			}
+			if albumName != "" && len(albumName) < 100 {
+				albums = append(albums, fmt.Sprintf("%s (%s)", albumName, year))
+				prevLine = ""
+				if len(albums) >= 20 {
+					break
+				}
+				continue
+			}
+		}
+
+		// Try "Year - Album Name" format
+		yearDashPattern := regexp.MustCompile(`^\s*(\d{4})\s*[-–]\s*(.+)$`)
+		if m := yearDashPattern.FindStringSubmatch(line); len(m) >= 3 {
+			year := m[1]
+			albumName := strings.TrimSpace(m[2])
+			if idx := strings.Index(albumName, "("); idx > 0 {
+				albumName = strings.TrimSpace(albumName[:idx])
+			}
+			if albumName != "" && len(albumName) < 100 {
+				albums = append(albums, fmt.Sprintf("%s (%s)", albumName, year))
+				prevLine = ""
+				if len(albums) >= 20 {
+					break
+				}
+				continue
+			}
+		}
+
+		// Check if bare year follows an album name
+		if yearMatch := yearOnlyPattern.FindStringSubmatch(line); len(yearMatch) >= 2 && prevLine != "" {
+			year := yearMatch[1]
+			prevLower := strings.ToLower(prevLine)
+			if !skipWords[prevLower] && !regexp.MustCompile(`^\d+$`).MatchString(prevLine) && prevLine != "—" {
+				albums = append(albums, fmt.Sprintf("%s (%s)", prevLine, year))
+				prevLine = ""
+				if len(albums) >= 20 {
+					break
+				}
+				continue
+			}
+		}
+
+		prevLine = line
 	}
 
 	return albums
 }
 
-// extractDiscographyLink finds link to separate discography article
-func (w *WikipediaClient) extractDiscographyLink(htmlContent string) string {
-	// Look for "Main article: X discography" pattern
-	// Pattern: <a href="/wiki/Artist_discography">Artist discography</a>
-	linkRegex := regexp.MustCompile(`<a[^>]*href="/wiki/([^"]*discography[^"]*)"[^>]*>([^<]*discography[^<]*)</a>`)
-	matches := linkRegex.FindStringSubmatch(htmlContent)
+// cleanHTML removes HTML tags and cleans text
+func cleanHTML(htmlText string) string {
+	re := regexp.MustCompile(`<style[^>]*>.*?</style>`)
+	htmlText = re.ReplaceAllString(htmlText, "")
 
-	if len(matches) >= 3 {
-		// Return the link text (e.g., "Arctic Monkeys discography")
-		return matches[2]
-	}
+	htmlText = regexp.MustCompile(`<br\s*/?>`).ReplaceAllString(htmlText, "\n")
 
-	return ""
+	re = regexp.MustCompile(`<a[^>]*>([^<]*)</a>`)
+	htmlText = re.ReplaceAllString(htmlText, "$1")
+
+	htmlText = regexp.MustCompile(`<i>([^<]*)</i>`).ReplaceAllString(htmlText, "$1")
+	htmlText = regexp.MustCompile(`</?i>`).ReplaceAllString(htmlText, "")
+
+	htmlText = regexp.MustCompile(`<[^>]+>`).ReplaceAllString(htmlText, "")
+
+	htmlText = html.UnescapeString(htmlText)
+
+	htmlText = regexp.MustCompile(`\[\d+\]`).ReplaceAllString(htmlText, "")
+	htmlText = regexp.MustCompile(`\[nb\s*\d*\]`).ReplaceAllString(htmlText, "")
+	htmlText = regexp.MustCompile(`\^\s*\w+.*`).ReplaceAllString(htmlText, "")
+	htmlText = regexp.MustCompile(`\(edit\)`).ReplaceAllString(htmlText, "")
+
+	htmlText = regexp.MustCompile(`\n\n+`).ReplaceAllString(htmlText, "\n")
+
+	return htmlText
 }
 
 // isAlbumPage checks if Wikipedia page is about an album (not a musician)
@@ -635,7 +759,6 @@ func (w *WikipediaClient) isAlbumPage(summary *SummaryResponse) bool {
 	desc := strings.ToLower(summary.Description)
 	title := strings.ToLower(summary.Title)
 
-	// Check description for album indicators
 	if strings.Contains(desc, "album by") {
 		return true
 	}
@@ -648,8 +771,10 @@ func (w *WikipediaClient) isAlbumPage(summary *SummaryResponse) bool {
 	if strings.Contains(desc, "compilation album") {
 		return true
 	}
+	if strings.Contains(desc, "EP by") {
+		return true
+	}
 
-	// Check title for album indicators
 	for _, indicator := range albumIndicators {
 		if strings.Contains(title, indicator) {
 			return true
@@ -666,52 +791,34 @@ func (w *WikipediaClient) isMusicianPage(summary *SummaryResponse) bool {
 	}
 
 	desc := strings.ToLower(summary.Description)
-	extract := strings.ToLower(summary.Extract)
 
-	// MUST have a description
 	if desc == "" {
 		return false
 	}
-
-	// Skip disambiguation pages
 	if strings.Contains(desc, "disambiguation") {
 		return false
 	}
 	if strings.Contains(desc, "topics referred to by the same term") {
 		return false
 	}
-
-	// Skip album pages (NEW - check this first)
 	if w.isAlbumPage(summary) {
 		return false
 	}
-
-	// STRICT: Must contain explicit musician keywords in DESCRIPTION
-	// Not just in the extract (which can mention bands in passing)
-	musicianDescKeywords := []string{
-		"band", "singer", "musician", "rapper", "artist",
-		"singer-songwriter", "songwriter", "dj", "producer",
-		"pianist", "composer", "duo", "group", "vocalist",
-		"rock band", "pop band", "metal band", "jazz",
-		"american band", "british band", "american singer",
-		"british singer", "american musician", "british musician",
+	// Reject song/soundtrack pages
+	if strings.Contains(desc, "song by") ||
+		strings.Contains(desc, "single by") ||
+		strings.Contains(desc, "soundtrack") {
+		return false
 	}
 
-	for _, kw := range musicianDescKeywords {
+	for _, kw := range musicianKeywords {
 		if strings.Contains(desc, kw) {
 			return true
 		}
 	}
 
-	// Fallback: Check extract ONLY if description is very short
-	// (some pages have minimal descriptions)
-	if len(desc) < 30 {
-		for _, kw := range musicianDescKeywords {
-			if strings.Contains(extract, kw) {
-				return true
-			}
-		}
-	}
+	// No extract fallback - words like "band", "group", "singer" appear
+	// in unrelated contexts causing false positives.
 
 	return false
 }
@@ -721,15 +828,11 @@ func similarityScore(title, artist string) float64 {
 	titleLower := strings.TrimSpace(strings.ToLower(title))
 	artistLower := strings.TrimSpace(strings.ToLower(artist))
 
-	// EXACT match (including disambiguators like "(band)")
 	if titleLower == artistLower {
 		return 1.0
 	}
 
-	// Title starts with artist name + disambiguator (e.g., "Ivy (band)" vs "Ivy")
-	// This is the BEST kind of match after exact
 	if strings.HasPrefix(titleLower, artistLower+" (") {
-		// Bonus for common disambiguators
 		if strings.Contains(titleLower, "(band)") ||
 			strings.Contains(titleLower, "(musician)") ||
 			strings.Contains(titleLower, "(singer)") ||
@@ -741,31 +844,24 @@ func similarityScore(title, artist string) float64 {
 		return 0.95
 	}
 
-	// Artist starts with title (e.g., artist="The Beatles", title="Beatles")
 	if strings.HasPrefix(artistLower, titleLower) {
 		return 0.90
 	}
 
-	// Normalize and compare (removes "the", punctuation, etc.)
 	titleNorm := normalizeArtistName(title)
 	artistNorm := normalizeArtistName(artist)
 
-	// Exact match after normalization
 	if titleNorm == artistNorm {
 		return 0.95
 	}
 
-	// Normalized prefix match - but penalize if title is MUCH longer
 	if strings.HasPrefix(titleNorm, artistNorm) {
-		// Calculate length ratio
 		lengthRatio := float64(len(titleNorm)) / float64(len(artistNorm))
-
-		// If title is more than 1.5x longer, it's probably a band name or different entity
 		if lengthRatio > 1.5 {
-			return 0.70 // Penalize
+			return 0.70
 		}
 		if lengthRatio > 1.2 {
-			return 0.85 // Slight penalty
+			return 0.85
 		}
 		return 0.88
 	}
@@ -774,7 +870,6 @@ func similarityScore(title, artist string) float64 {
 		return 0.82
 	}
 
-	// Levenshtein distance for fuzzy matching
 	maxLen := max(len(titleNorm), len(artistNorm))
 	if maxLen == 0 {
 		return 0.0
@@ -782,16 +877,14 @@ func similarityScore(title, artist string) float64 {
 	distance := levenshteinDistance(titleNorm, artistNorm)
 	score := 1.0 - float64(distance)/float64(maxLen)
 
-	if score > 0.3 {
+	if score > 0.5 {
 		words := strings.Fields(titleNorm)
 
-		// Check if artist name is contained in title words
 		artistFound := false
 		for _, word := range words {
 			if word == artistNorm {
 				score += 0.25
 				artistFound = true
-				// Bonus if artist name is the last word (common pattern)
 				if words[len(words)-1] == artistNorm {
 					score += 0.1
 				}
@@ -799,7 +892,6 @@ func similarityScore(title, artist string) float64 {
 			}
 		}
 
-		// Check for partial word matches
 		if !artistFound {
 			for _, word := range words {
 				if strings.HasPrefix(word, artistNorm) || strings.HasPrefix(artistNorm, word) {
@@ -808,7 +900,6 @@ func similarityScore(title, artist string) float64 {
 			}
 		}
 
-		// Bonus for explicit disambiguators
 		if strings.Contains(titleLower, "(singer)") ||
 			strings.Contains(titleLower, "(musician)") ||
 			strings.Contains(titleLower, "(band)") ||
@@ -817,7 +908,6 @@ func similarityScore(title, artist string) float64 {
 			score += 0.08
 		}
 
-		// Small bonus for multi-word titles (more specific)
 		score += float64(len(words)) * 0.02
 	}
 
@@ -827,14 +917,9 @@ func similarityScore(title, artist string) float64 {
 // normalizeArtistName normalizes artist name for comparison
 func normalizeArtistName(name string) string {
 	name = strings.ToLower(strings.TrimSpace(name))
-
-	// Remove leading "the "
 	name = regexp.MustCompile(`^the\s+`).ReplaceAllString(name, "")
-	// Remove trailing ", the"
 	name = regexp.MustCompile(`,?\s+the$`).ReplaceAllString(name, "")
-	// Remove non-word characters
 	name = regexp.MustCompile(`[^\w\s]`).ReplaceAllString(name, "")
-
 	return strings.TrimSpace(name)
 }
 
@@ -867,161 +952,4 @@ func levenshteinDistance(s1, s2 string) int {
 	}
 
 	return previousRow[len(previousRow)-1]
-}
-
-// FetchDiscography fetches discography from Wikipedia page
-func (w *WikipediaClient) FetchDiscography(ctx context.Context, pageTitle string, maxAlbums int) (string, error) {
-	// Get sections
-	// Wikipedia URLs need special escaping: spaces become underscores, but parentheses stay literal
-	wikiTitle := strings.ReplaceAll(pageTitle, " ", "_")
-
-	u := fmt.Sprintf(
-		"https://en.wikipedia.org/w/api.php?action=parse&page=%s&prop=sections&format=json",
-		wikiTitle,
-	)
-
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("User-Agent", w.userAgent)
-
-	resp, err := w.httpClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("API returned status %d", resp.StatusCode)
-	}
-
-	var parseResult ParseResponse
-	if err := json.NewDecoder(resp.Body).Decode(&parseResult); err != nil {
-		return "", err
-	}
-
-	// Find studio album or discography section
-	var targetIndex string
-	for _, s := range parseResult.Parse.Sections {
-		line := strings.ToLower(s.Line)
-		if strings.Contains(line, "studio album") {
-			targetIndex = s.Index
-			break
-		}
-		if strings.Contains(line, "discography") && targetIndex == "" {
-			targetIndex = s.Index
-		}
-	}
-
-	if targetIndex == "" {
-		return "", nil // No discography section found
-	}
-
-	// Get section content
-	u = fmt.Sprintf(
-		"https://en.wikipedia.org/w/api.php?action=parse&page=%s&section=%s&prop=text&format=json",
-		wikiTitle,
-		url.QueryEscape(targetIndex),
-	)
-
-	req, err = http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("User-Agent", w.userAgent)
-
-	resp, err = w.httpClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("API returned status %d", resp.StatusCode)
-	}
-
-	var sectionResult ParseResponse
-	if err := json.NewDecoder(resp.Body).Decode(&sectionResult); err != nil {
-		return "", err
-	}
-
-	htmlText := sectionResult.Parse.Text.Content
-
-	// Clean HTML
-	htmlText = cleanHTML(htmlText)
-
-	// Extract albums
-	albums := extractAlbums(htmlText, maxAlbums)
-
-	if len(albums) > 0 {
-		return strings.Join(albums, "\n"), nil
-	}
-
-	return "", nil
-}
-
-// cleanHTML removes HTML tags and cleans text
-func cleanHTML(htmlText string) string {
-	// Remove style blocks
-	re := regexp.MustCompile(`<style[^>]*>.*?</style>`)
-	htmlText = re.ReplaceAllString(htmlText, "")
-
-	// Replace <br> with newlines
-	htmlText = regexp.MustCompile(`<br\s*/?>`).ReplaceAllString(htmlText, "\n")
-
-	// Replace links with text
-	re = regexp.MustCompile(`<a[^>]*>([^<]*)</a>`)
-	htmlText = re.ReplaceAllString(htmlText, "$1")
-
-	// Remove italic tags
-	htmlText = regexp.MustCompile(`<i>([^<]*)</i>`).ReplaceAllString(htmlText, "$1")
-	htmlText = regexp.MustCompile(`</?i>`).ReplaceAllString(htmlText, "")
-
-	// Remove all remaining tags
-	htmlText = regexp.MustCompile(`<[^>]+>`).ReplaceAllString(htmlText, "")
-
-	// Unescape HTML entities
-	htmlText = html.UnescapeString(htmlText)
-
-	// Remove citation markers
-	htmlText = regexp.MustCompile(`\[\d+\]`).ReplaceAllString(htmlText, "")
-	htmlText = regexp.MustCompile(`\[nb\s*\d*\]`).ReplaceAllString(htmlText, "")
-	htmlText = regexp.MustCompile(`\^\s*\w+.*`).ReplaceAllString(htmlText, "")
-	htmlText = regexp.MustCompile(`\(edit\)`).ReplaceAllString(htmlText, "")
-
-	// Normalize newlines
-	htmlText = regexp.MustCompile(`\n\n+`).ReplaceAllString(htmlText, "\n")
-
-	return htmlText
-}
-
-// extractAlbums extracts album lines from cleaned HTML
-func extractAlbums(text string, maxAlbums int) []string {
-	var albums []string
-	lines := strings.Split(text, "\n")
-	albumPattern := regexp.MustCompile(`^(.+?)\s*\((\d{4})\)$`)
-
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		lineLower := strings.ToLower(line)
-		if strings.Contains(lineLower, "studio album") ||
-			strings.Contains(lineLower, "discography") ||
-			strings.Contains(lineLower, "chart") ||
-			line == "Title" || line == "Album details" || line == "Peak" {
-			continue
-		}
-
-		if albumPattern.MatchString(line) {
-			albums = append(albums, line)
-			if len(albums) >= maxAlbums {
-				break
-			}
-		}
-	}
-
-	return albums
 }

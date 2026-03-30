@@ -2,13 +2,17 @@
 
 scrobble support
 	last.fm, listenbrainz, or both
+	get credentials from config file
+	show status message when song successfully "scrobbles"
+	use site guidelines for when to scrobble (e.g. dont scrobble at beginning of song, must listen to X%)
 
 visualizer
 	add as another view with "v"
+	probably after artist view
 	switch visualizers with up/down (same way we scroll in views anyway)?
 	options
 		go-audio
-		what is cliamp using?
+		what is cliamp using? because they look cool and it's open source
 		https://github.com/bjarneo/cliamp
 
 crossfade on station changes, jukebox mode
@@ -31,6 +35,16 @@ search and play/enqueue favorites directly
 	add search to manage modal
 
 desktop notifications
+	notify-send?
+	albumart thumbnail on left
+	text on right
+		rptui - Radio Paradise
+		<station name> (full, not abbreviated)
+		<song>
+		<artist>
+		<album (year)>
+		same colors as in app, if that's possible with notify-send or whatever	
+	at least 3 seconds, maybe 5, if that's also configurable	
 
 cache for offline listening (good for flights, etc)
 	different than favorites, though jukebox mode can run offline (I think)
@@ -44,14 +58,17 @@ cache for offline listening (good for flights, etc)
 		would need a cache manager
 			could just add to manage modal with faves and blocklist items
 
-add artist thumnail to artist info view
-	will need to be scrollable
-	will also need to clear when we open modals or toggle views
-	if scrolling not possible, could just fallback to "press <key> to view artist image(s)"
-		then open modal with artist thumb and possibly other images from wikipedia page
+artist image gallery
 		go-termimg has a gallery feature
-		artist images modal with "i"?
-		cache images
+		from artist info view, provide hint "press "i" for <N> additional artist images"
+		new terminal full screen or modal
+		probably show only 1 image at a time as large as possible up to terminal size
+		preserve image aspect ratio, taking into account terminal cell aspect ratio
+			most images won't be square
+		use keys to change images (maybe up/down?)
+		give indicator which image you are viewing (e.g. "1/7")
+		show source attribution "source: discogs"
+		cache images?
 			~/.cache/rptui/images/albumart ?
 			~/.cache/tptui/images/artistart ?
 
@@ -59,6 +76,7 @@ implement command line switches (override config file)
 	size small (no album art, no playlist -- like toggle "v" to off) -s s or -s small
 	size medium (no playlist) -s m or -s medium
 	size large (default, show all) -s l or -s large
+	size narrow (like medium, but albumart on top, like mobile apps)
 	if run from launcher, can we open terminal of just that size?
 	if run from within terminal, no resize
 

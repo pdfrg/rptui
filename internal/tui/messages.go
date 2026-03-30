@@ -35,10 +35,16 @@ type lyricsFetchedMsg struct {
 	err     error
 }
 
+// artistStatusMsg is sent during async artist fetch to report progress
+type artistStatusMsg struct {
+	eventID int64
+	status  string // "Searching Discogs...", "Fetching discography...", etc.
+}
+
 // artistFetchedMsg is sent when artist info is fetched
 type artistFetchedMsg struct {
 	eventID int64
-	info    *api.ArtistInfo
+	info    *models.ArtistInfo
 	err     error
 }
 
@@ -48,6 +54,16 @@ type imageLoadedMsg struct {
 	imageData []byte
 	err       error
 }
+
+// artistImageLoadedMsg is sent when artist thumbnail image is loaded
+type artistImageLoadedMsg struct {
+	eventID   int64
+	imageData []byte
+	err       error
+}
+
+// renderArtistArtMsg is sent after a short delay to re-render artist thumbnail
+type renderArtistArtMsg struct{}
 
 // statusClearMsg is sent after a timeout to clear temporary status messages
 type statusClearMsg struct {
@@ -74,6 +90,14 @@ type themeChangedMsg struct {
 func renderAlbumArtAfterDelay() tea.Cmd {
 	return tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
 		return renderAlbumArtMsg{}
+	})
+}
+
+// renderArtistArtAfterDelay returns a command that triggers artist thumbnail re-render
+// after a short delay, allowing the cell renderer to finish its redraw first.
+func renderArtistArtAfterDelay() tea.Cmd {
+	return tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
+		return renderArtistArtMsg{}
 	})
 }
 

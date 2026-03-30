@@ -10,10 +10,18 @@ import (
 	"os"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"rptui-bubbletea/internal/api"
+)
+
+var (
+	discogsIDCache   = make(map[string]string)
+	discogsIDCacheMu sync.Mutex
+	discogsSem       = make(chan struct{}, 4)
 )
 
 type ArtistResult struct {
@@ -335,8 +343,9 @@ func testMusicBrainz(ctx context.Context, client *http.Client, artist string) *M
 	// Step 2: Fetch release groups — use search API with correct field names
 	// primarytype:Album matches the MB website "Album" filter
 	// NOT secondarytype:* excludes anything with a secondary type (compilation, live, remix, etc.)
-	reqURL := fmt.Sprintf("https://musicbrainz.org/ws/2/release-group/?query=arid:%s AND primarytype:Album NOT secondarytype:*&fmt=json&limit=100",
-		artistID)
+	mbQuery := fmt.Sprintf("arid:%s AND primarytype:Album NOT secondarytype:*", artistID)
+	reqURL := fmt.Sprintf("https://musicbrainz.org/ws/2/release-group/?query=%s&fmt=json&limit=100",
+		strings.ReplaceAll(mbQuery, " ", "%20"))
 
 	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
 	if err != nil {
@@ -427,6 +436,200 @@ func testMusicBrainz(ctx context.Context, client *http.Client, artist string) *M
 		Albums:        albums,
 		TotalGroups:   rgResult.Count,
 	}
+}
+
+func cleanDiscogsProfile(text string, resolveID func(string) string) string {
+	discogsIDTagRegex := regexp.MustCompile(`\[(a|r|l|m)(=?)(\d+)\]`)
+	discogsNamedTagRegex := regexp.MustCompile(`\[(a|r|l)=([^\]]+)\]`)
+	discogsURLTagRegex := regexp.MustCompile(`\[url=[^\]]+\](.*?)\[/url\]`)
+	discogsBoldItalicTagRegex := regexp.MustCompile(`\[/?(?:b|i)\]`)
+
+	text = discogsIDTagRegex.ReplaceAllStringFunc(text, func(tag string) string {
+		if resolveID != nil {
+			if name := resolveID(tag); name != "" {
+				return name
+			}
+		}
+		return ""
+	})
+	text = discogsNamedTagRegex.ReplaceAllString(text, "$2")
+	text = discogsURLTagRegex.ReplaceAllString(text, "$1")
+	text = discogsBoldItalicTagRegex.ReplaceAllString(text, "")
+
+	text = strings.TrimSpace(text)
+	text = regexp.MustCompile(`\s+`).ReplaceAllString(text, " ")
+	text = regexp.MustCompile(`\s([,.;:!?])`).ReplaceAllString(text, "$1")
+
+	return text
+}
+
+func fetchDiscogsName(ctx context.Context, client *http.Client, entityType, idStr string) (string, bool) {
+	cacheKey := entityType + ":" + idStr
+
+	discogsIDCacheMu.Lock()
+	if name, ok := discogsIDCache[cacheKey]; ok {
+		discogsIDCacheMu.Unlock()
+		return name, name != ""
+	}
+	discogsIDCacheMu.Unlock()
+
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		return "", false
+	}
+
+	select {
+	case discogsSem <- struct{}{}:
+		defer func() { <-discogsSem }()
+	case <-ctx.Done():
+		return "", false
+	}
+
+	var endpoint string
+	switch entityType {
+	case "a":
+		endpoint = fmt.Sprintf("https://api.discogs.com/artists/%d", id)
+	case "l":
+		endpoint = fmt.Sprintf("https://api.discogs.com/labels/%d", id)
+	case "r":
+		endpoint = fmt.Sprintf("https://api.discogs.com/releases/%d", id)
+	case "m":
+		endpoint = fmt.Sprintf("https://api.discogs.com/masters/%d", id)
+	default:
+		return "", false
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return "", false
+	}
+	req.Header.Set("User-Agent", "rptui-test/1.0")
+	if token := os.Getenv("DISCOGS_TOKEN"); token != "" {
+		req.Header.Set("Authorization", "Discogs token="+token)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", false
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		// Try alternate endpoint for r/m tags
+		var altEndpoint string
+		if entityType == "r" {
+			altEndpoint = fmt.Sprintf("https://api.discogs.com/masters/%d", id)
+		} else if entityType == "m" {
+			altEndpoint = fmt.Sprintf("https://api.discogs.com/releases/%d", id)
+		} else {
+			discogsIDCacheMu.Lock()
+			discogsIDCache[cacheKey] = ""
+			discogsIDCacheMu.Unlock()
+			return "", false
+		}
+		req2, _ := http.NewRequestWithContext(ctx, "GET", altEndpoint, nil)
+		if req2 != nil {
+			req2.Header.Set("User-Agent", "rptui-test/1.0")
+			if token := os.Getenv("DISCOGS_TOKEN"); token != "" {
+				req2.Header.Set("Authorization", "Discogs token="+token)
+			}
+			resp2, err := client.Do(req2)
+			if err == nil {
+				defer resp2.Body.Close()
+				if resp2.StatusCode == http.StatusOK {
+					var r struct {
+						Title string `json:"title"`
+					}
+					if json.NewDecoder(resp2.Body).Decode(&r) == nil && r.Title != "" {
+						discogsIDCacheMu.Lock()
+						discogsIDCache[cacheKey] = r.Title
+						discogsIDCacheMu.Unlock()
+						return r.Title, true
+					}
+				}
+			}
+		}
+		discogsIDCacheMu.Lock()
+		discogsIDCache[cacheKey] = ""
+		discogsIDCacheMu.Unlock()
+		return "", false
+	}
+
+	var result struct {
+		Name  string `json:"name"`
+		Title string `json:"title"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", false
+	}
+
+	name := result.Name
+	if name == "" {
+		name = result.Title
+	}
+
+	discogsIDCacheMu.Lock()
+	discogsIDCache[cacheKey] = name
+	discogsIDCacheMu.Unlock()
+
+	return name, name != ""
+}
+
+func resolveDiscogsBio(ctx context.Context, client *http.Client, text string) string {
+	discogsIDTagRegex := regexp.MustCompile(`\[(a|r|l|m)(=?)(\d+)\]`)
+
+	type idEntry struct {
+		fullMatch string
+		typ       string
+		idStr     string
+		pos       int
+	}
+
+	seen := make(map[string]bool)
+	var entries []idEntry
+	for _, m := range discogsIDTagRegex.FindAllStringSubmatchIndex(text, -1) {
+		typ := text[m[2]:m[3]]
+		idStr := text[m[6]:m[7]]
+		key := typ + ":" + idStr
+		if !seen[key] {
+			seen[key] = true
+			entries = append(entries, idEntry{
+				fullMatch: text[m[0]:m[1]],
+				typ:       typ,
+				idStr:     idStr,
+				pos:       m[0],
+			})
+		}
+	}
+
+	if len(entries) == 0 {
+		return cleanDiscogsProfile(text, nil)
+	}
+
+	type result struct {
+		idx  int
+		name string
+		ok   bool
+	}
+	results := make(chan result, len(entries))
+	for i, e := range entries {
+		go func(idx int, typ, id string) {
+			name, ok := fetchDiscogsName(ctx, client, typ, id)
+			results <- result{idx, name, ok}
+		}(i, e.typ, e.idStr)
+	}
+
+	nameMap := make(map[string]string)
+	for i := 0; i < len(entries); i++ {
+		r := <-results
+		if r.ok {
+			nameMap[entries[r.idx].fullMatch] = r.name
+		}
+	}
+
+	return cleanDiscogsProfile(text, func(tag string) string {
+		return nameMap[tag]
+	})
 }
 
 func testDiscogs(ctx context.Context, client *http.Client, artist string) *DiscogsResult {
@@ -568,7 +771,7 @@ func testDiscogs(ctx context.Context, client *http.Client, artist string) *Disco
 
 	return &DiscogsResult{
 		SearchResults: searchResults,
-		Bio:           artistResult.Profile,
+		Bio:           resolveDiscogsBio(ctx, client, artistResult.Profile),
 		Images:        images,
 	}
 }
