@@ -1478,9 +1478,9 @@ func (m *Model) updateBottomView() {
 	switch m.bottomViewMode {
 	case ViewLyrics:
 		if m.lyrics == "" {
-			content = "Loading lyrics..."
+			content = "  Loading lyrics..."
 		} else {
-			content = m.lyrics + strings.Repeat("\n", 10)
+			content = indentLines(m.lyrics, "  ") + strings.Repeat("\n", 10)
 			if m.hasPendingUpdate() {
 				content += "\n  \x1b[3m(press 'u' to update)\x1b[0m"
 			}
@@ -1488,7 +1488,7 @@ func (m *Model) updateBottomView() {
 
 	case ViewSyncedLyrics:
 		if len(m.syncedLyrics) == 0 {
-			content = "No synced lyrics available\nSynced lyrics require duration matching ±2s. Radio edits reduce match chances."
+			content = "  No synced lyrics available\n  Synced lyrics require duration matching ±2s. Radio edits reduce match chances."
 		} else {
 			// Use cached playback position (updated every tick)
 			// Find current line
@@ -1536,39 +1536,49 @@ func (m *Model) updateBottomView() {
 		}
 
 		if m.artistInfo == nil {
+			// Indent when no artist image (viewport not right-shifted)
+			indent := ""
+			if !(m.artistArtLoaded && m.artistArtStr != "") {
+				indent = "  "
+			}
 			if m.artistStatus != "" {
-				content = m.spinner.View() + " " + m.artistStatus
+				content = indent + m.spinner.View() + " " + m.artistStatus
 			} else {
-				content = "Loading artist info..."
+				content = indent + "Loading artist info..."
 			}
 		} else {
+			// Indent when no artist image (viewport not right-shifted)
+			indent := ""
+			if !(m.artistArtLoaded && m.artistArtStr != "") {
+				indent = "  "
+			}
 			var lines []string
 			if m.artistInfo.Bio != "" {
-				lines = append(lines, m.artistInfo.Bio)
+				lines = append(lines, indent+m.artistInfo.Bio)
 				if m.artistInfo.BioSource != "" {
-					lines = append(lines, "Source: "+m.artistInfo.BioSource)
+					lines = append(lines, indent+"Source: "+m.artistInfo.BioSource)
 				}
 			} else {
-				lines = append(lines, "No biography available.")
+				lines = append(lines, indent+"No biography available.")
 			}
 			if m.artistInfo.Discography != "" {
 				lines = append(lines, "")
-				lines = append(lines, "Studio Albums:")
+				lines = append(lines, indent+"Studio Albums:")
 				discoLines := strings.Split(m.artistInfo.Discography, "\n")
 				for _, line := range discoLines {
-					lines = append(lines, "  "+line)
+					lines = append(lines, indent+"  "+line)
 				}
 				if m.artistInfo.DiscoSource != "" {
-					lines = append(lines, "Source: "+m.artistInfo.DiscoSource)
+					lines = append(lines, indent+"Source: "+m.artistInfo.DiscoSource)
 				}
 			}
 			if m.artistInfo.ThumbSource != "" {
 				lines = append(lines, "")
-				lines = append(lines, "thumb: "+m.artistInfo.ThumbSource)
+				lines = append(lines, indent+"thumb: "+m.artistInfo.ThumbSource)
 			}
 			if m.hasPendingUpdate() {
 				lines = append(lines, "")
-				lines = append(lines, "  (press 'u' to update)")
+				lines = append(lines, "(press 'u' to update)")
 			}
 			// Pad with many newlines so viewport scrolls to blank space at bottom
 			content = strings.Join(lines, "\n") + strings.Repeat("\n", 10)
@@ -2325,4 +2335,12 @@ func (m Model) getSkipsAvailable() int {
 
 func (m Model) getPrevAvailable() int {
 	return m.currentSongIndex
+}
+
+func indentLines(s, prefix string) string {
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		lines[i] = prefix + line
+	}
+	return strings.Join(lines, "\n")
 }
