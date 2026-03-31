@@ -321,7 +321,7 @@ func testMusicBrainz(ctx context.Context, client *http.Client, artist string) *M
 	if strings.ToLower(matchedName) != artistLower && normalizeForCompare(strings.ToLower(matchedName)) != artistNorm {
 		for _, a := range searchResult.Artists {
 			nameLower := strings.ToLower(a.Name)
-			if strings.Contains(nameLower, artistLower) || strings.Contains(artistLower, nameLower) {
+			if strings.Contains(nameLower, artistLower) {
 				artistID, matchedName = a.ID, a.Name
 				break
 			}
