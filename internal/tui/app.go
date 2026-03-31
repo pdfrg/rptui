@@ -72,6 +72,7 @@ const (
 	ModalOptions
 	ModalSkipWarning
 	ModalFavorites
+	ModalGallery
 )
 
 // Connection retry constants
@@ -174,6 +175,7 @@ type Model struct {
 	optionsModal     *modals.Options
 	skipWarningModal *modals.SkipWarning
 	favoritesModal   *modals.Favorites
+	galleryModal     *modals.Gallery
 
 	// UI dimensions
 	width  int
@@ -415,6 +417,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.favoritesModal != nil {
 					cmd = m.favoritesModal.Update(msg)
 				}
+			case ModalGallery:
+				if m.galleryModal != nil {
+					cmd = m.galleryModal.Update(msg)
+				}
 			}
 			return handle(m, cmd)
 		}
@@ -515,6 +521,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return handle(m, renderAlbumArtAfterDelay())
+
+	case modals.GalleryMsg:
+		m.activeModal = ModalNone
+		m.galleryModal = nil
+		return handle(m, renderAlbumArtAfterDelay())
+
+	case modals.GalleryImageLoadedMsg:
+		if m.galleryModal != nil && m.activeModal == ModalGallery {
+			cmd := m.galleryModal.HandleImageLoaded(msg)
+			return m, cmd
+		}
+		return m, nil
+
+	case modals.GalleryRenderImageMsg:
+		if m.galleryModal != nil && m.activeModal == ModalGallery {
+			return m, tea.Raw(msg.ImageStr)
+		}
+		return m, nil
 
 	case blockFetchedMsg:
 		return handle(m.handleBlockFetched(msg))
@@ -791,6 +815,23 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.favoritesModal = modals.NewFavorites(m.styles, m.cacheManager, m.width, m.height)
 		m.activeModal = ModalFavorites
 		return m, clearKittyImagesCmd()
+
+	case "i":
+		// Gallery modal (only in artist view with images)
+		if m.bottomViewMode == ViewArtist && m.artistInfo != nil && len(m.artistInfo.GalleryURLs) > 0 {
+			m.galleryModal = modals.NewGallery(
+				m.styles,
+				m.artistInfo.GalleryURLs,
+				m.artistInfo.GallerySource,
+				m.width, m.height,
+				m.cellRatio,
+			)
+			m.activeModal = ModalGallery
+			return m, tea.Batch(
+				clearKittyImagesCmd(),
+				m.galleryModal.PrefetchImages(),
+			)
+		}
 
 	case "$":
 		// Open RP donate page
@@ -1576,6 +1617,11 @@ func (m *Model) updateBottomView() {
 				lines = append(lines, "")
 				lines = append(lines, indent+"thumb: "+m.artistInfo.ThumbSource)
 			}
+			if len(m.artistInfo.GalleryURLs) > 0 {
+				lines = append(lines, "")
+				count := len(m.artistInfo.GalleryURLs)
+				lines = append(lines, indent+fmt.Sprintf("(press 'i' for %d additional artist images)", count))
+			}
 			if m.hasPendingUpdate() {
 				lines = append(lines, "")
 				lines = append(lines, "(press 'u' to update)")
@@ -1813,7 +1859,8 @@ func (m Model) fetchLyricsCmd() tea.Cmd {
 //	gallery:    discogs > tadb
 //
 // TADB and MusicBrainz run in parallel first (fast, no ID resolution).
-// Discogs only runs if bio is still missing (avoids expensive ID resolution).
+// Discogs runs whenever auth is configured (for thumb/gallery priority),
+// or if bio is still missing.
 // Wikipedia is the final fallback for bio/thumb/discography.
 func (m Model) fetchArtistCmd() tea.Cmd {
 	if m.currentSong == nil {
@@ -1904,25 +1951,28 @@ func (m Model) fetchArtistCmd() tea.Cmd {
 			info.DiscoSource = "musicbrainz"
 		}
 
-		// --- Phase 2: Discogs (only if bio still missing — skips ID resolution) ---
-		if info.Bio == "" {
+		// --- Phase 2: Discogs ---
+		// Always run if auth configured (for thumb/gallery: discogs > tadb),
+		// or if bio still needed (bio: tadb > discogs > wikipedia)
+		if info.Bio == "" || discogsClient.HasAuth() {
 			logger.Printf("Artist fetch: phase 2 (Discogs) for %s", song.Artist)
 			discogsArtist, err := discogsClient.SearchArtist(ctx, song.Artist)
 			if err != nil {
 				logger.Printf("Discogs error for %s: %v", song.Artist, err)
 			}
 			if discogsArtist != nil {
-				if discogsArtist.Profile != "" {
+				// Bio: only fill if TADB didn't provide one
+				if info.Bio == "" && discogsArtist.Profile != "" {
 					info.Bio = discogsArtist.Profile
 					info.BioSource = "discogs"
 				}
-				// Thumb: discogs > tadb
-				if discogsArtist.PrimaryImage != "" && info.ThumbnailURL == "" {
+				// Thumb: discogs > tadb (always override if discogs has image)
+				if discogsArtist.PrimaryImage != "" {
 					info.ThumbnailURL = discogsArtist.PrimaryImage
 					info.ThumbSource = "discogs"
 				}
-				// Gallery: discogs > tadb
-				if len(discogsArtist.GalleryURLs) > 0 && len(info.GalleryURLs) == 0 {
+				// Gallery: discogs > tadb (always override if discogs has images)
+				if len(discogsArtist.GalleryURLs) > 0 {
 					info.GalleryURLs = discogsArtist.GalleryURLs
 					info.GallerySource = "discogs"
 				}
@@ -2159,6 +2209,10 @@ func (m Model) View() tea.View {
 		case ModalFavorites:
 			if m.favoritesModal != nil {
 				modalView = m.favoritesModal.View()
+			}
+		case ModalGallery:
+			if m.galleryModal != nil {
+				modalView = m.galleryModal.View()
 			}
 		}
 
