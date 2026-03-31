@@ -14,6 +14,11 @@ visualizer
 		go-audio
 		what is cliamp using? because they look cool and it's open source
 		https://github.com/bjarneo/cliamp
+	start in bottom view like all other alt views
+		can we give an option to "fill terminal window"? with toggle
+			would allow to maximize terminal for true fullscreen
+			if so, could give option to show currently playing info in visualizer
+				option for 5 second display, on (always visible), off
 
 crossfade on station changes, jukebox mode
 	pseudo-crossfade (vol down, vol up)
@@ -62,7 +67,8 @@ artist image gallery
 		go-termimg has a gallery feature
 		from artist info view, provide hint "press "i" for <N> additional artist images"
 		new terminal full screen or modal
-		probably show only 1 image at a time as large as possible up to terminal size
+		probably show only 1 image at a time as large as possible
+			limited by either terminal size, or full resolution of image (don't show at >1X zoom)
 		preserve image aspect ratio, taking into account terminal cell aspect ratio
 			most images won't be square
 		use keys to change images (maybe up/down?)
@@ -71,7 +77,8 @@ artist image gallery
 		cache images?
 			~/.cache/rptui/images/albumart ?
 			~/.cache/tptui/images/artistart ?
-
+			just in memory?
+	
 implement command line switches (override config file)
 	size small (no album art, no playlist -- like toggle "v" to off) -s s or -s small
 	size medium (no playlist) -s m or -s medium
@@ -90,3 +97,9 @@ favorites "jukebox" mode -- queue all faves random and play, at end repeat all
 		add all to playlist, but would then have to scroll
 		add a given number of songs, then when near end, add more, prune as needed, similar to normal mode
 	would need to show status jukebox mode or similar. is there a jukebox emoji?
+
+copy current artist - album (year) - song to clipboard
+	hotkey ideas?
+		"y" to yank
+		"c" to copy
+		

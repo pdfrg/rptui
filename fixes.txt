@@ -1,25 +1,3 @@
 # problems or improvements of current features
 # roadmap.txt is for major new features or changes
 
-artist image (minor visual glitch, not high priority)
-	now appears in artist info view to left with bio and discography to right
-	is supposed to be shown outside of viewport, not inside it
-	however, when scrolling viewport, image will scroll up 1 or 2 lines (but no more)		
-	increased padding from +3 to +5 to ensure there was no overlap, but behavior didn't change
-	not fixed with ZIndex=1
-
-omarchy/colors.toml parsing
-	refer to test program at cmd/test_threshold
-	rare theme where "muted" ends up being a bright color AND is similar to "accent"
-		only one of my themes seems to have this issue: aetheria
-		in footer, keys are "accent" and hints are "muted", so we need them to be very different
-	many themes don't have a defined muted color which I think we map from color 7 (light gray)
-		but this is OK, because we have a good fallback
-	possible solutions
-		find other color in omarchy theme or colors.toml that is actually a muted color and different than accent
-			challenge -- how to define this programmatically
-		just fallback to usual light gray fallback
-
-plain lyrics view
-	need 2 more characters of left padding/indentation
-	
