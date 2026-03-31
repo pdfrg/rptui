@@ -1861,7 +1861,7 @@ func (m Model) fetchArtistCmd() tea.Cmd {
 			tadbCh <- tadbResult{a, e}
 		}()
 		go func() {
-			a, e := mbClient.GetDiscography(ctx, song.Artist)
+			a, e := mbClient.GetDiscography(ctx, song.Artist, song.Album)
 			mbCh <- mbResult{a, e}
 		}()
 
