@@ -47,6 +47,22 @@ type Config struct {
 	DiscogsToken  string `toml:"discogs_token" comment:"Discogs personal access token\nenables artist images + higher API rate limits\nget one at: https://www.discogs.com/settings/developers\nalternative: set discogs_key + discogs_secret, or env vars DISCOGS_TOKEN / DISCOGS_KEY + DISCOGS_SECRET (default: '')"`
 	DiscogsKey    string `toml:"discogs_key" comment:"Discogs consumer key (developer app auth)\nalternative to discogs_token, requires both key and secret (default: '')"`
 	DiscogsSecret string `toml:"discogs_secret" comment:"Discogs consumer secret (developer app auth)\nalternative to discogs_token, requires both key and secret (default: '')"`
+
+	// Scrobble services
+	LastFM       LastFMConfig       `toml:"lastfm" comment:"Last.fm scrobbling\nrun 'rptui --lastfm-auth' once to obtain a session key"`
+	ListenBrainz ListenBrainzConfig `toml:"listenbrainz" comment:"ListenBrainz scrobbling\ntoken found at: https://listenbrainz.org/profile/"`
+}
+
+// LastFMConfig holds Last.fm scrobble settings
+type LastFMConfig struct {
+	Enabled    bool   `toml:"enabled" comment:"enable Last.fm scrobbling (default: false)"`
+	SessionKey string `toml:"session_key" comment:"obtained via 'rptui --lastfm-auth' (default: '')"`
+}
+
+// ListenBrainzConfig holds ListenBrainz scrobble settings
+type ListenBrainzConfig struct {
+	Enabled bool   `toml:"enabled" comment:"enable ListenBrainz scrobbling (default: false)"`
+	Token   string `toml:"token" comment:"user token from https://listenbrainz.org/profile/ (default: '')"`
 }
 
 // DefaultConfig returns a Config with default values
@@ -196,4 +212,9 @@ func (c *Config) GetFavoritesDir() string {
 // GetBlocklistDir returns the blocklist directory path
 func (c *Config) GetBlocklistDir() string {
 	return filepath.Join(filepath.Dir(c.FavoritesDir), "blocklist")
+}
+
+// GetScrobbleCacheDir returns the scrobble cache directory path.
+func GetScrobbleCacheDir() string {
+	return filepath.Join(xdg.CacheHome, "rptui", "scrobbles")
 }

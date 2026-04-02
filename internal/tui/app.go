@@ -58,6 +58,15 @@ const (
 	ViewModeCount
 )
 
+// Scrobble flash states
+const (
+	flashOff      = 0
+	flashSolid    = 1 // success — accent for 5s
+	flashBlinkOn  = 2 // failure — accent visible
+	flashBlinkOff = 3 // failure — muted
+	flashDuration = 5 * time.Second
+)
+
 var bottomViewNames = []string{
 	"Playlist",
 	"Lyrics",
@@ -186,6 +195,13 @@ type Model struct {
 	statusIsError bool
 	statusSeq     int
 
+	// Scrobble support
+	scrobbler          *api.Scrobbler
+	songStartTime      time.Time
+	scrobbleEligible   bool
+	scrobbleFlashAt    time.Time // when scrobble flash started
+	scrobbleFlashState int       // 0=off, 1=solid accent (success), 2=blink-on, 3=blink-off
+
 	// Connection monitoring
 	connState           string // "connected", "disconnected", "reconnecting"
 	consecutiveFailures int
@@ -250,6 +266,10 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme) *Model {
 		cfg.GetBlocklistDir(),
 		cfg.MaxFavorites,
 	)
+	scrobbler := api.NewScrobbler(cfg)
+	if scrobbler.Enabled() {
+		logger.Printf("Scrobble enabled: %v", scrobbler.ServiceNames())
+	}
 	if err := cacheManager.EnsureDirectories(); err != nil {
 		logger.Printf("Warning: failed to create cache directories: %v", err)
 	}
@@ -257,6 +277,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme) *Model {
 	// Initialize custom widgets
 	headerWidget := widgets.NewHeader(styles.Header, "rptui - Radio Paradise")
 	footerWidget := widgets.NewFooter(styles.AccentStyle, styles.MutedStyle)
+	footerWidget.SetScrobbleServices(scrobbler.ServiceNames())
 	nowPlayingWidget := widgets.NewNowPlaying(styles.ForegroundStyle, styles.AccentStyle, styles.MutedStyle, theme.Accent, theme.Cursor, theme.Background)
 	playlistWidget := widgets.NewPlaylist(styles)
 
@@ -295,6 +316,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme) *Model {
 		theaudiodbClient:  theaudiodbClient,
 		mpvBackend:        mpvBackend,
 		cacheManager:      cacheManager,
+		scrobbler:         scrobbler,
 		bottomViewMode:    ViewPlaylist,
 		headerWidget:      headerWidget,
 		footerWidget:      footerWidget,
@@ -586,6 +608,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return handle(m, nil)
 
+	case scrobbleResultMsg:
+		m.scrobbleFlashAt = time.Now()
+		m.scrobbleFlashState = flashSolid // default to success
+		for _, r := range msg.results {
+			if !r.Success {
+				m.scrobbleFlashState = flashBlinkOn // any failure triggers blink
+				break
+			}
+		}
+
 	case themeChangedMsg:
 		newTheme, err := config.LoadTheme(m.config.ColorsFile, m.config.Theme)
 		if err != nil {
@@ -621,6 +653,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "q", "ctrl+c":
+		// Scrobble current song if eligible before quitting
+		if m.currentSong != nil && m.scrobbleEligible && m.scrobbler.Enabled() {
+			go m.scrobbler.Scrobble(context.Background(), *m.currentSong, m.songStartTime)
+		}
 		// Cleanup MPV before quitting
 		m.mpvBackend.Stop()
 		if m.themeWatcher != nil {
@@ -1206,6 +1242,30 @@ func (m Model) handleProgressTick(msg progressTickMsg) (tea.Model, tea.Cmd) {
 		m.updateBottomView()
 	}
 
+	// Check scrobble eligibility (once per song, when listen threshold is met)
+	if !m.scrobbleEligible && m.scrobbler.Enabled() && m.currentSong != nil {
+		elapsed := time.Since(m.songStartTime)
+		durSecs := float64(m.currentSong.Duration) / 1000.0
+		threshold := time.Duration(min(durSecs/2, 240) * float64(time.Second))
+		if elapsed >= threshold && durSecs > 30 {
+			m.scrobbleEligible = true
+		}
+	}
+
+	// Toggle scrobble blink state for failure indication (every 1 second)
+	if m.scrobbleFlashState == flashBlinkOn || m.scrobbleFlashState == flashBlinkOff {
+		if time.Since(m.scrobbleFlashAt) >= flashDuration {
+			m.scrobbleFlashState = flashOff
+		} else {
+			elapsed := time.Since(m.scrobbleFlashAt)
+			if int(elapsed.Seconds())%2 == 0 {
+				m.scrobbleFlashState = flashBlinkOn
+			} else {
+				m.scrobbleFlashState = flashBlinkOff
+			}
+		}
+	}
+
 	return m, tea.Batch(cmds...)
 }
 
@@ -1655,8 +1715,23 @@ func (m *Model) songChangedCmds() tea.Cmd {
 		return nil
 	}
 
+	// Scrobble previous song if it met the listen threshold
+	prevSong := m.currentSong
+	scrobbleStartTime := m.songStartTime
+	scrobblePrev := prevSong != nil && m.scrobbleEligible && m.scrobbler.Enabled()
+
 	m.currentSong = m.songs[m.currentSongIndex]
 	m.playlistWidget.SetCursor(m.currentSongIndex)
+
+	// Reset scrobble state for new song
+	m.songStartTime = time.Now()
+	m.scrobbleEligible = false
+
+	// Send now-playing notification to scrobble services
+	if m.scrobbler.Enabled() && m.currentSong != nil {
+		song := *m.currentSong
+		go m.scrobbler.SendNowPlaying(context.Background(), song)
+	}
 
 	// Clear synced lyrics (time-based, always refresh)
 	m.syncedLyrics = nil
@@ -1716,6 +1791,11 @@ func (m *Model) songChangedCmds() tea.Cmd {
 	m.updateBottomView()
 
 	var cmds []tea.Cmd
+
+	// Scrobble previous song if eligible
+	if scrobblePrev {
+		cmds = append(cmds, scrobbleCmd(m.scrobbler, *prevSong, scrobbleStartTime))
+	}
 
 	// Reset progress bar
 	if cmd := m.nowPlayingWidget.UpdateProgress(0); cmd != nil {
@@ -2292,6 +2372,11 @@ func (m Model) View() tea.View {
 	}
 
 	// 4. Footer
+	// Update scrobble flash state before rendering
+	if m.scrobbleFlashState != flashOff && time.Since(m.scrobbleFlashAt) >= flashDuration {
+		m.scrobbleFlashState = flashOff
+	}
+	m.footerWidget.SetFlashState(m.scrobbleFlashState)
 	footer := m.footerWidget.View()
 
 	var b strings.Builder
