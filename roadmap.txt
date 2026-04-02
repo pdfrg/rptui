@@ -1,11 +1,5 @@
 # fixes.txt is for bugs, minor refinements to existing features
 
-scrobble support
-	last.fm, listenbrainz, or both
-	get credentials from config file
-	show status message when song successfully "scrobbles"
-	use site guidelines for when to scrobble (e.g. dont scrobble at beginning of song, must listen to X%)
-
 visualizer
 	add as another view with "v"
 	probably after artist view
@@ -62,24 +56,10 @@ cache for offline listening (good for flights, etc)
 			ask user if they want to run in offline mode
 		would need a cache manager
 			could just add to manage modal with faves and blocklist items
+		give hint as to how much disk space used per hour for each quality
 
-artist image gallery
-		go-termimg has a gallery feature
-		from artist info view, provide hint "press "i" for <N> additional artist images"
-		new terminal full screen or modal
-		probably show only 1 image at a time as large as possible
-			limited by either terminal size, or full resolution of image (don't show at >1X zoom)
-		preserve image aspect ratio, taking into account terminal cell aspect ratio
-			most images won't be square
-		use keys to change images (maybe up/down?)
-		give indicator which image you are viewing (e.g. "1/7")
-		show source attribution "source: discogs"
-		cache images?
-			~/.cache/rptui/images/albumart ?
-			~/.cache/tptui/images/artistart ?
-			just in memory?
-	
 implement command line switches (override config file)
+	already  have --lastfm-auth
 	size small (no album art, no playlist -- like toggle "v" to off) -s s or -s small
 	size medium (no playlist) -s m or -s medium
 	size large (default, show all) -s l or -s large

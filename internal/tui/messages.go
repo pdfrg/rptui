@@ -2,6 +2,7 @@
 package tui
 
 import (
+	"context"
 	"os/exec"
 	"time"
 
@@ -83,6 +84,11 @@ type themeChangedMsg struct {
 	path string
 }
 
+// scrobbleResultMsg is sent when a scrobble attempt completes with results
+type scrobbleResultMsg struct {
+	results []api.ScrobbleResult
+}
+
 // Command functions
 
 // renderAlbumArtAfterDelay returns a command that triggers album art re-render
@@ -154,5 +160,13 @@ func watchThemeCmd(watcher *config.ThemeWatcher) tea.Cmd {
 	return func() tea.Msg {
 		path := <-watcher.Events()
 		return themeChangedMsg{path: path}
+	}
+}
+
+// scrobbleCmd runs the scrobble and returns results as a message.
+func scrobbleCmd(scrobbler *api.Scrobbler, song models.Song, startTime time.Time) tea.Cmd {
+	return func() tea.Msg {
+		results := scrobbler.ScrobbleWithResult(context.Background(), song, startTime)
+		return scrobbleResultMsg{results: results}
 	}
 }

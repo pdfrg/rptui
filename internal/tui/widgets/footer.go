@@ -21,6 +21,10 @@ type Footer struct {
 	width       int
 	keys        []KeyBinding
 	stationKeys []KeyBinding
+
+	// Scrobble indicator
+	scrobbleServices []string // e.g. ["fm", "lb"]
+	flashState       int      // 0=off, 1=solid accent, 2=blink-on, 3=blink-off
 }
 
 // NewFooter creates a new Footer widget
@@ -63,6 +67,36 @@ func (h *Footer) UpdateStyles(accentStyle, mutedStyle lipgloss.Style) {
 	h.mutedStyle = mutedStyle
 }
 
+// SetScrobbleServices sets which scrobble services are active (e.g. ["fm", "lb"])
+func (h *Footer) SetScrobbleServices(services []string) {
+	h.scrobbleServices = services
+}
+
+// SetFlashState sets the scrobble indicator flash state.
+// 0=off, 1=solid accent (success), 2=blink-on (failure), 3=blink-off (failure).
+func (h *Footer) SetFlashState(state int) {
+	h.flashState = state
+}
+
+// scrobbleIndicator returns the rendered scrobble indicator string, or empty if none.
+func (h Footer) scrobbleIndicator() string {
+	if len(h.scrobbleServices) == 0 {
+		return ""
+	}
+
+	var style lipgloss.Style
+	switch h.flashState {
+	case 1: // solid accent (success)
+		style = h.accentStyle
+	case 2: // blink-on (failure)
+		style = h.accentStyle
+	default: // off or blink-off
+		style = h.mutedStyle
+	}
+
+	return style.Render("[" + strings.Join(h.scrobbleServices, "+") + "]")
+}
+
 // View renders the footer (two lines: controls + stations)
 func (h Footer) View() string {
 	renderLine := func(bindings []KeyBinding) string {
@@ -98,5 +132,18 @@ func (h Footer) View() string {
 		return content
 	}
 
-	return renderLine(h.stationKeys) + "\n" + renderLine(h.keys)
+	stationLine := renderLine(h.stationKeys)
+	controlsLine := renderLine(h.keys)
+
+	// Append scrobble indicator to the right of controls line
+	if ind := h.scrobbleIndicator(); ind != "" && h.width > 0 {
+		lineWidth := lipgloss.Width(controlsLine)
+		indWidth := lipgloss.Width(ind)
+		space := h.width - lineWidth - indWidth - 1
+		if space > 0 {
+			controlsLine += strings.Repeat(" ", space) + ind
+		}
+	}
+
+	return stationLine + "\n" + controlsLine
 }
