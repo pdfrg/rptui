@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"rptui-bubbletea/internal/config"
+	"rptui-bubbletea/internal/tui/visualizer"
 )
 
 // OptionsMsg is sent when user applies options or closes the modal
@@ -16,6 +17,7 @@ type OptionsMsg struct {
 	ShowAlbumArt   *bool
 	ShowSkipWarn   *bool
 	CopyAlbumArt   *bool
+	VisualizerMode *string
 	Closed         bool
 }
 
@@ -26,6 +28,7 @@ const (
 	optShowAlbumArt
 	optShowSkipWarning
 	optCopyAlbumArt
+	optVisualizerMode
 	optCount // number of items
 )
 
@@ -41,11 +44,12 @@ type Options struct {
 	cursor int // which row is selected
 
 	// Current values (editable)
-	stationIdx     int // index into stationIDs
-	bitrateIdx     int // index into bitrateIDs
-	showAlbumArt   bool
-	showSkipWarn   bool
-	copyAlbumArt   bool
+	stationIdx   int // index into stationIDs
+	bitrateIdx   int // index into bitrateIDs
+	showAlbumArt bool
+	showSkipWarn bool
+	copyAlbumArt bool
+	visModeIdx   int // index into visualizer mode names
 
 	// Original values for change detection
 	origStationIdx int
@@ -53,10 +57,16 @@ type Options struct {
 	origAlbumArt   bool
 	origSkipWarn   bool
 	origCopyArt    bool
+	origVisModeIdx int
+}
+
+// visualizerModeNames returns the display names of all visualizer modes.
+func visualizerModeNames() []string {
+	return visualizer.ModeNames()
 }
 
 // NewOptions creates a new Options modal
-func NewOptions(styles *config.ThemeStyles, currentStation, currentBitrate int, showAlbumArt, showSkipWarn, copyAlbumArt bool) *Options {
+func NewOptions(styles *config.ThemeStyles, currentStation, currentBitrate int, showAlbumArt, showSkipWarn, copyAlbumArt bool, visMode string) *Options {
 	// Find index of current station in stationIDs
 	stationIdx := 0
 	for i, id := range stationIDs {
@@ -75,6 +85,16 @@ func NewOptions(styles *config.ThemeStyles, currentStation, currentBitrate int, 
 		}
 	}
 
+	// Find index of current visualizer mode
+	visNames := visualizerModeNames()
+	visModeIdx := 0
+	for i, name := range visNames {
+		if name == visMode {
+			visModeIdx = i
+			break
+		}
+	}
+
 	return &Options{
 		styles:         styles,
 		stationIdx:     stationIdx,
@@ -82,11 +102,13 @@ func NewOptions(styles *config.ThemeStyles, currentStation, currentBitrate int, 
 		showAlbumArt:   showAlbumArt,
 		showSkipWarn:   showSkipWarn,
 		copyAlbumArt:   copyAlbumArt,
+		visModeIdx:     visModeIdx,
 		origStationIdx: stationIdx,
 		origBitrateIdx: bitrateIdx,
 		origAlbumArt:   showAlbumArt,
 		origSkipWarn:   showSkipWarn,
 		origCopyArt:    copyAlbumArt,
+		origVisModeIdx: visModeIdx,
 	}
 }
 
@@ -127,6 +149,8 @@ func (o *Options) Update(msg tea.Msg) tea.Cmd {
 				o.showSkipWarn = !o.showSkipWarn
 			case optCopyAlbumArt:
 				o.copyAlbumArt = !o.copyAlbumArt
+			case optVisualizerMode:
+				o.cycleRight()
 			}
 
 		case "a":
@@ -156,6 +180,13 @@ func (o *Options) cycleLeft() {
 		o.showSkipWarn = !o.showSkipWarn
 	case optCopyAlbumArt:
 		o.copyAlbumArt = !o.copyAlbumArt
+	case optVisualizerMode:
+		visNames := visualizerModeNames()
+		if o.visModeIdx > 0 {
+			o.visModeIdx--
+		} else {
+			o.visModeIdx = len(visNames) - 1
+		}
 	}
 }
 
@@ -179,6 +210,13 @@ func (o *Options) cycleRight() {
 		o.showSkipWarn = !o.showSkipWarn
 	case optCopyAlbumArt:
 		o.copyAlbumArt = !o.copyAlbumArt
+	case optVisualizerMode:
+		visNames := visualizerModeNames()
+		if o.visModeIdx < len(visNames)-1 {
+			o.visModeIdx++
+		} else {
+			o.visModeIdx = 0
+		}
 	}
 }
 
@@ -189,8 +227,9 @@ func (o *Options) applyChanges() tea.Cmd {
 	albumArtChanged := o.showAlbumArt != o.origAlbumArt
 	skipWarnChanged := o.showSkipWarn != o.origSkipWarn
 	copyArtChanged := o.copyAlbumArt != o.origCopyArt
+	visModeChanged := o.visModeIdx != o.origVisModeIdx
 
-	if !stationChanged && !bitrateChanged && !albumArtChanged && !skipWarnChanged && !copyArtChanged {
+	if !stationChanged && !bitrateChanged && !albumArtChanged && !skipWarnChanged && !copyArtChanged && !visModeChanged {
 		return func() tea.Msg { return OptionsMsg{Closed: true} }
 	}
 
@@ -215,6 +254,11 @@ func (o *Options) applyChanges() tea.Cmd {
 		v := o.copyAlbumArt
 		msg.CopyAlbumArt = &v
 	}
+	if visModeChanged {
+		visNames := visualizerModeNames()
+		m := visNames[o.visModeIdx]
+		msg.VisualizerMode = &m
+	}
 	return func() tea.Msg { return msg }
 }
 
@@ -236,6 +280,12 @@ func (o Options) View() string {
 	b.WriteString("\n\n")
 
 	// Render each option row
+	visNames := visualizerModeNames()
+	visModeName := "Bars"
+	if o.visModeIdx >= 0 && o.visModeIdx < len(visNames) {
+		visModeName = visNames[o.visModeIdx]
+	}
+
 	items := []struct {
 		label string
 		value string
@@ -245,6 +295,7 @@ func (o Options) View() string {
 		{"Show album art", o.renderToggle(o.showAlbumArt, o.cursor == optShowAlbumArt)},
 		{"Show skip warning", o.renderToggle(o.showSkipWarn, o.cursor == optShowSkipWarning)},
 		{"Copy album art", o.renderToggle(o.copyAlbumArt, o.cursor == optCopyAlbumArt)},
+		{"Visualizer mode", o.renderPicker(visModeName, o.cursor == optVisualizerMode)},
 	}
 
 	labelColWidth := 22

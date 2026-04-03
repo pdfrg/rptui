@@ -51,6 +51,9 @@ type Config struct {
 	// Scrobble services
 	LastFM       LastFMConfig       `toml:"lastfm" comment:"Last.fm scrobbling\nrun 'rptui --lastfm-auth' once to obtain a session key"`
 	ListenBrainz ListenBrainzConfig `toml:"listenbrainz" comment:"ListenBrainz scrobbling\ntoken found at: https://listenbrainz.org/profile/"`
+
+	// Visualizer settings
+	Visualizer VisualizerConfig `toml:"visualizer" comment:"audio visualizer settings"`
 }
 
 // LastFMConfig holds Last.fm scrobble settings
@@ -63,6 +66,14 @@ type LastFMConfig struct {
 type ListenBrainzConfig struct {
 	Enabled bool   `toml:"enabled" comment:"enable ListenBrainz scrobbling (default: false)"`
 	Token   string `toml:"token" comment:"user token from https://listenbrainz.org/profile/ (default: '')"`
+}
+
+// VisualizerConfig holds visualizer settings
+type VisualizerConfig struct {
+	Mode         string `toml:"mode" comment:"default visualizer mode\nBars, Braille, ClassicPeak, Wave, Stars, BrailleBars, Rain, Segmented, Binary (default: Bars)"`
+	ShowInfo     string `toml:"show_info" comment:"song info overlay in fullscreen visualizer\nfade, on, off (default: fade)"`
+	InfoDuration int    `toml:"info_duration" comment:"seconds to show song info overlay (default: 5)"`
+	RealAudio    bool   `toml:"real_audio" comment:"use PipeWire audio capture if available\nrequires pw-record (default: true)"`
 }
 
 // DefaultConfig returns a Config with default values
@@ -79,6 +90,12 @@ func DefaultConfig() *Config {
 		MinFavorites:    10,
 		ShowSkipWarning: true,
 		ColorsFile:      "",
+		Visualizer: VisualizerConfig{
+			Mode:         "Segmented",
+			ShowInfo:     "fade",
+			InfoDuration: 5,
+			RealAudio:    true,
+		},
 	}
 }
 
@@ -186,6 +203,19 @@ func (c *Config) applyDefaults() {
 	// Ensure album art path is set
 	if c.AlbumArtPath == "" {
 		c.AlbumArtPath = defaults.AlbumArtPath
+	}
+
+	// Ensure visualizer settings are valid
+	if c.Visualizer.Mode == "" {
+		c.Visualizer.Mode = defaults.Visualizer.Mode
+	}
+	if c.Visualizer.ShowInfo == "" {
+		c.Visualizer.ShowInfo = defaults.Visualizer.ShowInfo
+	} else if c.Visualizer.ShowInfo != "fade" && c.Visualizer.ShowInfo != "on" && c.Visualizer.ShowInfo != "off" {
+		c.Visualizer.ShowInfo = defaults.Visualizer.ShowInfo
+	}
+	if c.Visualizer.InfoDuration <= 0 {
+		c.Visualizer.InfoDuration = defaults.Visualizer.InfoDuration
 	}
 }
 

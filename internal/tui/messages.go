@@ -89,6 +89,9 @@ type scrobbleResultMsg struct {
 	results []api.ScrobbleResult
 }
 
+// visTickMsg is sent every 50ms to update the visualizer animation
+type visTickMsg time.Time
+
 // Command functions
 
 // renderAlbumArtAfterDelay returns a command that triggers album art re-render
@@ -161,6 +164,13 @@ func watchThemeCmd(watcher *config.ThemeWatcher) tea.Cmd {
 		path := <-watcher.Events()
 		return themeChangedMsg{path: path}
 	}
+}
+
+// tickVisCmd returns a command that sends visTickMsg every 50ms (20 FPS)
+func tickVisCmd() tea.Cmd {
+	return tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
+		return visTickMsg(t)
+	})
 }
 
 // scrobbleCmd runs the scrobble and returns results as a message.
