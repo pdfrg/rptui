@@ -28,6 +28,13 @@ func (v *Visualizer) renderClassicPeak(width int) string {
 		bandWidth = 1
 	}
 
+	// Calculate total content width and center it
+	contentWidth := bandCount*bandWidth + (bandCount - 1)
+	leftPad := (width - contentWidth) / 2
+	if leftPad < 0 {
+		leftPad = 0
+	}
+
 	ps := v.getPeakState()
 
 	// Update peak positions: rise with level, fall slowly
@@ -48,6 +55,9 @@ func (v *Visualizer) renderClassicPeak(width int) string {
 		var b strings.Builder
 		rowLevel := float64(height - 1 - row)
 
+		for range leftPad {
+			b.WriteString(" ")
+		}
 		for i, level := range v.bands {
 			barH := level * float64(height)
 			peakH := ps.positions[i]
