@@ -6,14 +6,19 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// renderSegmented draws many thin interpolated columns for a dense organic look.
-// Bands are interpolated across the full width so adjacent columns vary slightly.
+// renderSegmented draws bars with the same width as Bars, but each bar is
+// broken into horizontal blocks with small gaps between them, like a
+// segmented LED display.
 func (v *Visualizer) renderSegmented(width int) string {
 	height := v.rows
+	bandCount := len(v.bands)
+	bandWidth := max(1, (width-(bandCount-1))/bandCount)
 
-	// Interpolate bands across all available columns
-	totalCols := width
-	cols := interpolateBands(v.bands, totalCols)
+	contentWidth := bandCount*bandWidth + (bandCount - 1)
+	leftPad := (width - contentWidth) / 2
+	if leftPad < 0 {
+		leftPad = 0
+	}
 
 	lowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(v.colorLow))
 	midStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(v.interpolateColor(v.colorLow, v.colorHigh, 0.5)))
@@ -35,13 +40,29 @@ func (v *Visualizer) renderSegmented(width int) string {
 			cellStyle = lowStyle
 		}
 
-		for col := range totalCols {
-			level := cols[col]
+		for range leftPad {
+			b.WriteString(" ")
+		}
+		for i, level := range v.bands {
 			block := fracBlock(level, rowBottom, rowTop)
 			if block == " " {
-				b.WriteString(" ")
+				for range bandWidth {
+					b.WriteString(" ")
+				}
 			} else {
-				b.WriteString(cellStyle.Render(block))
+				// Every other row gets a space gap, creating segmented look
+				if row%2 == 0 {
+					s := ""
+					for range bandWidth {
+						s += block
+					}
+					b.WriteString(cellStyle.Render(s))
+				} else {
+					b.WriteString(strings.Repeat(" ", bandWidth))
+				}
+			}
+			if i < bandCount-1 {
+				b.WriteString(" ")
 			}
 		}
 		lines[row] = b.String()
