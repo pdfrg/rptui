@@ -73,35 +73,40 @@ type AudioTap struct {
 	closed bool
 }
 
-// findDefaultSinkNode returns the node ID of the default Audio/Sink.
-func findDefaultSinkNode() (int, error) {
+// findMonitorSourceNode returns the node ID of the default sink's monitor source.
+// This is a Stream/Input/Audio node whose name ends with ".monitor".
+func findMonitorSourceNode() (int, error) {
 	cmd := exec.Command("pw-cli", "list-objects")
 	out, err := cmd.Output()
 	if err != nil {
 		return 0, err
 	}
 
-	// Parse output to find Audio/Sink nodes
 	lines := strings.Split(string(out), "\n")
 	for i, line := range lines {
-		if strings.Contains(line, `media.class = "Audio/Sink"`) {
-			// Look backwards for the node ID (can be 10-25 lines back)
+		if strings.Contains(line, `media.class = "Stream/Input/Audio"`) {
+			// Look backwards for node.name ending with .monitor
 			for j := i - 1; j >= 0 && j >= i-30; j-- {
-				if strings.Contains(lines[j], "node.id") {
-					parts := strings.Split(lines[j], "=")
-					if len(parts) >= 2 {
-						numStr := strings.TrimSpace(parts[1])
-						numStr = strings.Trim(numStr, `"`)
-						num, err := strconv.Atoi(numStr)
-						if err == nil {
-							return num, nil
+				if strings.Contains(lines[j], `node.name`) && strings.Contains(lines[j], ".monitor") {
+					// Found the monitor source, now find its node.id
+					for k := j; k >= 0 && k >= j-10; k-- {
+						if strings.Contains(lines[k], "node.id") {
+							parts := strings.Split(lines[k], "=")
+							if len(parts) >= 2 {
+								numStr := strings.TrimSpace(parts[1])
+								numStr = strings.Trim(numStr, `"`)
+								num, err := strconv.Atoi(numStr)
+								if err == nil {
+									return num, nil
+								}
+							}
 						}
 					}
 				}
 			}
 		}
 	}
-	return 0, fmt.Errorf("no Audio/Sink found")
+	return 0, fmt.Errorf("no monitor source found")
 }
 
 // NewAudioTap creates an AudioTap that captures mono float32 audio at 48kHz
@@ -112,8 +117,8 @@ func NewAudioTap() *AudioTap {
 		return nil
 	}
 
-	// Find the default sink node to capture its monitor output
-	sinkNode, err := findDefaultSinkNode()
+	// Find the default sink's monitor source node to capture system audio output
+	monitorNode, err := findMonitorSourceNode()
 	if err != nil {
 		return nil
 	}
@@ -124,7 +129,7 @@ func NewAudioTap() *AudioTap {
 		"--channels=1",
 		"--channel-map=mono",
 		"--latency=50ms",
-		fmt.Sprintf("--target=%d", sinkNode),
+		fmt.Sprintf("--target=%d", monitorNode),
 		"-",
 	)
 
