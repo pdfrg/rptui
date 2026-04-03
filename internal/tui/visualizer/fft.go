@@ -116,9 +116,10 @@ func (a *Analyzer) Analyze(samples []float32) []float64 {
 		for i := start; i < end; i++ {
 			sum += a.magBuf[i]
 		}
-		// Normalize: divide by bin count and apply log scaling
+		// Normalize: apply log scaling to compress dynamic range
+		// Typical music: avg 10-200 per bin. Log10(1+avg)/2.5 maps this to ~0.4-0.92
 		avg := sum / float64(end-start)
-		a.bands[b] = math.Log10(1+avg*100) / 3.0 // log scale, clamp to ~0-1
+		a.bands[b] = math.Log10(1+avg) / 2.5
 		if a.bands[b] > 1 {
 			a.bands[b] = 1
 		}
@@ -127,7 +128,7 @@ func (a *Analyzer) Analyze(samples []float32) []float64 {
 	// Temporal smoothing: fast attack, slow decay
 	for i := range bandCount {
 		if a.bands[i] > a.prevBands[i] {
-			a.bands[i] = a.bands[i]*0.6 + a.prevBands[i]*0.4
+			a.bands[i] = a.bands[i]*0.8 + a.prevBands[i]*0.2
 		} else {
 			a.bands[i] = a.bands[i]*0.25 + a.prevBands[i]*0.75
 		}
