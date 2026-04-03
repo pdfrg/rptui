@@ -704,6 +704,9 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.themeWatcher != nil {
 			m.themeWatcher.Close()
 		}
+		if m.vis != nil {
+			m.vis.Close()
+		}
 		return m, tea.Quit
 
 	case "space":
@@ -828,8 +831,16 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			} else {
 				m.vis.SetColors(m.theme.Accent, m.theme.Cursor, m.theme.Muted)
 			}
+			// Start audio tap if real audio is enabled
+			source := m.vis.EnableRealAudio(m.config.Visualizer.RealAudio)
 			m.vis.RequestRefresh()
 			cmds = append(cmds, tickVisCmd())
+			cmds = append(cmds, setStatus(&m, "Visualizer: "+source, false))
+		} else {
+			// Stop audio tap when leaving visualizer view
+			if m.vis != nil {
+				m.vis.Close()
+			}
 		}
 
 		// Fetch lyrics/artist if needed when entering those views

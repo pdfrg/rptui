@@ -73,6 +73,7 @@ type VisualizerConfig struct {
 	Mode         string `toml:"mode" comment:"default visualizer mode\nBars, BarsDot, ClassicPeak, Wave, Retro (default: Bars)"`
 	ShowInfo     string `toml:"show_info" comment:"song info overlay in fullscreen visualizer\nfade, on, off (default: fade)"`
 	InfoDuration int    `toml:"info_duration" comment:"seconds to show song info overlay (default: 5)"`
+	RealAudio    bool   `toml:"real_audio" comment:"use PipeWire audio capture if available\nrequires pw-record (default: true)"`
 }
 
 // DefaultConfig returns a Config with default values
@@ -93,6 +94,7 @@ func DefaultConfig() *Config {
 			Mode:         "Bars",
 			ShowInfo:     "fade",
 			InfoDuration: 5,
+			RealAudio:    true,
 		},
 	}
 }

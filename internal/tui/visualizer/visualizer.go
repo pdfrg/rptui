@@ -72,6 +72,12 @@ type Visualizer struct {
 	colorLow  string // bottom bars (accent)
 	colorHigh string // top bars (cursor)
 	colorDim  string // empty space (muted)
+
+	// Real audio support
+	audioTap  *AudioTap
+	analyzer  *Analyzer
+	realAudio bool
+	sampleBuf []float32 // buffer for reading from audio tap
 }
 
 // New creates a Visualizer with the given seed for spectrum generation.
@@ -147,7 +153,6 @@ func (v *Visualizer) Tick(playing bool, paused bool) {
 	}
 
 	if paused {
-		// Decay bands when paused, don't advance animation frame
 		for i := range v.bands {
 			v.bands[i] *= 0.85
 			v.prevBands[i] = v.bands[i]
@@ -158,7 +163,92 @@ func (v *Visualizer) Tick(playing bool, paused bool) {
 
 	v.frame++
 	if playing {
+		if v.realAudio && v.analyzer != nil && v.audioTap != nil {
+			v.updateFromAudio()
+		} else {
+			v.updateSpectrum()
+		}
+	}
+}
+
+// updateFromAudio reads samples from the audio tap and runs FFT analysis.
+func (v *Visualizer) updateFromAudio() {
+	if len(v.sampleBuf) < fftSize {
+		v.sampleBuf = make([]float32, fftSize)
+	}
+
+	n := v.audioTap.ReadSamples(v.sampleBuf)
+	if n < fftSize {
+		// Not enough samples yet, fall back to simulated
 		v.updateSpectrum()
+		return
+	}
+
+	bands := v.analyzer.Analyze(v.sampleBuf[:n])
+	if bands == nil {
+		v.updateSpectrum()
+		return
+	}
+
+	// Copy analyzed bands into visualizer state
+	for i := range bandCount {
+		v.bands[i] = bands[i]
+		v.prevBands[i] = bands[i]
+	}
+	v.refreshPending = true
+}
+
+// EnableRealAudio enables or disables real audio capture.
+// If enabled and pw-record is available, starts the audio tap.
+// Returns the actual audio source in use: "PipeWire" or "Simulated".
+func (v *Visualizer) EnableRealAudio(enabled bool) string {
+	if v == nil {
+		return "Simulated"
+	}
+
+	if enabled && PwRecordAvailable() && v.audioTap == nil {
+		v.audioTap = NewAudioTap()
+		if v.audioTap != nil {
+			v.analyzer = NewAnalyzer()
+			v.realAudio = true
+			return "PipeWire"
+		}
+	}
+
+	if !enabled && v.audioTap != nil {
+		v.audioTap.Close()
+		v.audioTap = nil
+		v.analyzer = nil
+		v.realAudio = false
+	}
+
+	if v.realAudio {
+		return "PipeWire"
+	}
+	return "Simulated"
+}
+
+// AudioSource returns the current audio source: "PipeWire" or "Simulated".
+func (v *Visualizer) AudioSource() string {
+	if v == nil {
+		return "Simulated"
+	}
+	if v.realAudio {
+		return "PipeWire"
+	}
+	return "Simulated"
+}
+
+// Close stops the audio tap if running.
+func (v *Visualizer) Close() {
+	if v == nil {
+		return
+	}
+	if v.audioTap != nil {
+		v.audioTap.Close()
+		v.audioTap = nil
+		v.analyzer = nil
+		v.realAudio = false
 	}
 }
 
