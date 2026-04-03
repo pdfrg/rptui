@@ -291,7 +291,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme) *Model {
 	playlistWidget := widgets.NewPlaylist(styles)
 
 	// Initialize modal widgets
-	optionsModal := modals.NewOptions(styles, cfg.Channel, cfg.Bitrate, cfg.ShowAlbumArt, cfg.ShowSkipWarning, cfg.CopyAlbumArt)
+	optionsModal := modals.NewOptions(styles, cfg.Channel, cfg.Bitrate, cfg.ShowAlbumArt, cfg.ShowSkipWarning, cfg.CopyAlbumArt, cfg.Visualizer.Mode)
 	skipWarningModal := modals.NewSkipWarning(styles, cfg.MinFavorites)
 
 	// Initialize viewport for bottom views
@@ -473,6 +473,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.CopyAlbumArt != nil {
 			m.config.CopyAlbumArt = *msg.CopyAlbumArt
+		}
+		if msg.VisualizerMode != nil {
+			m.config.Visualizer.Mode = *msg.VisualizerMode
+			if m.vis != nil {
+				mode := visualizer.ModeFromString(*msg.VisualizerMode)
+				m.vis.SetMode(mode)
+				m.vis.RequestRefresh()
+			}
 		}
 
 		needsRestart := msg.Station != nil || msg.Bitrate != nil
@@ -892,7 +900,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.visFullscreen {
 			return m, nil
 		}
-		m.optionsModal = modals.NewOptions(m.styles, m.config.Channel, m.config.Bitrate, m.config.ShowAlbumArt, m.config.ShowSkipWarning, m.config.CopyAlbumArt)
+		m.optionsModal = modals.NewOptions(m.styles, m.config.Channel, m.config.Bitrate, m.config.ShowAlbumArt, m.config.ShowSkipWarning, m.config.CopyAlbumArt, m.config.Visualizer.Mode)
 		m.activeModal = ModalOptions
 		return m, clearKittyImagesCmd()
 

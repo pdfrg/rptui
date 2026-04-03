@@ -40,6 +40,15 @@ var visModes = [ModeCount]visEntry{
 	ModeRetro:       {"Retro"},
 }
 
+// ModeNames returns display names for all visualizer modes.
+func ModeNames() []string {
+	names := make([]string, ModeCount)
+	for i := range visModes {
+		names[i] = visModes[i].name
+	}
+	return names
+}
+
 // Visualizer performs spectrum analysis and renders visualizer output.
 type Visualizer struct {
 	bands          []float64
