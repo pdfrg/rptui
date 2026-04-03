@@ -31,6 +31,7 @@ import (
 	"rptui-bubbletea/internal/models"
 	"rptui-bubbletea/internal/mpv"
 	"rptui-bubbletea/internal/tui/modals"
+	"rptui-bubbletea/internal/tui/visualizer"
 	"rptui-bubbletea/internal/tui/widgets"
 )
 
@@ -54,6 +55,7 @@ const (
 	ViewLyrics
 	ViewSyncedLyrics
 	ViewArtist
+	ViewVisualizer
 	ViewOff
 	ViewModeCount
 )
@@ -72,6 +74,7 @@ var bottomViewNames = []string{
 	"Lyrics",
 	"Synced Lyrics",
 	"Artist",
+	"Visualizer",
 	"Off",
 }
 
@@ -228,6 +231,12 @@ type Model struct {
 
 	// Terminal cell ratio for album art aspect ratio correction
 	cellRatio float64
+
+	// Visualizer state
+	vis            *visualizer.Visualizer // visualizer engine
+	visFullscreen  bool                   // visualizer is in fullscreen mode
+	visInfoShownAt time.Time              // when song info overlay was last shown
+	visInfoVisible bool                   // whether info overlay is currently visible
 }
 
 // NewModel creates a new TUI model
@@ -618,6 +627,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+	case visTickMsg:
+		if m.vis != nil && m.bottomViewMode == ViewVisualizer {
+			m.vis.Tick(m.isPlaying, m.isPaused)
+			// Update song info overlay visibility in fullscreen
+			if m.visFullscreen && m.currentSong != nil {
+				showInfo := m.config.Visualizer.ShowInfo
+				if showInfo == "on" {
+					m.visInfoVisible = true
+				} else if showInfo == "fade" && m.visInfoVisible {
+					if time.Since(m.visInfoShownAt) >= time.Duration(m.config.Visualizer.InfoDuration)*time.Second {
+						m.visInfoVisible = false
+					}
+				}
+			}
+		}
+		// Re-schedule visualizer tick
+		if m.vis != nil && m.bottomViewMode == ViewVisualizer {
+			cmds = append(cmds, tickVisCmd())
+		}
+
 	case themeChangedMsg:
 		newTheme, err := config.LoadTheme(m.config.ColorsFile, m.config.Theme)
 		if err != nil {
@@ -745,7 +774,10 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "v":
-		// Toggle bottom view
+		// Toggle bottom view — suppressed in fullscreen visualizer
+		if m.visFullscreen {
+			return m, nil
+		}
 		prevMode := m.bottomViewMode
 		m.bottomViewMode = (m.bottomViewMode + 1) % ViewModeCount
 		statusCmd := setStatus(&m, fmt.Sprintf("View: %s", bottomViewNames[m.bottomViewMode]), false)
@@ -767,6 +799,21 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// Clear artist image when leaving artist view
 		if prevMode == ViewArtist && m.bottomViewMode != ViewArtist {
 			cmds = append(cmds, clearKittyImagesCmd(), renderAlbumArtAfterDelay())
+		}
+
+		// Initialize visualizer when entering the view
+		if m.bottomViewMode == ViewVisualizer {
+			if m.vis == nil {
+				seed := uint64(0)
+				if m.currentSong != nil {
+					seed = uint64(m.currentSong.EventID)
+				}
+				m.vis = visualizer.New(seed)
+				mode := visualizer.ModeFromString(m.config.Visualizer.Mode)
+				m.vis.SetMode(mode)
+			}
+			m.vis.RequestRefresh()
+			cmds = append(cmds, tickVisCmd())
 		}
 
 		// Fetch lyrics/artist if needed when entering those views
@@ -841,13 +888,19 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.switchStation(station)
 
 	case "o":
-		// Options modal
+		// Options modal — suppressed in fullscreen visualizer
+		if m.visFullscreen {
+			return m, nil
+		}
 		m.optionsModal = modals.NewOptions(m.styles, m.config.Channel, m.config.Bitrate, m.config.ShowAlbumArt, m.config.ShowSkipWarning, m.config.CopyAlbumArt)
 		m.activeModal = ModalOptions
 		return m, clearKittyImagesCmd()
 
 	case "m":
-		// Manage favorites modal
+		// Manage favorites modal — suppressed in fullscreen visualizer
+		if m.visFullscreen {
+			return m, nil
+		}
 		m.favoritesModal = modals.NewFavorites(m.styles, m.cacheManager, m.width, m.height)
 		m.activeModal = ModalFavorites
 		return m, clearKittyImagesCmd()
@@ -873,13 +926,46 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// Open RP donate page
 		return m, tea.Batch(setStatus(&m, "Opening RP donate page...", false), openDonatePageCmd)
 
+	case "F":
+		// Toggle fullscreen visualizer — only works when visualizer view is active
+		if m.bottomViewMode == ViewVisualizer {
+			m.visFullscreen = !m.visFullscreen
+			if m.visFullscreen {
+				return m, tea.Batch(
+					setStatus(&m, "Visualizer: fullscreen", false),
+					clearKittyImagesCmd(),
+				)
+			}
+			// Exiting fullscreen: restore album art
+			return m, tea.Batch(
+				setStatus(&m, "Visualizer: windowed", false),
+				clearKittyImagesCmd(),
+				renderAlbumArtAfterDelay(),
+			)
+		}
+		return m, nil
+
 	case "up", "k":
-		// Scroll up in viewport
+		// Cycle visualizer modes when in visualizer view, otherwise scroll viewport
+		if m.bottomViewMode == ViewVisualizer {
+			if m.vis != nil {
+				m.vis.CycleMode()
+				m.vis.RequestRefresh()
+				return m, setStatus(&m, fmt.Sprintf("Visualizer: %s", m.vis.ModeName()), false)
+			}
+		}
 		m.viewport.ScrollUp(1)
 		return m, nil
 
 	case "down", "j":
-		// Scroll down in viewport
+		// Cycle visualizer modes (reverse) when in visualizer view, otherwise scroll viewport
+		if m.bottomViewMode == ViewVisualizer {
+			if m.vis != nil {
+				m.vis.CycleModeReverse()
+				m.vis.RequestRefresh()
+				return m, setStatus(&m, fmt.Sprintf("Visualizer: %s", m.vis.ModeName()), false)
+			}
+		}
 		m.viewport.ScrollDown(1)
 		return m, nil
 
@@ -1694,6 +1780,10 @@ func (m *Model) updateBottomView() {
 		// Playlist is rendered separately via table component
 		return
 
+	case ViewVisualizer:
+		// Visualizer is rendered directly in View()
+		return
+
 	case ViewOff:
 		content = ""
 	}
@@ -1789,6 +1879,19 @@ func (m *Model) songChangedCmds() tea.Cmd {
 	m.prunePlaylist()
 	m.updatePlaylist()
 	m.updateBottomView()
+
+	// Update visualizer seed on song change
+	if m.vis != nil && m.bottomViewMode == ViewVisualizer {
+		m.vis.SetSeed(uint64(m.currentSong.EventID))
+		// Show song info overlay in fullscreen
+		if m.visFullscreen {
+			showInfo := m.config.Visualizer.ShowInfo
+			if showInfo == "fade" || showInfo == "on" {
+				m.visInfoVisible = true
+				m.visInfoShownAt = time.Now()
+			}
+		}
+	}
 
 	var cmds []tea.Cmd
 
@@ -2327,6 +2430,11 @@ func (m Model) View() tea.View {
 		}
 	}
 
+	// Fullscreen visualizer — replaces entire screen
+	if m.visFullscreen && m.bottomViewMode == ViewVisualizer && m.vis != nil {
+		return m.renderFullscreenVisualizer()
+	}
+
 	// 1. Header
 	header := m.headerWidget.View()
 
@@ -2353,10 +2461,12 @@ func (m Model) View() tea.View {
 		len(m.favoritesQueue),
 	)
 
-	// 3. Bottom Section (Playlist or other)
+	// 3. Bottom Section (Playlist, Visualizer, or other)
 	var bottomSection string
 	if m.bottomViewMode == ViewPlaylist {
 		bottomSection = m.playlistWidget.View()
+	} else if m.bottomViewMode == ViewVisualizer && m.vis != nil {
+		bottomSection = m.vis.Render(m.width)
 	} else if m.bottomViewMode != ViewOff {
 		viewportContent := m.viewport.View()
 		// Offset viewport to the right when artist image is beside it
@@ -2460,6 +2570,79 @@ func (m Model) renderImagesCmd() tea.Cmd {
 // with all the existing renderAlbumArtAfterDelay() call sites.
 func (m Model) renderAlbumArtCmd() tea.Cmd {
 	return m.renderImagesCmd()
+}
+
+// renderFullscreenVisualizer renders the visualizer filling the entire terminal,
+// with an optional song info overlay.
+func (m Model) renderFullscreenVisualizer() tea.View {
+	if m.vis == nil {
+		return m.altView("Visualizer not initialized")
+	}
+
+	vizContent := m.vis.Render(m.width)
+
+	var b strings.Builder
+	b.WriteString(vizContent)
+
+	// Song info overlay
+	if m.visInfoVisible && m.currentSong != nil {
+		infoLines := m.buildVisInfoOverlay()
+		// Position overlay near top-center
+		infoHeight := len(infoLines)
+		padTop := max(2, (m.height-infoHeight)/4)
+		padLeft := max(2, (m.width-lipgloss.Width(infoLines[0]))/2)
+
+		for i := 0; i < padTop; i++ {
+			b.WriteString("\n")
+		}
+		leftPad := strings.Repeat(" ", padLeft)
+		for _, line := range infoLines {
+			b.WriteString(leftPad + line + "\n")
+		}
+	}
+
+	return m.altView(b.String())
+}
+
+// buildVisInfoOverlay creates styled lines for the song info overlay.
+func (m Model) buildVisInfoOverlay() []string {
+	song := m.currentSong
+	if song == nil {
+		return nil
+	}
+
+	// Build info lines
+	var lines []string
+
+	// Title
+	titleStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.theme.Foreground)).
+		Bold(true)
+	lines = append(lines, titleStyle.Render(song.Title))
+
+	// Artist
+	artistStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.theme.Accent))
+	lines = append(lines, artistStyle.Render(song.Artist))
+
+	// Album (year)
+	if song.Album != "" {
+		albumStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(m.theme.Muted))
+		album := song.Album
+		if song.Year != "" {
+			album = fmt.Sprintf("%s (%s)", album, song.Year)
+		}
+		lines = append(lines, albumStyle.Render(album))
+	}
+
+	// Station info
+	stationStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.theme.Muted))
+	stationName := config.StationNames[m.config.Channel]
+	lines = append(lines, stationStyle.Render(stationName))
+
+	return lines
 }
 
 // getFavoriteCount returns the number of favorites
