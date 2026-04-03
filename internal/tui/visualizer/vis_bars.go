@@ -11,12 +11,22 @@ func (v *Visualizer) renderBars(width int) string {
 		bandWidth = 1
 	}
 
+	// Calculate total content width and center it
+	contentWidth := bandCount*bandWidth + (bandCount - 1)
+	leftPad := (width - contentWidth) / 2
+	if leftPad < 0 {
+		leftPad = 0
+	}
+
 	lines := make([]string, height)
 	for row := range height {
 		var b strings.Builder
 		rowBottom := float64(height-1-row) / float64(height)
 		rowTop := float64(height-row) / float64(height)
 
+		for range leftPad {
+			b.WriteString(" ")
+		}
 		for i, level := range v.bands {
 			block := fracBlock(level, rowBottom, rowTop)
 			for range bandWidth {

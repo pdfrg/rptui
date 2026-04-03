@@ -53,29 +53,26 @@ func (v *Visualizer) renderRetro(width int) string {
 				}
 			}
 		} else {
-			// Scrolling ground grid with perspective
+			// Ground grid with perspective
 			depthF := float64(row-horizonRow) / float64(groundRows)
-			// Smooth scroll: add continuous offset
-			scrolledDepth := depthF + scrollOffset*0.02
-			if scrolledDepth > 1 {
-				scrolledDepth -= 1
-			}
 
-			vSpacing := max(1, int(1.0/(scrolledDepth*0.5+0.1)))
+			// Vertical line spacing based on perspective
+			vSpacing := max(1, int(1.0/(depthF*0.5+0.1)))
 
 			for col := range width {
 				center := float64(width) / 2
 				offset := float64(col) - center
-				perspectiveX := offset / (scrolledDepth*2 + 0.5)
+				perspectiveX := offset / (depthF*2 + 0.5)
 				gridCol := int(perspectiveX+center) % vSpacing
 				if gridCol < 0 {
 					gridCol += vSpacing
 				}
 
 				// Horizontal lines with smooth scroll
-				hSpacing := max(1, int(1.0/(scrolledDepth*3+0.2))+1)
-				rowFromHorizon := float64(row-horizonRow) + scrollOffset*0.3
-				isHLine := int(rowFromHorizon)%hSpacing == 0
+				hSpacing := max(1, int(1.0/(depthF*3+0.2))+1)
+				// Add scroll offset to row position for smooth vertical movement
+				scrolledRow := float64(row-horizonRow) + scrollOffset*float64(hSpacing)*0.05
+				isHLine := int(scrolledRow)%hSpacing == 0
 
 				if gridCol == 0 || isHLine {
 					if isHLine && gridCol == 0 {
