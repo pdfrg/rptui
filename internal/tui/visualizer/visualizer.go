@@ -58,6 +58,7 @@ type Visualizer struct {
 	frame          uint64
 	refreshPending bool
 	seed           uint64
+	peakState      *peakState // persistent peak positions for ClassicPeak mode
 }
 
 // New creates a Visualizer with the given seed for spectrum generation.
@@ -162,6 +163,7 @@ func (v *Visualizer) Render(width int) string {
 // SetSeed reinitializes the spectrum with a new seed (e.g. on song change).
 func (v *Visualizer) SetSeed(seed uint64) {
 	v.seed = seed
+	v.peakState = nil // reset peak positions for new song
 	v.initSpectrum()
 	v.refreshPending = true
 }
@@ -185,22 +187,21 @@ func (v *Visualizer) SetMode(mode VisMode) {
 
 // initSpectrum generates initial band values from the seed.
 func (v *Visualizer) initSpectrum() {
-	// Use the seed to create a unique energy profile per song
 	seed := v.seed
 	for i := range v.bands {
-		// Simple LCG-based PRNG for deterministic per-song patterns
 		seed = seed*6364136223846793005 + 1442695040888963407
-		val := float64(seed>>33) / float64(1<<31) // normalize to 0-1
-		v.bands[i] = val*0.6 + 0.1                // bias toward mid range
+		val := float64(seed>>33) / float64(1<<31)
+		v.bands[i] = val*0.6 + 0.1
 		v.prevBands[i] = v.bands[i]
 	}
 }
 
 // updateSpectrum evolves the spectrum bands with temporal smoothing.
+// Incorporates v.frame so the spectrum changes every tick.
 func (v *Visualizer) updateSpectrum() {
-	seed := v.seed
+	// Evolve seed by frame so each tick produces different values
+	seed := v.seed + uint64(v.frame)*7919
 	for i := range v.bands {
-		// Evolve each band using a different phase of the PRNG
 		seed = seed*6364136223846793005 + 1442695040888963407
 		raw := float64(seed>>33) / float64(1<<31)
 

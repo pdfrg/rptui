@@ -5,7 +5,8 @@ import (
 	"strings"
 )
 
-// renderRetro renders an 80s synthwave perspective grid with a waveform horizon.
+// renderRetro renders an 80s synthwave perspective grid with a scrolling ground
+// and audio-modulated horizon wave.
 func (v *Visualizer) renderRetro(width int) string {
 	height := v.rows
 	lines := make([]string, height)
@@ -14,47 +15,68 @@ func (v *Visualizer) renderRetro(width int) string {
 	if horizonRow < 1 {
 		horizonRow = 1
 	}
+	groundRows := height - horizonRow
+
+	// Vertical scroll offset for the ground grid
+	scrollOffset := float64(v.frame%20) / 20.0
 
 	for row := range height {
 		var b strings.Builder
 
 		if row <= horizonRow {
-			// Sky area — draw a subtle wave at the horizon
+			// Sky area — draw an audio-modulated wave at the horizon
 			if row == horizonRow {
 				for col := range width {
-					wave := math.Sin(float64(col)*0.2+float64(v.frame)*0.1) * 0.3
-					for _, band := range v.bands {
-						wave += (band - 0.5) * 0.2
+					wave := math.Sin(float64(col)*0.15+float64(v.frame)*0.12) * 0.3
+					// Use individual bands for more variation
+					bandIdx := col * len(v.bands) / width
+					if bandIdx < len(v.bands) {
+						wave += (v.bands[bandIdx] - 0.5) * 0.6
 					}
 					if wave > 0.1 {
 						b.WriteString("═")
+					} else if wave > -0.1 {
+						b.WriteString("─")
 					} else {
 						b.WriteString(" ")
 					}
 				}
 			} else {
-				for range width {
-					b.WriteString(" ")
+				// Stars in the sky
+				for col := range width {
+					seed := uint64(row*1000 + col*7 + 42)
+					seed = seed*6364136223846793005 + 1442695040888963407
+					if (seed>>60)%4 == 0 {
+						b.WriteString("·")
+					} else {
+						b.WriteString(" ")
+					}
 				}
 			}
 		} else {
-			// Ground grid with perspective
-			depth := float64(row-horizonRow) / float64(height-horizonRow)
-			vSpacing := int(1.0 / (depth*0.5 + 0.1))
-			if vSpacing < 1 {
-				vSpacing = 1
+			// Scrolling ground grid with perspective
+			depthF := float64(row-horizonRow) / float64(groundRows)
+			// Add scroll to create vertical movement illusion
+			scrolledDepth := depthF + scrollOffset*0.1
+			if scrolledDepth > 1 {
+				scrolledDepth -= 1
 			}
 
+			vSpacing := max(1, int(1.0/(scrolledDepth*0.5+0.1)))
+
 			for col := range width {
-				// Vertical lines with perspective convergence
 				center := float64(width) / 2
 				offset := float64(col) - center
-				perspectiveX := offset / (depth*2 + 0.5)
+				perspectiveX := offset / (scrolledDepth*2 + 0.5)
 				gridCol := int(perspectiveX+center) % vSpacing
+				if gridCol < 0 {
+					gridCol += vSpacing
+				}
 
-				// Horizontal lines
-				hSpacing := int(1.0/(depth*3+0.2)) + 1
-				isHLine := (row-horizonRow)%max(1, hSpacing) == 0
+				// Horizontal lines with scroll offset
+				hSpacing := max(1, int(1.0/(scrolledDepth*3+0.2))+1)
+				rowFromHorizon := row - horizonRow
+				isHLine := (rowFromHorizon+int(scrollOffset*float64(hSpacing)))%hSpacing == 0
 
 				if gridCol == 0 || isHLine {
 					if isHLine && gridCol == 0 {
