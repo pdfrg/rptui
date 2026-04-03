@@ -2,27 +2,21 @@ package visualizer
 
 import "strings"
 
-// peakPositions tracks falling peak cap positions per band, keyed by band index.
-// Stored on the Visualizer for persistence across frames.
+// peakPositions stores the falling peak cap height per band.
+// Lives on the Visualizer so it resets when SetSeed is called.
 type peakState struct {
 	positions []float64
 }
 
-var peakCache map[uint64]*peakState
-
+// getPeakState returns the peak state, creating it if needed.
 func (v *Visualizer) getPeakState() *peakState {
-	if peakCache == nil {
-		peakCache = make(map[uint64]*peakState)
+	if v.peakState == nil {
+		v.peakState = &peakState{positions: make([]float64, len(v.bands))}
 	}
-	if ps, ok := peakCache[v.seed]; ok {
-		if len(ps.positions) != len(v.bands) {
-			ps.positions = make([]float64, len(v.bands))
-		}
-		return ps
+	if len(v.peakState.positions) != len(v.bands) {
+		v.peakState.positions = make([]float64, len(v.bands))
 	}
-	ps := &peakState{positions: make([]float64, len(v.bands))}
-	peakCache[v.seed] = ps
-	return ps
+	return v.peakState
 }
 
 // renderClassicPeak renders classic falling peak meter bars.
@@ -36,7 +30,7 @@ func (v *Visualizer) renderClassicPeak(width int) string {
 
 	ps := v.getPeakState()
 
-	// Update peak positions
+	// Update peak positions: rise with level, fall slowly
 	for i, level := range v.bands {
 		peakTarget := level * float64(height)
 		if peakTarget > ps.positions[i] {

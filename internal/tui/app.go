@@ -2469,34 +2469,6 @@ func (m Model) View() tea.View {
 		len(m.favoritesQueue),
 	)
 
-	// 3. Bottom Section (Playlist, Visualizer, or other)
-	var bottomSection string
-	if m.bottomViewMode == ViewPlaylist {
-		bottomSection = m.playlistWidget.View()
-	} else if m.bottomViewMode == ViewVisualizer && m.vis != nil {
-		bottomSection = m.vis.Render(m.width)
-	} else if m.bottomViewMode != ViewOff {
-		viewportContent := m.viewport.View()
-		// Offset viewport to the right when artist image is beside it
-		if m.bottomViewMode == ViewArtist && m.artistArtLoaded && m.artistArtStr != "" {
-			leftPad := strings.Repeat(" ", m.artistArtWidth+5)
-			vpLines := strings.Split(viewportContent, "\n")
-			for i, line := range vpLines {
-				vpLines[i] = leftPad + line
-			}
-			viewportContent = strings.Join(vpLines, "\n")
-		}
-		bottomSection = viewportContent
-	}
-
-	// 4. Footer
-	// Update scrobble flash state before rendering
-	if m.scrobbleFlashState != flashOff && time.Since(m.scrobbleFlashAt) >= flashDuration {
-		m.scrobbleFlashState = flashOff
-	}
-	m.footerWidget.SetFlashState(m.scrobbleFlashState)
-	footer := m.footerWidget.View()
-
 	var b strings.Builder
 	b.WriteString(header + "\n\n")
 
@@ -2518,6 +2490,28 @@ func (m Model) View() tea.View {
 		m.viewport.SetHeight(remainingHeight)
 	}
 
+	// 3. Bottom Section (Playlist, Visualizer, or other)
+	// Visualizer renders now that we know the available height
+	var bottomSection string
+	if m.bottomViewMode == ViewPlaylist {
+		bottomSection = m.playlistWidget.View()
+	} else if m.bottomViewMode == ViewVisualizer && m.vis != nil {
+		m.vis.SetRows(max(3, remainingHeight))
+		bottomSection = m.vis.Render(m.width)
+	} else if m.bottomViewMode != ViewOff {
+		viewportContent := m.viewport.View()
+		// Offset viewport to the right when artist image is beside it
+		if m.bottomViewMode == ViewArtist && m.artistArtLoaded && m.artistArtStr != "" {
+			leftPad := strings.Repeat(" ", m.artistArtWidth+5)
+			vpLines := strings.Split(viewportContent, "\n")
+			for i, line := range vpLines {
+				vpLines[i] = leftPad + line
+			}
+			viewportContent = strings.Join(vpLines, "\n")
+		}
+		bottomSection = viewportContent
+	}
+
 	if remainingHeight > 0 {
 		// Crop or pad bottom section
 		bottomLines := strings.Split(bottomSection, "\n")
@@ -2530,6 +2524,13 @@ func (m Model) View() tea.View {
 		}
 	}
 
+	// 4. Footer
+	if m.scrobbleFlashState != flashOff && time.Since(m.scrobbleFlashAt) >= flashDuration {
+		m.scrobbleFlashState = flashOff
+	}
+	m.footerWidget.SetFlashState(m.scrobbleFlashState)
+	footer := m.footerWidget.View()
+
 	b.WriteString(footer)
 
 	return m.altView(b.String())
@@ -2540,6 +2541,11 @@ func (m Model) View() tea.View {
 // because ClearAll removes all kitty placements.
 func (m Model) renderImagesCmd() tea.Cmd {
 	if m.activeModal != ModalNone {
+		return nil
+	}
+
+	// Suppress all images when in fullscreen visualizer
+	if m.visFullscreen && m.bottomViewMode == ViewVisualizer {
 		return nil
 	}
 
