@@ -2516,7 +2516,20 @@ func (m Model) View() tea.View {
 		bottomSection = m.playlistWidget.View()
 	} else if m.bottomViewMode == ViewVisualizer && m.vis != nil {
 		m.vis.SetRows(max(3, remainingHeight))
-		bottomSection = m.vis.Render(m.width)
+		if m.vis.AudioReady() {
+			bottomSection = m.vis.Render(m.width)
+		} else {
+			// Show loading message while audio tap connects
+			modeName := m.vis.ModeName()
+			source := m.vis.AudioSource()
+			lines := []string{
+				"",
+				fmt.Sprintf("Loading %s visualization...", modeName),
+				fmt.Sprintf("Connecting to %s audio...", source),
+				"",
+			}
+			bottomSection = strings.Join(lines, "\n")
+		}
 	} else if m.bottomViewMode != ViewOff {
 		viewportContent := m.viewport.View()
 		// Offset viewport to the right when artist image is beside it
@@ -2620,9 +2633,20 @@ func (m Model) renderFullscreenVisualizer() tea.View {
 
 	rows := max(3, m.height-infoReserve)
 	m.vis.SetRows(rows)
-	vizContent := m.vis.Render(m.width)
 
 	var b strings.Builder
+
+	if !m.vis.AudioReady() {
+		// Show loading message while audio tap connects
+		modeName := m.vis.ModeName()
+		source := m.vis.AudioSource()
+		b.WriteString("\n\n")
+		b.WriteString(fmt.Sprintf("Loading %s visualization...\n", modeName))
+		b.WriteString(fmt.Sprintf("Connecting to %s audio...\n", source))
+		return m.altView(b.String())
+	}
+
+	vizContent := m.vis.Render(m.width)
 
 	// Song info overlay at top with padding
 	if m.visInfoVisible && m.currentSong != nil {

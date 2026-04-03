@@ -68,16 +68,36 @@ func (r *ringBuffer) Available() uint64 {
 type AudioTap struct {
 	cmd    *exec.Cmd
 	stdout io.ReadCloser
+	stderr io.ReadCloser
 	buf    *ringBuffer
 	done   chan struct{}
 	closed bool
 }
 
 // findMonitorSourceNode returns the node ID of the default sink's monitor source.
-// This is a Stream/Input/Audio node whose name ends with ".monitor".
+// Uses pactl which lists monitor sources even when suspended (unlike pw-cli).
 func findMonitorSourceNode() (int, error) {
-	cmd := exec.Command("pw-cli", "list-objects")
+	// Try pactl first — it always lists sources even when suspended
+	cmd := exec.Command("pactl", "list", "sources", "short")
 	out, err := cmd.Output()
+	if err == nil {
+		lines := strings.Split(string(out), "\n")
+		for _, line := range lines {
+			if strings.Contains(line, ".monitor") {
+				fields := strings.Fields(line)
+				if len(fields) >= 1 {
+					num, err := strconv.Atoi(fields[0])
+					if err == nil {
+						return num, nil
+					}
+				}
+			}
+		}
+	}
+
+	// Fallback: try pw-cli list-objects for active monitor nodes
+	cmd = exec.Command("pw-cli", "list-objects")
+	out, err = cmd.Output()
 	if err != nil {
 		return 0, err
 	}
@@ -85,10 +105,8 @@ func findMonitorSourceNode() (int, error) {
 	lines := strings.Split(string(out), "\n")
 	for i, line := range lines {
 		if strings.Contains(line, `media.class = "Stream/Input/Audio"`) {
-			// Look backwards for node.name ending with .monitor
 			for j := i - 1; j >= 0 && j >= i-30; j-- {
 				if strings.Contains(lines[j], `node.name`) && strings.Contains(lines[j], ".monitor") {
-					// Found the monitor source, now find its node.id
 					for k := j; k >= 0 && k >= j-10; k-- {
 						if strings.Contains(lines[k], "node.id") {
 							parts := strings.Split(lines[k], "=")
@@ -137,6 +155,10 @@ func NewAudioTap() *AudioTap {
 	if err != nil {
 		return nil
 	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return nil
+	}
 
 	if err := cmd.Start(); err != nil {
 		return nil
@@ -145,11 +167,15 @@ func NewAudioTap() *AudioTap {
 	tap := &AudioTap{
 		cmd:    cmd,
 		stdout: stdout,
+		stderr: stderr,
 		buf:    newRingBuffer(8192),
 		done:   make(chan struct{}),
 	}
 
 	go tap.readLoop()
+	// Drain stderr so pw-record doesn't block
+	go io.Copy(io.Discard, tap.stderr)
+
 	return tap
 }
 
