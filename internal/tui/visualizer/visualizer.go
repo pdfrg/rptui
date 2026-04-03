@@ -74,10 +74,11 @@ type Visualizer struct {
 	colorDim  string // empty space (muted)
 
 	// Real audio support
-	audioTap  *AudioTap
-	analyzer  *Analyzer
-	realAudio bool
-	sampleBuf []float32 // buffer for reading from audio tap
+	audioTap   *AudioTap
+	analyzer   *Analyzer
+	realAudio  bool
+	audioReady bool      // true when real audio data is flowing
+	sampleBuf  []float32 // buffer for reading from audio tap
 }
 
 // New creates a Visualizer with the given seed for spectrum generation.
@@ -172,6 +173,7 @@ func (v *Visualizer) Tick(playing bool, paused bool) {
 }
 
 // updateFromAudio reads samples from the audio tap and runs FFT analysis.
+// Does nothing until real audio data is available — no simulated fallback.
 func (v *Visualizer) updateFromAudio() {
 	if len(v.sampleBuf) < fftSize {
 		v.sampleBuf = make([]float32, fftSize)
@@ -179,29 +181,29 @@ func (v *Visualizer) updateFromAudio() {
 
 	n := v.audioTap.ReadSamples(v.sampleBuf)
 	if n < fftSize {
-		v.updateSpectrum()
+		// Buffer not full yet — keep waiting
 		return
 	}
 
 	bands := v.analyzer.Analyze(v.sampleBuf[:n])
 	if bands == nil {
-		v.updateSpectrum()
 		return
 	}
 
-	// Check if audio has any energy — fall back to simulated if silent
+	// Check if audio has any energy — skip if silent (monitor may be suspended)
 	hasEnergy := false
 	for _, b := range bands {
-		if b > 0.01 {
+		if b > 0.001 {
 			hasEnergy = true
 			break
 		}
 	}
 	if !hasEnergy {
-		v.updateSpectrum()
 		return
 	}
 
+	// Real audio data is flowing
+	v.audioReady = true
 	for i := range bandCount {
 		v.bands[i] = bands[i]
 		v.prevBands[i] = bands[i]
@@ -222,6 +224,7 @@ func (v *Visualizer) EnableRealAudio(enabled bool) string {
 		if v.audioTap != nil {
 			v.analyzer = NewAnalyzer()
 			v.realAudio = true
+			v.audioReady = false // will become true when data arrives
 			return "PipeWire"
 		}
 	}
@@ -231,6 +234,7 @@ func (v *Visualizer) EnableRealAudio(enabled bool) string {
 		v.audioTap = nil
 		v.analyzer = nil
 		v.realAudio = false
+		v.audioReady = false
 	}
 
 	if v.realAudio {
@@ -248,6 +252,17 @@ func (v *Visualizer) AudioSource() string {
 		return "PipeWire"
 	}
 	return "Simulated"
+}
+
+// AudioReady returns true when real audio data is flowing and bands are populated.
+func (v *Visualizer) AudioReady() bool {
+	if v == nil {
+		return false
+	}
+	if !v.realAudio {
+		return false
+	}
+	return v.audioReady
 }
 
 // Close stops the audio tap if running.
