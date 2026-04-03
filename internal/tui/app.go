@@ -680,6 +680,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			Foreground(lipgloss.Color(m.theme.Foreground))
 		m.spinner.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Accent))
 
+		// Update visualizer theme colors
+		if m.vis != nil {
+			m.vis.SetColors(m.theme.Accent, m.theme.Cursor, m.theme.Muted)
+		}
+
 		return m, watchThemeCmd(m.themeWatcher)
 	}
 
@@ -817,8 +822,11 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 					seed = uint64(m.currentSong.EventID)
 				}
 				m.vis = visualizer.New(seed)
+				m.vis.SetColors(m.theme.Accent, m.theme.Cursor, m.theme.Muted)
 				mode := visualizer.ModeFromString(m.config.Visualizer.Mode)
 				m.vis.SetMode(mode)
+			} else {
+				m.vis.SetColors(m.theme.Accent, m.theme.Cursor, m.theme.Muted)
 			}
 			m.vis.RequestRefresh()
 			cmds = append(cmds, tickVisCmd())
@@ -2657,7 +2665,7 @@ func (m Model) buildVisInfoOverlay() []string {
 
 	// Station info
 	stationStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.theme.Muted))
+		Foreground(lipgloss.Color(m.theme.Cursor))
 	stationName := config.StationNames[m.config.Channel]
 	lines = append(lines, stationStyle.Render(stationName))
 

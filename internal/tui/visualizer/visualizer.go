@@ -59,6 +59,11 @@ type Visualizer struct {
 	refreshPending bool
 	seed           uint64
 	peakState      *peakState // persistent peak positions for ClassicPeak mode
+
+	// Theme colors for rendering
+	colorLow  string // bottom bars (accent)
+	colorHigh string // top bars (cursor)
+	colorDim  string // empty space (muted)
 }
 
 // New creates a Visualizer with the given seed for spectrum generation.
@@ -68,9 +73,20 @@ func New(seed uint64) *Visualizer {
 		prevBands: make([]float64, DefaultBandCount),
 		rows:      DefaultRows,
 		seed:      seed,
+		colorLow:  "#89b4fa", // default accent (Catppuccin blue)
+		colorHigh: "#f5c2e7", // default cursor (Catppuccin pink)
+		colorDim:  "#6c7086", // default muted
 	}
 	v.initSpectrum()
 	return v
+}
+
+// SetColors sets the theme colors for gradient rendering.
+func (v *Visualizer) SetColors(low, high, dim string) {
+	v.colorLow = low
+	v.colorHigh = high
+	v.colorDim = dim
+	v.refreshPending = true
 }
 
 // Mode returns the current visualizer mode.
