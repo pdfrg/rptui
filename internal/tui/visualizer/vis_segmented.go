@@ -6,9 +6,9 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// renderSegmented draws bars with the same width as Bars, but each bar is
-// broken into horizontal blocks with small gaps between them, like a
-// segmented LED display.
+// renderSegmented draws solid block bars with visible gaps between rows.
+// Uses half-height blocks (▄) so each "brick" is half a terminal row,
+// with blank gaps between them — like cliamp's Bricks visualizer.
 func (v *Visualizer) renderSegmented(width int) string {
 	height := v.rows
 	bandCount := len(v.bands)
@@ -27,14 +27,13 @@ func (v *Visualizer) renderSegmented(width int) string {
 	lines := make([]string, height)
 	for row := range height {
 		var b strings.Builder
-		rowBottom := float64(height-1-row) / float64(height)
-		rowTop := float64(height-row) / float64(height)
+		rowThreshold := float64(height-1-row) / float64(height)
 
 		var cellStyle lipgloss.Style
 		switch {
-		case rowBottom >= 0.6:
+		case rowThreshold >= 0.6:
 			cellStyle = highStyle
-		case rowBottom >= 0.3:
+		case rowThreshold >= 0.3:
 			cellStyle = midStyle
 		default:
 			cellStyle = lowStyle
@@ -44,21 +43,15 @@ func (v *Visualizer) renderSegmented(width int) string {
 			b.WriteString(" ")
 		}
 		for i, level := range v.bands {
-			block := fracBlock(level, rowBottom, rowTop)
-			if block == " " {
+			if level > rowThreshold {
+				s := ""
+				for range bandWidth {
+					s += "▄"
+				}
+				b.WriteString(cellStyle.Render(s))
+			} else {
 				for range bandWidth {
 					b.WriteString(" ")
-				}
-			} else {
-				// Every other row gets a space gap, creating segmented look
-				if row%2 == 0 {
-					s := ""
-					for range bandWidth {
-						s += block
-					}
-					b.WriteString(cellStyle.Render(s))
-				} else {
-					b.WriteString(strings.Repeat(" ", bandWidth))
 				}
 			}
 			if i < bandCount-1 {

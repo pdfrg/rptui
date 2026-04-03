@@ -3,10 +3,12 @@ package visualizer
 import (
 	"math"
 	"strings"
+
+	"charm.land/lipgloss/v2"
 )
 
 // renderRetro renders an 80s synthwave perspective grid with a scrolling ground
-// and audio-modulated horizon wave.
+// and audio-modulated horizon wave, using theme colors.
 func (v *Visualizer) renderRetro(width int) string {
 	height := v.rows
 	lines := make([]string, height)
@@ -16,8 +18,10 @@ func (v *Visualizer) renderRetro(width int) string {
 		horizonRow = 1
 	}
 
-	// Smooth scroll for horizontal lines
 	scrollY := float64(v.frame) * 0.73
+
+	waveStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(v.colorHigh))
+	gridStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(v.colorLow))
 
 	for row := range height {
 		var b strings.Builder
@@ -31,9 +35,9 @@ func (v *Visualizer) renderRetro(width int) string {
 						wave += (v.bands[bandIdx] - 0.5) * 0.6
 					}
 					if wave > 0.1 {
-						b.WriteString("═")
+						b.WriteString(waveStyle.Render("═"))
 					} else if wave > -0.1 {
-						b.WriteString("─")
+						b.WriteString(waveStyle.Render("─"))
 					} else {
 						b.WriteString(" ")
 					}
@@ -62,12 +66,10 @@ func (v *Visualizer) renderRetro(width int) string {
 				perspectiveX := offset / (depth*2 + 0.5)
 				gridCol := int(perspectiveX+center) % vSpacing
 
-				// Horizontal lines with smooth scroll offset
 				hSpacing := int(1.0/(depth*3+0.2)) + 1
 				scrolledRow := float64(row-horizonRow) + scrollY
 				isHLine := int(scrolledRow)%max(1, hSpacing) == 0
 
-				// Fade out grid near bottom to avoid dense fill
 				isBottom := row >= height-2
 				if isBottom {
 					b.WriteString(" ")
@@ -76,11 +78,11 @@ func (v *Visualizer) renderRetro(width int) string {
 
 				if gridCol == 0 || isHLine {
 					if isHLine && gridCol == 0 {
-						b.WriteString("┼")
+						b.WriteString(gridStyle.Render("┼"))
 					} else if isHLine {
-						b.WriteString("─")
+						b.WriteString(gridStyle.Render("─"))
 					} else {
-						b.WriteString("│")
+						b.WriteString(gridStyle.Render("│"))
 					}
 				} else {
 					b.WriteString(" ")
