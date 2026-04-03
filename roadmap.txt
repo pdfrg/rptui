@@ -1,19 +1,5 @@
 # fixes.txt is for bugs, minor refinements to existing features
 
-visualizer
-	add as another view with "v"
-	probably after artist view
-	switch visualizers with up/down (same way we scroll in views anyway)?
-	options
-		go-audio
-		what is cliamp using? because they look cool and it's open source
-		https://github.com/bjarneo/cliamp
-	start in bottom view like all other alt views
-		can we give an option to "fill terminal window"? with toggle
-			would allow to maximize terminal for true fullscreen
-			if so, could give option to show currently playing info in visualizer
-				option for 5 second display, on (always visible), off
-
 crossfade on station changes, jukebox mode
 	pseudo-crossfade (vol down, vol up)
 	apparently mpv doesn't support real crossfade?

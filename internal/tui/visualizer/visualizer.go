@@ -19,7 +19,7 @@ const (
 	ModeBraille
 	ModeClassicPeak
 	ModeWave
-	ModeRetro
+	ModeStars
 	ModeBrailleBars
 	ModeRain
 	ModeSegmented
@@ -41,7 +41,7 @@ var visModes = [ModeCount]visEntry{
 	ModeBraille:     {"Braille"},
 	ModeClassicPeak: {"ClassicPeak"},
 	ModeWave:        {"Wave"},
-	ModeRetro:       {"Retro"},
+	ModeStars:       {"Stars"},
 	ModeBrailleBars: {"BrailleBars"},
 	ModeRain:        {"Rain"},
 	ModeSegmented:   {"Segmented"},
@@ -293,8 +293,8 @@ func (v *Visualizer) Render(width int) string {
 		return v.renderClassicPeak(width)
 	case ModeWave:
 		return v.renderWave(width)
-	case ModeRetro:
-		return v.renderRetro(width)
+	case ModeStars:
+		return v.renderStars(width)
 	case ModeBrailleBars:
 		return v.renderBrailleBars(width)
 	case ModeRain:
