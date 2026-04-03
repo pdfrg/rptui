@@ -8,6 +8,7 @@ import (
 
 // renderBinary draws streaming columns of 0s and 1s that scroll at speeds
 // proportional to each band's energy. Higher energy = more 1s and faster flow.
+// Uses accent/cursor gradient: dim 0s, bright 1s.
 func (v *Visualizer) renderBinary(width int) string {
 	height := v.rows
 	bandCount := len(v.bands)
@@ -19,8 +20,9 @@ func (v *Visualizer) renderBinary(width int) string {
 		leftPad = 0
 	}
 
-	lowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(v.colorDim))
-	midStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(v.interpolateColor(v.colorLow, v.colorHigh, 0.5)))
+	// 0s use muted/dim, 1s use accent→cursor gradient based on energy
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(v.colorDim))
+	lowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(v.colorLow))
 	highStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(v.colorHigh))
 
 	lines := make([]string, height)
@@ -48,12 +50,14 @@ func (v *Visualizer) renderBinary(width int) string {
 				}
 
 				var style lipgloss.Style
-				if ch == '1' && energy > 0.4 {
-					style = highStyle
-				} else if ch == '1' || energy > 0.3 {
-					style = midStyle
+				if ch == '1' {
+					if energy > 0.5 {
+						style = highStyle
+					} else {
+						style = lowStyle
+					}
 				} else {
-					style = lowStyle
+					style = dimStyle
 				}
 				b.WriteString(style.Render(string(ch)))
 				col++
