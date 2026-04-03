@@ -2593,27 +2593,32 @@ func (m Model) renderFullscreenVisualizer() tea.View {
 		return m.altView("Visualizer not initialized")
 	}
 
+	// Reserve top rows for song info overlay when visible
+	infoReserve := 0
+	if m.visInfoVisible && m.currentSong != nil {
+		infoReserve = 6 // title + artist + album + station + 2 padding
+	}
+
+	rows := max(3, m.height-infoReserve)
+	m.vis.SetRows(rows)
 	vizContent := m.vis.Render(m.width)
 
 	var b strings.Builder
-	b.WriteString(vizContent)
 
-	// Song info overlay
+	// Song info overlay at top with padding
 	if m.visInfoVisible && m.currentSong != nil {
 		infoLines := m.buildVisInfoOverlay()
-		// Position overlay near top-center
-		infoHeight := len(infoLines)
-		padTop := max(2, (m.height-infoHeight)/4)
 		padLeft := max(2, (m.width-lipgloss.Width(infoLines[0]))/2)
-
-		for i := 0; i < padTop; i++ {
-			b.WriteString("\n")
-		}
 		leftPad := strings.Repeat(" ", padLeft)
+
+		// Two blank lines of padding above song info
+		b.WriteString("\n\n")
 		for _, line := range infoLines {
 			b.WriteString(leftPad + line + "\n")
 		}
 	}
+
+	b.WriteString(vizContent)
 
 	return m.altView(b.String())
 }

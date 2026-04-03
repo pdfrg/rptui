@@ -17,8 +17,8 @@ func (v *Visualizer) renderRetro(width int) string {
 	}
 	groundRows := height - horizonRow
 
-	// Vertical scroll offset for the ground grid
-	scrollOffset := float64(v.frame%20) / 20.0
+	// Smooth vertical scroll offset for the ground grid
+	scrollOffset := float64(v.frame) * 0.4
 
 	for row := range height {
 		var b strings.Builder
@@ -28,7 +28,6 @@ func (v *Visualizer) renderRetro(width int) string {
 			if row == horizonRow {
 				for col := range width {
 					wave := math.Sin(float64(col)*0.15+float64(v.frame)*0.12) * 0.3
-					// Use individual bands for more variation
 					bandIdx := col * len(v.bands) / width
 					if bandIdx < len(v.bands) {
 						wave += (v.bands[bandIdx] - 0.5) * 0.6
@@ -42,9 +41,9 @@ func (v *Visualizer) renderRetro(width int) string {
 					}
 				}
 			} else {
-				// Stars in the sky
+				// Stars — use frame to twinkle
 				for col := range width {
-					seed := uint64(row*1000 + col*7 + 42)
+					seed := uint64(row*1000+col*7+42) + uint64(v.frame)/10
 					seed = seed*6364136223846793005 + 1442695040888963407
 					if (seed>>60)%4 == 0 {
 						b.WriteString("·")
@@ -56,8 +55,8 @@ func (v *Visualizer) renderRetro(width int) string {
 		} else {
 			// Scrolling ground grid with perspective
 			depthF := float64(row-horizonRow) / float64(groundRows)
-			// Add scroll to create vertical movement illusion
-			scrolledDepth := depthF + scrollOffset*0.1
+			// Smooth scroll: add continuous offset
+			scrolledDepth := depthF + scrollOffset*0.02
 			if scrolledDepth > 1 {
 				scrolledDepth -= 1
 			}
@@ -73,10 +72,10 @@ func (v *Visualizer) renderRetro(width int) string {
 					gridCol += vSpacing
 				}
 
-				// Horizontal lines with scroll offset
+				// Horizontal lines with smooth scroll
 				hSpacing := max(1, int(1.0/(scrolledDepth*3+0.2))+1)
-				rowFromHorizon := row - horizonRow
-				isHLine := (rowFromHorizon+int(scrollOffset*float64(hSpacing)))%hSpacing == 0
+				rowFromHorizon := float64(row-horizonRow) + scrollOffset*0.3
+				isHLine := int(rowFromHorizon)%hSpacing == 0
 
 				if gridCol == 0 || isHLine {
 					if isHLine && gridCol == 0 {
