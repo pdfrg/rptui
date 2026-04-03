@@ -2,8 +2,12 @@ package visualizer
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
+	"math"
 	"os/exec"
+	"strconv"
+	"strings"
 	"sync/atomic"
 )
 
@@ -69,10 +73,48 @@ type AudioTap struct {
 	closed bool
 }
 
-// NewAudioTap creates an AudioTap that captures mono float32 audio at 48kHz.
-// Returns nil if pw-record is not available.
+// findDefaultSinkNode returns the node ID of the default Audio/Sink.
+func findDefaultSinkNode() (int, error) {
+	cmd := exec.Command("pw-cli", "list-objects")
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, err
+	}
+
+	// Parse output to find Audio/Sink nodes
+	lines := strings.Split(string(out), "\n")
+	for i, line := range lines {
+		if strings.Contains(line, `media.class = "Audio/Sink"`) {
+			// Look backwards for the node ID (can be 10-25 lines back)
+			for j := i - 1; j >= 0 && j >= i-30; j-- {
+				if strings.Contains(lines[j], "node.id") {
+					parts := strings.Split(lines[j], "=")
+					if len(parts) >= 2 {
+						numStr := strings.TrimSpace(parts[1])
+						numStr = strings.Trim(numStr, `"`)
+						num, err := strconv.Atoi(numStr)
+						if err == nil {
+							return num, nil
+						}
+					}
+				}
+			}
+		}
+	}
+	return 0, fmt.Errorf("no Audio/Sink found")
+}
+
+// NewAudioTap creates an AudioTap that captures mono float32 audio at 48kHz
+// from the default PipeWire sink's monitor output.
+// Returns nil if pw-record is not available or no sink is found.
 func NewAudioTap() *AudioTap {
 	if _, err := exec.LookPath("pw-record"); err != nil {
+		return nil
+	}
+
+	// Find the default sink node to capture its monitor output
+	sinkNode, err := findDefaultSinkNode()
+	if err != nil {
 		return nil
 	}
 
@@ -82,6 +124,7 @@ func NewAudioTap() *AudioTap {
 		"--channels=1",
 		"--channel-map=mono",
 		"--latency=50ms",
+		fmt.Sprintf("--target=%d", sinkNode),
 		"-",
 	)
 
@@ -119,14 +162,20 @@ func (t *AudioTap) readLoop() {
 		sampleCount := n / 4
 		for i := 0; i < sampleCount; i++ {
 			bits := binary.LittleEndian.Uint32(byteBuf[i*4 : (i+1)*4])
-			floatBuf[i] = float32FromBits(bits)
+			floatBuf[i] = math.Float32frombits(bits)
 		}
 		t.buf.Write(floatBuf[:sampleCount])
 	}
 }
 
-func float32FromBits(bits uint32) float32 {
-	return float32(int32(bits)) / 2147483648.0
+func (t *AudioTap) Close() {
+	if t == nil || t.closed {
+		return
+	}
+	t.closed = true
+	t.cmd.Process.Kill()
+	t.cmd.Wait()
+	<-t.done
 }
 
 func (t *AudioTap) ReadSamples(dst []float32) int {
@@ -141,16 +190,6 @@ func (t *AudioTap) AvailableSamples() uint64 {
 		return 0
 	}
 	return t.buf.Available()
-}
-
-func (t *AudioTap) Close() {
-	if t == nil || t.closed {
-		return
-	}
-	t.closed = true
-	t.cmd.Process.Kill()
-	t.cmd.Wait()
-	<-t.done
 }
 
 func PwRecordAvailable() bool {

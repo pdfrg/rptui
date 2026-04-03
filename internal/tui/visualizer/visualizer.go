@@ -179,7 +179,6 @@ func (v *Visualizer) updateFromAudio() {
 
 	n := v.audioTap.ReadSamples(v.sampleBuf)
 	if n < fftSize {
-		// Not enough samples yet, fall back to simulated
 		v.updateSpectrum()
 		return
 	}
@@ -190,7 +189,19 @@ func (v *Visualizer) updateFromAudio() {
 		return
 	}
 
-	// Copy analyzed bands into visualizer state
+	// Check if audio has any energy — fall back to simulated if silent
+	hasEnergy := false
+	for _, b := range bands {
+		if b > 0.01 {
+			hasEnergy = true
+			break
+		}
+	}
+	if !hasEnergy {
+		v.updateSpectrum()
+		return
+	}
+
 	for i := range bandCount {
 		v.bands[i] = bands[i]
 		v.prevBands[i] = bands[i]
