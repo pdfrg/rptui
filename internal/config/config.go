@@ -51,6 +51,9 @@ type Config struct {
 	// Scrobble services
 	LastFM       LastFMConfig       `toml:"lastfm" comment:"Last.fm scrobbling\nrun 'rptui --lastfm-auth' once to obtain a session key"`
 	ListenBrainz ListenBrainzConfig `toml:"listenbrainz" comment:"ListenBrainz scrobbling\ntoken found at: https://listenbrainz.org/profile/"`
+
+	// Visualizer settings
+	Visualizer VisualizerConfig `toml:"visualizer" comment:"audio visualizer settings"`
 }
 
 // LastFMConfig holds Last.fm scrobble settings
@@ -63,6 +66,13 @@ type LastFMConfig struct {
 type ListenBrainzConfig struct {
 	Enabled bool   `toml:"enabled" comment:"enable ListenBrainz scrobbling (default: false)"`
 	Token   string `toml:"token" comment:"user token from https://listenbrainz.org/profile/ (default: '')"`
+}
+
+// VisualizerConfig holds visualizer settings
+type VisualizerConfig struct {
+	Mode         string `toml:"mode" comment:"default visualizer mode\nBars, BarsDot, ClassicPeak, Wave, Retro (default: Bars)"`
+	ShowInfo     string `toml:"show_info" comment:"song info overlay in fullscreen visualizer\nfade, on, off (default: fade)"`
+	InfoDuration int    `toml:"info_duration" comment:"seconds to show song info overlay (default: 5)"`
 }
 
 // DefaultConfig returns a Config with default values
