@@ -121,10 +121,9 @@ func (v *Visualizer) Tick(playing bool, paused bool) {
 	if v == nil {
 		return
 	}
-	v.frame++
 
 	if paused {
-		// Decay bands when paused
+		// Decay bands when paused, don't advance animation frame
 		for i := range v.bands {
 			v.bands[i] *= 0.85
 			v.prevBands[i] = v.bands[i]
@@ -133,6 +132,7 @@ func (v *Visualizer) Tick(playing bool, paused bool) {
 		return
 	}
 
+	v.frame++
 	if playing {
 		v.updateSpectrum()
 	}
@@ -199,9 +199,9 @@ func (v *Visualizer) initSpectrum() {
 // updateSpectrum evolves the spectrum bands with temporal smoothing.
 // Incorporates v.frame so the spectrum changes every tick.
 func (v *Visualizer) updateSpectrum() {
-	// Evolve seed by frame so each tick produces different values
-	seed := v.seed + uint64(v.frame)*7919
 	for i := range v.bands {
+		// Each band gets a unique seed per frame — no iterative LCG across bands
+		seed := v.seed + uint64(i)*104729 + uint64(v.frame)*3571
 		seed = seed*6364136223846793005 + 1442695040888963407
 		raw := float64(seed>>33) / float64(1<<31)
 

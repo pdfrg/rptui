@@ -11,33 +11,43 @@ var brailleBits = [4][2]int{
 }
 
 // renderBarsDot renders spectrum bars with Braille dot stipple for sub-cell resolution.
+// Each Braille character covers 4 terminal rows x 2 columns, giving fine vertical resolution.
 func (v *Visualizer) renderBarsDot(width int) string {
 	height := v.rows
 	bandCount := len(v.bands)
-	// Braille gives us 2x horizontal resolution
-	totalCols := width / 2
+
+	// Interpolate bands to pixel columns (2x horizontal from Braille)
+	totalCols := width * 2
 	if totalCols < bandCount {
 		totalCols = bandCount
 	}
-
-	// Interpolate bands to column count
 	cols := interpolateBands(v.bands, totalCols)
 
-	brailleRows := height * 2
-	lines := make([]string, brailleRows)
+	// Each Braille character = 4 rows, so we need height/4 characters vertically
+	// But we render at terminal row granularity: height rows
+	brailleH := height * 4 // sub-row resolution
+	lines := make([]string, height)
 
-	for brow := range brailleRows {
+	for row := range height {
 		var b strings.Builder
-		for col := range totalCols {
-			level := cols[col]
-			// Each Braille cell covers 2 rows of our display
-			cellRow := brow % 4
-			cellCol := 0
-			rowLevel := float64(brailleRows-1-brow) / float64(brailleRows)
-
+		for col := range width {
 			bit := 0
-			if level > rowLevel {
-				bit = brailleBits[cellRow][cellCol]
+			for br := 0; br < 4; br++ {
+				// Map Braille sub-row to actual level
+				subRow := row*4 + br
+				rowLevel := float64(brailleH-1-subRow) / float64(brailleH)
+
+				// Two horizontal sub-columns per Braille char
+				for bc := 0; bc < 2; bc++ {
+					pixelCol := col*2 + bc
+					if pixelCol >= len(cols) {
+						continue
+					}
+					level := cols[pixelCol]
+					if level > rowLevel {
+						bit |= brailleBits[br][bc]
+					}
+				}
 			}
 			if bit == 0 {
 				b.WriteRune(' ')
@@ -45,7 +55,7 @@ func (v *Visualizer) renderBarsDot(width int) string {
 				b.WriteRune(rune(0x2800 + bit))
 			}
 		}
-		lines[brow] = b.String()
+		lines[row] = b.String()
 	}
 	return strings.Join(lines, "\n")
 }
