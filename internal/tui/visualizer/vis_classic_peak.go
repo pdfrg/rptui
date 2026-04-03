@@ -1,6 +1,10 @@
 package visualizer
 
-import "strings"
+import (
+	"strings"
+
+	"charm.land/lipgloss/v2"
+)
 
 // peakPositions stores the falling peak cap height per band.
 // Lives on the Visualizer so it resets when SetSeed is called.
@@ -19,7 +23,7 @@ func (v *Visualizer) getPeakState() *peakState {
 	return v.peakState
 }
 
-// renderClassicPeak renders classic falling peak meter bars.
+// renderClassicPeak renders classic falling peak meter bars with theme colors.
 func (v *Visualizer) renderClassicPeak(width int) string {
 	height := v.rows
 	bandCount := len(v.bands)
@@ -34,6 +38,12 @@ func (v *Visualizer) renderClassicPeak(width int) string {
 	if leftPad < 0 {
 		leftPad = 0
 	}
+
+	// Pre-build styles
+	lowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(v.colorLow))
+	midStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(v.interpolateColor(v.colorLow, v.colorHigh, 0.5)))
+	highStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(v.colorHigh))
+	peakStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(v.colorHigh)).Bold(true)
 
 	ps := v.getPeakState()
 
@@ -55,6 +65,17 @@ func (v *Visualizer) renderClassicPeak(width int) string {
 		var b strings.Builder
 		rowLevel := float64(height - 1 - row)
 
+		// Select bar color based on row position
+		var barStyle lipgloss.Style
+		switch {
+		case rowLevel/float64(height) >= 0.6:
+			barStyle = highStyle
+		case rowLevel/float64(height) >= 0.3:
+			barStyle = midStyle
+		default:
+			barStyle = lowStyle
+		}
+
 		for range leftPad {
 			b.WriteString(" ")
 		}
@@ -62,15 +83,19 @@ func (v *Visualizer) renderClassicPeak(width int) string {
 			barH := level * float64(height)
 			peakH := ps.positions[i]
 			ch := " "
+			style := barStyle
 			if rowLevel < barH {
 				ch = "│"
 			}
 			if rowLevel >= peakH-0.5 && rowLevel <= peakH+0.5 {
 				ch = "━"
+				style = peakStyle
 			}
+			s := ""
 			for range bandWidth {
-				b.WriteString(ch)
+				s += ch
 			}
+			b.WriteString(style.Render(s))
 			if i < bandCount-1 {
 				b.WriteString(" ")
 			}
