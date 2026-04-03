@@ -70,7 +70,7 @@ type ListenBrainzConfig struct {
 
 // VisualizerConfig holds visualizer settings
 type VisualizerConfig struct {
-	Mode         string `toml:"mode" comment:"default visualizer mode\nBars, BarsDot, ClassicPeak, Wave, Retro (default: Bars)"`
+	Mode         string `toml:"mode" comment:"default visualizer mode\nBars, Braille, ClassicPeak, Wave, Retro, BrailleBars, Rain, Segmented, Binary (default: Bars)"`
 	ShowInfo     string `toml:"show_info" comment:"song info overlay in fullscreen visualizer\nfade, on, off (default: fade)"`
 	InfoDuration int    `toml:"info_duration" comment:"seconds to show song info overlay (default: 5)"`
 	RealAudio    bool   `toml:"real_audio" comment:"use PipeWire audio capture if available\nrequires pw-record (default: true)"`
