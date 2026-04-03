@@ -16,7 +16,7 @@ var barBlocks = []string{" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "
 // Mode constants — must match the order in visModes registry
 const (
 	ModeBars VisMode = iota
-	ModeBarsDot
+	ModeBraille
 	ModeClassicPeak
 	ModeWave
 	ModeRetro
@@ -38,7 +38,7 @@ type visEntry struct {
 // visModes is the single source of truth for all visualizer modes.
 var visModes = [ModeCount]visEntry{
 	ModeBars:        {"Bars"},
-	ModeBarsDot:     {"BarsDot"},
+	ModeBraille:     {"Braille"},
 	ModeClassicPeak: {"ClassicPeak"},
 	ModeWave:        {"Wave"},
 	ModeRetro:       {"Retro"},
@@ -171,7 +171,7 @@ func (v *Visualizer) Render(width int) string {
 	switch v.mode {
 	case ModeBars:
 		return v.renderBars(width)
-	case ModeBarsDot:
+	case ModeBraille:
 		return v.renderBarsDot(width)
 	case ModeClassicPeak:
 		return v.renderClassicPeak(width)
