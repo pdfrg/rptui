@@ -20,6 +20,10 @@ const (
 	ModeClassicPeak
 	ModeWave
 	ModeRetro
+	ModeBrailleBars
+	ModeRain
+	ModeSegmented
+	ModeBinary
 	ModeCount
 )
 
@@ -38,6 +42,10 @@ var visModes = [ModeCount]visEntry{
 	ModeClassicPeak: {"ClassicPeak"},
 	ModeWave:        {"Wave"},
 	ModeRetro:       {"Retro"},
+	ModeBrailleBars: {"BrailleBars"},
+	ModeRain:        {"Rain"},
+	ModeSegmented:   {"Segmented"},
+	ModeBinary:      {"Binary"},
 }
 
 // ModeNames returns display names for all visualizer modes.
@@ -171,6 +179,14 @@ func (v *Visualizer) Render(width int) string {
 		return v.renderWave(width)
 	case ModeRetro:
 		return v.renderRetro(width)
+	case ModeBrailleBars:
+		return v.renderBrailleBars(width)
+	case ModeRain:
+		return v.renderRain(width)
+	case ModeSegmented:
+		return v.renderSegmented(width)
+	case ModeBinary:
+		return v.renderBinary(width)
 	default:
 		return v.renderBars(width)
 	}
