@@ -15,16 +15,14 @@ func (v *Visualizer) renderRetro(width int) string {
 	if horizonRow < 1 {
 		horizonRow = 1
 	}
-	groundRows := height - horizonRow
 
-	// Smooth vertical scroll offset for the ground grid
-	scrollOffset := float64(v.frame) * 0.4
+	// Smooth scroll for horizontal lines
+	scrollY := float64(v.frame) * 0.73
 
 	for row := range height {
 		var b strings.Builder
 
 		if row <= horizonRow {
-			// Sky area — draw an audio-modulated wave at the horizon
 			if row == horizonRow {
 				for col := range width {
 					wave := math.Sin(float64(col)*0.15+float64(v.frame)*0.12) * 0.3
@@ -41,7 +39,6 @@ func (v *Visualizer) renderRetro(width int) string {
 					}
 				}
 			} else {
-				// Stars — use frame to twinkle
 				for col := range width {
 					seed := uint64(row*1000+col*7+42) + uint64(v.frame)/10
 					seed = seed*6364136223846793005 + 1442695040888963407
@@ -53,26 +50,29 @@ func (v *Visualizer) renderRetro(width int) string {
 				}
 			}
 		} else {
-			// Ground grid with perspective
-			depthF := float64(row-horizonRow) / float64(groundRows)
-
-			// Vertical line spacing based on perspective
-			vSpacing := max(1, int(1.0/(depthF*0.5+0.1)))
+			depth := float64(row-horizonRow) / float64(height-horizonRow)
+			vSpacing := int(1.0 / (depth*0.5 + 0.1))
+			if vSpacing < 1 {
+				vSpacing = 1
+			}
 
 			for col := range width {
 				center := float64(width) / 2
 				offset := float64(col) - center
-				perspectiveX := offset / (depthF*2 + 0.5)
+				perspectiveX := offset / (depth*2 + 0.5)
 				gridCol := int(perspectiveX+center) % vSpacing
-				if gridCol < 0 {
-					gridCol += vSpacing
-				}
 
-				// Horizontal lines with smooth scroll
-				hSpacing := max(1, int(1.0/(depthF*3+0.2))+1)
-				// Add scroll offset to row position for smooth vertical movement
-				scrolledRow := float64(row-horizonRow) + scrollOffset*float64(hSpacing)*0.05
-				isHLine := int(scrolledRow)%hSpacing == 0
+				// Horizontal lines with smooth scroll offset
+				hSpacing := int(1.0/(depth*3+0.2)) + 1
+				scrolledRow := float64(row-horizonRow) + scrollY
+				isHLine := int(scrolledRow)%max(1, hSpacing) == 0
+
+				// Fade out grid near bottom to avoid dense fill
+				isBottom := row >= height-2
+				if isBottom {
+					b.WriteString(" ")
+					continue
+				}
 
 				if gridCol == 0 || isHLine {
 					if isHLine && gridCol == 0 {
