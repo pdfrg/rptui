@@ -1,17 +1,13 @@
 package visualizer
 
-import "strings"
+import (
+	"strings"
 
-// brailleBits maps (row, col) in a 4x2 Braille cell to its bit value.
-var brailleBits = [4][2]int{
-	{0x01, 0x08},
-	{0x02, 0x10},
-	{0x04, 0x20},
-	{0x40, 0x80},
-}
+	"charm.land/lipgloss/v2"
+)
 
 // renderBarsDot renders spectrum bars with Braille dot stipple for sub-cell resolution.
-// Each Braille character covers 4 terminal rows x 2 columns, giving fine vertical resolution.
+// Each Braille character covers 4 terminal rows x 2 columns.
 func (v *Visualizer) renderBarsDot(width int) string {
 	height := v.rows
 	bandCount := len(v.bands)
@@ -23,21 +19,33 @@ func (v *Visualizer) renderBarsDot(width int) string {
 	}
 	cols := interpolateBands(v.bands, totalCols)
 
-	// Each Braille character = 4 rows, so we need height/4 characters vertically
-	// But we render at terminal row granularity: height rows
-	brailleH := height * 4 // sub-row resolution
-	lines := make([]string, height)
+	brailleH := height * 4
 
+	lowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(v.colorLow))
+	midStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(v.interpolateColor(v.colorLow, v.colorHigh, 0.5)))
+	highStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(v.colorHigh))
+
+	lines := make([]string, height)
 	for row := range height {
 		var b strings.Builder
+		rowNorm := float64(height-1-row) / float64(height)
+
+		var cellStyle lipgloss.Style
+		switch {
+		case rowNorm >= 0.6:
+			cellStyle = highStyle
+		case rowNorm >= 0.3:
+			cellStyle = midStyle
+		default:
+			cellStyle = lowStyle
+		}
+
 		for col := range width {
 			bit := 0
 			for br := 0; br < 4; br++ {
-				// Map Braille sub-row to actual level
 				subRow := row*4 + br
 				rowLevel := float64(brailleH-1-subRow) / float64(brailleH)
 
-				// Two horizontal sub-columns per Braille char
 				for bc := 0; bc < 2; bc++ {
 					pixelCol := col*2 + bc
 					if pixelCol >= len(cols) {
@@ -45,14 +53,14 @@ func (v *Visualizer) renderBarsDot(width int) string {
 					}
 					level := cols[pixelCol]
 					if level > rowLevel {
-						bit |= brailleBits[br][bc]
+						bit |= int(brailleBit[br][bc])
 					}
 				}
 			}
 			if bit == 0 {
-				b.WriteRune(' ')
+				b.WriteString(" ")
 			} else {
-				b.WriteRune(rune(0x2800 + bit))
+				b.WriteString(cellStyle.Render(string(rune(0x2800 + bit))))
 			}
 		}
 		lines[row] = b.String()
