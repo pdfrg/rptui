@@ -89,6 +89,11 @@ func DefaultConfig() *Config {
 		MinFavorites:    10,
 		ShowSkipWarning: true,
 		ColorsFile:      "",
+		Visualizer: VisualizerConfig{
+			Mode:         "Bars",
+			ShowInfo:     "fade",
+			InfoDuration: 5,
+		},
 	}
 }
 
@@ -196,6 +201,19 @@ func (c *Config) applyDefaults() {
 	// Ensure album art path is set
 	if c.AlbumArtPath == "" {
 		c.AlbumArtPath = defaults.AlbumArtPath
+	}
+
+	// Ensure visualizer settings are valid
+	if c.Visualizer.Mode == "" {
+		c.Visualizer.Mode = defaults.Visualizer.Mode
+	}
+	if c.Visualizer.ShowInfo == "" {
+		c.Visualizer.ShowInfo = defaults.Visualizer.ShowInfo
+	} else if c.Visualizer.ShowInfo != "fade" && c.Visualizer.ShowInfo != "on" && c.Visualizer.ShowInfo != "off" {
+		c.Visualizer.ShowInfo = defaults.Visualizer.ShowInfo
+	}
+	if c.Visualizer.InfoDuration <= 0 {
+		c.Visualizer.InfoDuration = defaults.Visualizer.InfoDuration
 	}
 }
 
