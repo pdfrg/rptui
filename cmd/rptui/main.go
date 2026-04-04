@@ -12,47 +12,49 @@ import (
 )
 
 func main() {
-	// Handle --lastfm-auth one-time setup command
-	if len(os.Args) > 1 && os.Args[1] == "--lastfm-auth" {
-		sessionKey, err := api.LastFMDoAuth()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+	jukeboxMode := false
+	args := os.Args[1:]
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--lastfm-auth":
+			sessionKey, err := api.LastFMDoAuth()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+			cfg, err := config.NewConfig()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+				os.Exit(1)
+			}
+			cfg.LastFM.SessionKey = sessionKey
+			cfg.LastFM.Enabled = true
+			if err := cfg.Save(); err != nil {
+				fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Println("Session key saved to config. Last.fm scrobbling is now enabled.")
+			return
+		case "--jukebox", "-j":
+			jukeboxMode = true
 		}
-		// Save session key to config
-		cfg, err := config.NewConfig()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
-			os.Exit(1)
-		}
-		cfg.LastFM.SessionKey = sessionKey
-		cfg.LastFM.Enabled = true
-		if err := cfg.Save(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Println("Session key saved to config. Last.fm scrobbling is now enabled.")
-		return
 	}
 
-	// Load config
 	cfg, err := config.NewConfig()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Load theme
 	theme, err := config.LoadTheme(cfg.ColorsFile, cfg.Theme)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to load theme: %v\n", err)
 		theme = config.DefaultTheme()
 	}
 
-	// Create TUI model
-	m := tui.NewModel(cfg, theme)
+	m := tui.NewModel(cfg, theme, jukeboxMode)
 
-	// Run program
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error running program: %v\n", err)

@@ -58,6 +58,16 @@ type Config struct {
 	// Desktop notifications
 	NotificationsEnabled bool `toml:"notifications_enabled" comment:"show desktop notifications on song changes (default: false)"`
 	NotificationsShowArt bool `toml:"notifications_show_art" comment:"include album art thumbnail in notifications (default: true)"`
+
+	// Jukebox mode
+	Jukebox JukeboxConfig `toml:"jukebox" comment:"favorites jukebox mode\nplay your favorites in random order\nmin_faves: minimum favorites required (default: 20)\nrepeat: reshuffle and repeat after playing all (default: false)\ncrossfade_duration: seconds for volume crossfade between songs, 0=disabled (default: 3.0)"`
+}
+
+// JukeboxConfig holds jukebox mode settings
+type JukeboxConfig struct {
+	MinFaves          int     `toml:"min_faves" comment:"minimum favorites required to enable jukebox mode (default: 20)"`
+	Repeat            bool    `toml:"repeat" comment:"reshuffle and repeat after playing all favorites (default: false)"`
+	CrossfadeDuration float64 `toml:"crossfade_duration" comment:"seconds for pseudo-crossfade volume ramp between songs, 0=disabled (default: 3.0)"`
 }
 
 // LastFMConfig holds Last.fm scrobble settings
@@ -102,6 +112,11 @@ func DefaultConfig() *Config {
 		},
 		NotificationsEnabled: false,
 		NotificationsShowArt: true,
+		Jukebox: JukeboxConfig{
+			MinFaves:          20,
+			Repeat:            false,
+			CrossfadeDuration: 3.0,
+		},
 	}
 }
 
@@ -222,6 +237,14 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Visualizer.InfoDuration <= 0 {
 		c.Visualizer.InfoDuration = defaults.Visualizer.InfoDuration
+	}
+
+	// Validate jukebox settings
+	if c.Jukebox.MinFaves < 1 {
+		c.Jukebox.MinFaves = defaults.Jukebox.MinFaves
+	}
+	if c.Jukebox.CrossfadeDuration < 0 {
+		c.Jukebox.CrossfadeDuration = defaults.Jukebox.CrossfadeDuration
 	}
 }
 

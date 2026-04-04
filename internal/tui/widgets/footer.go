@@ -20,7 +20,9 @@ type Footer struct {
 	mutedStyle  lipgloss.Style
 	width       int
 	keys        []KeyBinding
+	jukeKeys    []KeyBinding
 	stationKeys []KeyBinding
+	jukeboxMode bool
 
 	// Scrobble indicator
 	scrobbleServices []string // e.g. ["fm", "lb"]
@@ -45,6 +47,19 @@ func NewFooter(accentStyle, mutedStyle lipgloss.Style) *Footer {
 			{Key: "o", Icon: "", Label: "Opt"},
 			{Key: "m", Icon: "", Label: "Manage"},
 			{Key: "$", Icon: "", Label: "Support RP"},
+			{Key: "q", Icon: "", Label: "Quit"},
+		},
+		jukeKeys: []KeyBinding{
+			{Key: "p", Icon: "󰒮", Label: ""},
+			{Key: "r", Icon: "󰜉", Label: ""},
+			{Key: "Space", Icon: "󰐎", Label: ""},
+			{Key: "\u25c0 \u25b6", Icon: "", Label: "Seek"},
+			{Key: "n", Icon: "󰒭", Label: ""},
+			{Key: "v", Icon: "", Label: "View"},
+			{Key: "c", Icon: "", Label: "Copy"},
+			{Key: "o", Icon: "", Label: "Opt"},
+			{Key: "$", Icon: "", Label: "Support RP"},
+			{Key: "J", Icon: "", Label: "Exit Jukebox"},
 			{Key: "q", Icon: "", Label: "Quit"},
 		},
 		stationKeys: []KeyBinding{
@@ -77,6 +92,11 @@ func (h *Footer) SetScrobbleServices(services []string) {
 // 0=off, 1=solid accent (success), 2=blink-on (failure), 3=blink-off (failure).
 func (h *Footer) SetFlashState(state int) {
 	h.flashState = state
+}
+
+// SetJukeboxMode toggles between normal and jukebox key bindings
+func (h *Footer) SetJukeboxMode(jukebox bool) {
+	h.jukeboxMode = jukebox
 }
 
 // scrobbleIndicator returns the rendered scrobble indicator string, or empty if none.
@@ -135,6 +155,9 @@ func (h Footer) View() string {
 
 	stationLine := renderLine(h.stationKeys)
 	controlsLine := renderLine(h.keys)
+	if h.jukeboxMode {
+		controlsLine = renderLine(h.jukeKeys)
+	}
 
 	// Append scrobble indicator to the right of controls line
 	if ind := h.scrobbleIndicator(); ind != "" && h.width > 0 {
