@@ -74,6 +74,8 @@ type CacheManager struct {
 	maxFavorites int
 	favorites    []CachedSong
 	blocklist    []CachedSong
+	downloadWG   sync.WaitGroup
+	downloading  sync.Map
 }
 
 // NewCacheManager creates a new cache manager
@@ -93,6 +95,14 @@ func (c *CacheManager) EnsureDirectories() error {
 	if err := os.MkdirAll(c.blocklistDir, 0755); err != nil {
 		return fmt.Errorf("failed to create blocklist directory: %w", err)
 	}
+
+	// Clean up orphaned .tmp files from crashed/interrupted downloads
+	if tmpFiles, err := filepath.Glob(filepath.Join(c.favoritesDir, "*.tmp")); err == nil {
+		for _, f := range tmpFiles {
+			os.Remove(f)
+		}
+	}
+
 	c.favorites = c.loadMetadata(c.favoritesDir)
 	c.blocklist = c.loadMetadata(c.blocklistDir)
 	return nil
@@ -218,8 +228,9 @@ func (c *CacheManager) RemoveFavorite(eventID int64) error {
 	return nil
 }
 
-// ToggleFavorite adds or removes a song from favorites
-// Returns (added bool, audioPath, error)
+// ToggleFavorite checks if a song is already a favorite.
+// Returns (added bool, audioPath, error) — audioPath is empty here
+// because the download happens asynchronously via StartFavoriteDownload.
 func (c *CacheManager) ToggleFavorite(song *models.Song, fileExt string) (bool, string, error) {
 	if c.IsFavorite(song) {
 		if err := c.RemoveFavorite(song.EventID); err != nil {
@@ -227,12 +238,8 @@ func (c *CacheManager) ToggleFavorite(song *models.Song, fileExt string) (bool, 
 		}
 		return false, "", nil
 	}
-
-	audioPath, err := c.AddFavorite(song, fileExt)
-	if err != nil {
-		return false, "", err
-	}
-	return true, audioPath, nil
+	// Download will be started via StartFavoriteDownload
+	return true, "", nil
 }
 
 // AddBlocklist adds a song to blocklist
@@ -336,19 +343,6 @@ func (c *CacheManager) GetFavoriteByEventID(eventID int64) (*CachedSong, error) 
 	}
 	return nil, nil
 }
-func (c *CacheManager) UpdateFavoriteAudioPath(eventID int64, audioPath string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	for i, fav := range c.favorites {
-		if fav.EventID == eventID {
-			c.favorites[i].AudioPath = audioPath
-			if err := c.saveMetadata(c.favoritesDir, c.favorites); err != nil {
-				logger.Printf("Failed to update metadata after download: %v", err)
-			}
-			return
-		}
-	}
-}
 
 // ToSong converts a CachedSong to a models.Song
 func (cs *CachedSong) ToSong() *models.Song {
@@ -370,53 +364,106 @@ func (cs *CachedSong) ToSong() *models.Song {
 	}
 }
 
-// DownloadFavorite downloads the audio file for a favorite in the background
-func (c *CacheManager) DownloadFavorite(audioPath, url string, eventID int64) {
-	if audioPath == "" || url == "" {
+// StartFavoriteDownload downloads the audio for a favorite and adds it to metadata.
+// The onDone callback is called with true on success, false on failure.
+func (c *CacheManager) StartFavoriteDownload(song *models.Song, fileExt string, onDone func(success bool)) {
+	if song == nil {
 		return
 	}
-	// Skip if already downloaded
-	if _, err := os.Stat(audioPath); err == nil {
+	// Prevent duplicate downloads of same song
+	if _, loaded := c.downloading.LoadOrStore(song.EventID, true); loaded {
 		return
 	}
-	go c.downloadAudio(audioPath, url, eventID)
+	c.downloadWG.Add(1)
+	go func() {
+		defer c.downloadWG.Done()
+		defer c.downloading.Delete(song.EventID)
+		success := c.downloadAndAdd(song, fileExt)
+		onDone(success)
+	}()
 }
 
-func (c *CacheManager) downloadAudio(path, url string, eventID int64) {
-	logger.Printf("Downloading favorite audio: %s", filepath.Base(path))
+// downloadAndAdd downloads audio to a .tmp file, renames on success, then adds to favorites.
+// Returns true on success.
+func (c *CacheManager) downloadAndAdd(song *models.Song, fileExt string) bool {
+	audioPath := c.buildAudioPath(song, fileExt)
+	tmpPath := audioPath + ".tmp"
+
+	// Skip if already downloaded
+	if _, err := os.Stat(audioPath); err == nil {
+		return false
+	}
+
+	logger.Printf("Downloading favorite audio: %s", filepath.Base(audioPath))
 
 	client := &http.Client{Timeout: 5 * time.Minute}
-	resp, err := client.Get(url)
+	resp, err := client.Get(song.GaplessURL)
 	if err != nil {
-		logger.Printf("Failed to download audio for event %d: %v", eventID, err)
-		return
+		logger.Printf("Failed to download audio for event %d: %v", song.EventID, err)
+		return false
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		logger.Printf("Audio download returned status %d for event %d", resp.StatusCode, eventID)
-		return
+		logger.Printf("Audio download returned status %d for event %d", resp.StatusCode, song.EventID)
+		return false
 	}
 
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		logger.Printf("Failed to create directory for audio: %v", err)
-		return
+	if err := os.MkdirAll(c.favoritesDir, 0755); err != nil {
+		logger.Printf("Failed to create favorites directory: %v", err)
+		return false
 	}
 
-	f, err := os.Create(path)
+	f, err := os.Create(tmpPath)
 	if err != nil {
-		logger.Printf("Failed to create audio file %s: %v", path, err)
-		return
+		logger.Printf("Failed to create temp audio file: %v", err)
+		return false
 	}
-	defer f.Close()
 
 	if _, err := io.Copy(f, resp.Body); err != nil {
-		logger.Printf("Failed to write audio file %s: %v", path, err)
-		os.Remove(path)
-		return
+		f.Close()
+		os.Remove(tmpPath)
+		logger.Printf("Failed to write audio file: %v", err)
+		return false
 	}
 
-	logger.Printf("Downloaded audio: %s", filepath.Base(path))
+	if err := f.Close(); err != nil {
+		os.Remove(tmpPath)
+		logger.Printf("Failed to close audio file: %v", err)
+		return false
+	}
+
+	// Atomic rename
+	if err := os.Rename(tmpPath, audioPath); err != nil {
+		os.Remove(tmpPath)
+		logger.Printf("Failed to rename temp audio file: %v", err)
+		return false
+	}
+
+	// Now add to favorites (metadata only after file is complete)
+	_, err = c.AddFavorite(song, fileExt)
+	if err != nil {
+		logger.Printf("Failed to add favorite after download: %v", err)
+		return false
+	}
+
+	logger.Printf("Downloaded and added favorite: %s", filepath.Base(audioPath))
+	return true
+}
+
+// WaitForDownloads waits for all in-progress downloads to complete, up to a timeout.
+func (c *CacheManager) WaitForDownloads(timeout time.Duration) {
+	done := make(chan struct{})
+	go func() {
+		c.downloadWG.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		logger.Printf("All downloads completed")
+	case <-time.After(timeout):
+		logger.Printf("Download wait timed out after %v", timeout)
+	}
 }
 
 // buildAudioPath generates a human-readable file path for a favorite's audio
