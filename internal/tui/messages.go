@@ -102,6 +102,9 @@ type favoriteDownloadMsg struct {
 	success bool
 }
 
+// jukeboxStartMsg is sent to trigger jukebox playback initialization
+type jukeboxStartMsg struct{}
+
 // Command functions
 
 // renderAlbumArtAfterDelay returns a command that triggers album art re-render
@@ -223,5 +226,12 @@ func favoriteDownloadCmd(cmgr *cache.CacheManager, song *models.Song, fileExt st
 			results <- favoriteDownloadMsg{success: success}
 		})
 		return nil
+	}
+}
+
+// startJukeboxCmd returns a command that triggers jukebox initialization
+func startJukeboxCmd() tea.Cmd {
+	return func() tea.Msg {
+		return jukeboxStartMsg{}
 	}
 }

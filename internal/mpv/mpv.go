@@ -396,6 +396,23 @@ func (m *MPVBackend) SetMute(muted bool) error {
 	return err
 }
 
+// SetVolume sets the volume (0-100)
+func (m *MPVBackend) SetVolume(vol float64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.process == nil {
+		return fmt.Errorf("MPV not running")
+	}
+
+	cmd := IPCCommand{
+		Command: []any{"set_property", "volume", vol},
+	}
+
+	_, err := m.sendIPCCommandLocked(cmd)
+	return err
+}
+
 // GetPlaybackPosition gets current playback position
 func (m *MPVBackend) GetPlaybackPosition() (PlaybackPosition, error) {
 	m.mu.Lock()

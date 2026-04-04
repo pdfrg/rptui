@@ -121,6 +121,9 @@ func (n NowPlaying) View(
 	connErrorMsg string,
 	minFavorites int,
 	favoritesRemaining int,
+	jukeboxMode bool,
+	jukeboxPlayed int,
+	jukeboxTotal int,
 ) string {
 	if song == nil {
 		return " No song playing"
@@ -157,46 +160,83 @@ func (n NowPlaying) View(
 	if prevAvailable > 0 {
 		prevStr = fmt.Sprintf("%d", prevAvailable)
 	}
-	favStr := fmt.Sprintf("%s%s%s",
-		n.foregroundStyle.Render(fmt.Sprintf("%d", favoriteCount)),
-		n.mutedStyle.Render("/"),
-		n.mutedStyle.Render(fmt.Sprintf("%d", minFavorites)))
-	if favoriteCount >= minFavorites {
-		remaining := favoritesRemaining
-		if remaining == 0 {
-			remaining = favoriteCount
-		}
-		remainingStr := fmt.Sprintf("%s%s%s",
-			n.mutedStyle.Render("<"),
-			n.foregroundStyle.Render(fmt.Sprintf("%d", remaining)),
-			n.mutedStyle.Render(">"))
-		favStr += " ✅ " + remainingStr
-	}
-	navLine := fmt.Sprintf("%s %s  %s %s  ⭐ %s",
-		n.mutedStyle.Render("󰒮"), n.foregroundStyle.Render(prevStr),
-		n.mutedStyle.Render("󰒭"), n.foregroundStyle.Render(nextStr),
-		favStr)
 
-	status := "Playing"
-	if isPaused {
-		status = n.mutedStyle.Render("Paused")
+	var navLine string
+	if jukeboxMode {
+		jukeStr := fmt.Sprintf("%s %s/%s",
+			n.foregroundStyle.Render("🎶"),
+			n.foregroundStyle.Render(fmt.Sprintf("%d", jukeboxPlayed)),
+			n.mutedStyle.Render(fmt.Sprintf("%d", jukeboxTotal)))
+		navLine = fmt.Sprintf("%s %s  %s %s  %s",
+			n.mutedStyle.Render("󰒮"), n.foregroundStyle.Render(prevStr),
+			n.mutedStyle.Render("󰒭"), n.foregroundStyle.Render(nextStr),
+			jukeStr)
 	} else {
-		status = n.mutedStyle.Render("Playing")
+		favStr := fmt.Sprintf("%s%s%s",
+			n.foregroundStyle.Render(fmt.Sprintf("%d", favoriteCount)),
+			n.mutedStyle.Render("/"),
+			n.mutedStyle.Render(fmt.Sprintf("%d", minFavorites)))
+		if favoriteCount >= minFavorites {
+			remaining := favoritesRemaining
+			if remaining == 0 {
+				remaining = favoriteCount
+			}
+			remainingStr := fmt.Sprintf("%s%s%s",
+				n.mutedStyle.Render("<"),
+				n.foregroundStyle.Render(fmt.Sprintf("%d", remaining)),
+				n.mutedStyle.Render(">"))
+			favStr += " ✅ " + remainingStr
+		}
+		navLine = fmt.Sprintf("%s %s  %s %s  ⭐ %s",
+			n.mutedStyle.Render("󰒮"), n.foregroundStyle.Render(prevStr),
+			n.mutedStyle.Render("󰒭"), n.foregroundStyle.Render(nextStr),
+			favStr)
 	}
-	statusLine := fmt.Sprintf("%s %s %s", status, n.mutedStyle.Render("•"), n.mutedStyle.Render(configInfo))
+
+	var statusLine string
+	if jukeboxMode {
+		status := "Playing"
+		if isPaused {
+			status = n.mutedStyle.Render("Paused")
+		} else {
+			status = n.mutedStyle.Render("Playing")
+		}
+		statusLine = status
+	} else {
+		status := "Playing"
+		if isPaused {
+			status = n.mutedStyle.Render("Paused")
+		} else {
+			status = n.mutedStyle.Render("Playing")
+		}
+		statusLine = fmt.Sprintf("%s %s %s", status, n.mutedStyle.Render("•"), n.mutedStyle.Render(configInfo))
+	}
 
 	var connectedLine string
-	if connErrorMsg != "" {
-		// Persistent connection error — always accent (error) color
-		connectedLine = n.accentStyle.Render(connErrorMsg)
-	} else if statusMsg != "" {
-		if statusIsError {
-			connectedLine = n.accentStyle.Render(statusMsg)
+	if jukeboxMode {
+		if connErrorMsg != "" {
+			connectedLine = n.accentStyle.Render(connErrorMsg)
+		} else if statusMsg != "" {
+			if statusIsError {
+				connectedLine = n.accentStyle.Render(statusMsg)
+			} else {
+				connectedLine = n.foregroundStyle.Render(statusMsg)
+			}
 		} else {
-			connectedLine = n.foregroundStyle.Render(statusMsg)
+			connectedLine = n.mutedStyle.Render(fmt.Sprintf("Jukebox mode • %s", connectedTime.Format("15:04:05")))
 		}
 	} else {
-		connectedLine = n.mutedStyle.Render(fmt.Sprintf("Connected • %s", connectedTime.Format("15:04:05")))
+		if connErrorMsg != "" {
+			connectedLine = n.accentStyle.Render(connErrorMsg)
+		} else if statusMsg != "" {
+			if statusIsError {
+				connectedLine = n.accentStyle.Render(statusMsg)
+			} else {
+				connectedLine = n.foregroundStyle.Render(statusMsg)
+			}
+		} else {
+			connectedLine = n.mutedStyle.Render(fmt.Sprintf("Connected • %s", connectedTime.Format("15:04:05")))
+		}
 	}
 
 	return fmt.Sprintf(" %s\n %s\n %s\n\n %s\n %s\n\n %s\n\n %s\n\n %s\n\n %s\n\n",

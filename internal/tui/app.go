@@ -244,10 +244,18 @@ type Model struct {
 	visFullscreen  bool                   // visualizer is in fullscreen mode
 	visInfoShownAt time.Time              // when song info overlay was last shown
 	visInfoVisible bool                   // whether info overlay is currently visible
+
+	// Jukebox mode
+	jukeboxMode      bool               // whether jukebox mode is active
+	jukeboxQueue     []cache.CachedSong // shuffled queue of favorites
+	jukeboxPlayed    int                // number of songs played so far (current song included)
+	jukeboxTotal     int                // total songs in this jukebox session
+	jukeboxBatchSize int                // how many songs to queue at once
+	crossfading      bool               // whether currently doing a crossfade volume ramp
 }
 
 // NewModel creates a new TUI model
-func NewModel(cfg *config.Config, theme *config.ColorTheme) *Model {
+func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool) *Model {
 	styles := config.NewThemeStyles(theme)
 
 	themeWatcher := config.NewThemeWatcher(cfg.ColorsFile)
@@ -345,13 +353,14 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme) *Model {
 		spinner:           sp,
 		cellRatio:         cellRatio,
 		downloadResults:   make(chan favoriteDownloadMsg, 1),
+		jukeboxMode:       startJukebox,
+		jukeboxBatchSize:  10,
 	}
 }
 
 // Init initializes the TUI model
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{
-		m.fetchBlockCmd,
 		tickProgressCmd(),
 		tickPollCmd(),
 		tea.RequestBackgroundColor,
@@ -359,6 +368,13 @@ func (m Model) Init() tea.Cmd {
 	}
 	if m.themeWatcher != nil {
 		cmds = append(cmds, watchThemeCmd(m.themeWatcher))
+	}
+
+	// In jukebox mode, trigger jukebox start instead of fetching API block
+	if m.jukeboxMode {
+		cmds = append(cmds, startJukeboxCmd())
+	} else {
+		cmds = append(cmds, m.fetchBlockCmd)
 	}
 	return tea.Batch(cmds...)
 }
@@ -614,6 +630,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case blockFetchedMsg:
 		return handle(m.handleBlockFetched(msg))
 
+	case jukeboxStartMsg:
+		return handle(m.handleJukeboxStart())
+
 	case progressTickMsg:
 		return handle(m.handleProgressTick(msg))
 
@@ -774,6 +793,9 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.currentSongIndex < len(m.songs)-1 {
 			if err := m.mpvBackend.SkipNext(); err == nil {
 				m.currentSongIndex++
+				if m.jukeboxMode {
+					m.jukeboxPlayed++
+				}
 				return m, m.songChangedCmds()
 			}
 		} else {
@@ -786,6 +808,9 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.currentSongIndex > 0 {
 			if err := m.mpvBackend.SkipPrev(); err == nil {
 				m.currentSongIndex--
+				if m.jukeboxMode && m.jukeboxPlayed > 1 {
+					m.jukeboxPlayed--
+				}
 				return m, m.songChangedCmds()
 			}
 		} else {
@@ -921,7 +946,10 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "f":
-		// Toggle favorite
+		// Toggle favorite — disabled in jukebox mode
+		if m.jukeboxMode {
+			return m, nil
+		}
 		if m.currentSong != nil {
 			if m.cacheManager.IsFavorite(m.currentSong) {
 				// Remove favorite
@@ -944,7 +972,10 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "b":
-		// Toggle blocklist
+		// Toggle blocklist — disabled in jukebox mode
+		if m.jukeboxMode {
+			return m, nil
+		}
 		var statusCmd tea.Cmd
 		if m.currentSong != nil {
 			wasBlocked := m.cacheManager.IsBlocked(m.currentSong)
@@ -974,8 +1005,8 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, clearKittyImagesCmd()
 
 	case "m":
-		// Manage favorites modal — suppressed in fullscreen visualizer
-		if m.visFullscreen {
+		// Manage favorites modal — suppressed in fullscreen visualizer and jukebox mode
+		if m.visFullscreen || m.jukeboxMode {
 			return m, nil
 		}
 		m.favoritesModal = modals.NewFavorites(m.styles, m.cacheManager, m.width, m.height)
@@ -1035,7 +1066,6 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "down", "j":
-		// Cycle visualizer modes (reverse) when in visualizer view, otherwise scroll viewport
 		if m.bottomViewMode == ViewVisualizer {
 			if m.vis != nil {
 				m.vis.CycleModeReverse()
@@ -1045,6 +1075,9 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		m.viewport.ScrollDown(1)
 		return m, nil
+
+	case "J":
+		return m.toggleJukeboxMode()
 
 	case "g":
 		// Scroll to top
@@ -1080,7 +1113,42 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// switchStation changes the station and restarts playback
+// handleJukeboxStart initializes jukebox mode playback
+func (m Model) handleJukeboxStart() (tea.Model, tea.Cmd) {
+	favCount, err := m.cacheManager.GetFavoriteCount()
+	if err != nil {
+		return m, setStatus(&m, "Error reading favorites", true)
+	}
+
+	minFaves := m.config.Jukebox.MinFaves
+	if favCount < minFaves {
+		m.jukeboxMode = false
+		return m, setStatus(&m, fmt.Sprintf("Save %d favorites to enable jukebox mode", minFaves), true)
+	}
+
+	favorites, err := m.cacheManager.GetFavorites()
+	if err != nil {
+		m.jukeboxMode = false
+		return m, setStatus(&m, "Error loading favorites", true)
+	}
+
+	shuffled := make([]cache.CachedSong, len(favorites))
+	copy(shuffled, favorites)
+	rand.Shuffle(len(shuffled), func(i, j int) {
+		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+	})
+
+	m.jukeboxQueue = shuffled
+	m.jukeboxPlayed = 0
+	m.jukeboxTotal = len(shuffled)
+	m.connectedAt = time.Now()
+
+	logger.Printf("Jukebox mode: %d songs loaded", len(shuffled))
+
+	return m.startJukeboxPlayback()
+}
+
+// toggleJukeboxMode enters or exits jukebox mode
 func (m Model) switchStation(channel int) (tea.Model, tea.Cmd) {
 	if channel == m.config.Channel {
 		return m, nil
@@ -1131,8 +1199,249 @@ func (m Model) switchStation(channel int) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(setStatus(&m, fmt.Sprintf("Switching to %s...", stationName), false), m.fetchBlockCmd)
 }
 
+// toggleJukeboxMode enters or exits jukebox mode
+func (m Model) toggleJukeboxMode() (tea.Model, tea.Cmd) {
+	if m.jukeboxMode {
+		return m.exitJukeboxMode()
+	}
+
+	favCount, err := m.cacheManager.GetFavoriteCount()
+	if err != nil {
+		return m, setStatus(&m, "Error reading favorites", true)
+	}
+
+	minFaves := m.config.Jukebox.MinFaves
+	if favCount < minFaves {
+		return m, setStatus(&m, fmt.Sprintf("Save %d favorites to enable jukebox mode", minFaves), true)
+	}
+
+	favorites, err := m.cacheManager.GetFavorites()
+	if err != nil {
+		return m, setStatus(&m, "Error loading favorites", true)
+	}
+
+	// Shuffle favorites
+	shuffled := make([]cache.CachedSong, len(favorites))
+	copy(shuffled, favorites)
+	rand.Shuffle(len(shuffled), func(i, j int) {
+		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+	})
+
+	// Stop current playback
+	m.mpvBackend.Stop()
+
+	// Clear state
+	m.songs = nil
+	m.currentSongIndex = 0
+	m.playlistStartIdx = 0
+	m.currentSong = nil
+	m.isPlaying = false
+	m.isPaused = false
+	m.pollingNextBlock = false
+	m.initialized = false
+	m.connectedAt = time.Now()
+	m.lyrics = ""
+	m.syncedLyrics = nil
+	m.artistInfo = nil
+	m.artistStatus = ""
+	m.pendingLyrics = ""
+	m.pendingArtistInfo = nil
+	m.pendingEventID = 0
+	m.albumArtLoaded = false
+	m.albumArtStr = ""
+	m.artistArtStr = ""
+	m.artistArtLoaded = false
+	m.connErrorMsg = ""
+	m.connState = ""
+	m.consecutiveFailures = 0
+	m.retryInterval = 0
+
+	// Set jukebox state
+	m.jukeboxMode = true
+	m.jukeboxQueue = shuffled
+	m.jukeboxPlayed = 0
+	m.jukeboxTotal = len(shuffled)
+
+	logger.Printf("Jukebox mode: %d songs loaded", len(shuffled))
+
+	return m.startJukeboxPlayback()
+}
+
+// exitJukeboxMode stops jukebox mode and clears playlist
+func (m Model) exitJukeboxMode() (tea.Model, tea.Cmd) {
+	m.mpvBackend.Stop()
+
+	m.songs = nil
+	m.currentSongIndex = 0
+	m.playlistStartIdx = 0
+	m.currentSong = nil
+	m.isPlaying = false
+	m.isPaused = false
+	m.pollingNextBlock = false
+	m.initialized = false
+	m.connectedAt = time.Time{}
+	m.lyrics = ""
+	m.syncedLyrics = nil
+	m.artistInfo = nil
+	m.artistStatus = ""
+	m.pendingLyrics = ""
+	m.pendingArtistInfo = nil
+	m.pendingEventID = 0
+	m.albumArtLoaded = false
+	m.albumArtStr = ""
+	m.artistArtStr = ""
+	m.artistArtLoaded = false
+	m.connErrorMsg = ""
+	m.connState = ""
+	m.consecutiveFailures = 0
+	m.retryInterval = 0
+
+	m.jukeboxMode = false
+	m.jukeboxQueue = nil
+	m.jukeboxPlayed = 0
+	m.jukeboxTotal = 0
+	m.crossfading = false
+
+	logger.Printf("Jukebox mode exited")
+
+	m.mpvBackend.SetVolume(100.0)
+
+	return m, tea.Batch(
+		clearKittyImagesCmd(),
+		setStatus(&m, "Jukebox mode off", false),
+		m.fetchBlockCmd,
+	)
+}
+
+// startJukeboxPlayback starts MPV with the first batch of jukebox songs
+func (m Model) startJukeboxPlayback() (tea.Model, tea.Cmd) {
+	if len(m.jukeboxQueue) == 0 {
+		if m.config.Jukebox.Repeat {
+			m.reshuffleJukebox()
+		} else {
+			return m, setStatus(&m, "Jukebox complete", false)
+		}
+	}
+
+	batchSize := m.jukeboxBatchSize
+	if batchSize > len(m.jukeboxQueue) {
+		batchSize = len(m.jukeboxQueue)
+	}
+
+	urls := make([]string, batchSize)
+	songs := make([]*models.Song, batchSize)
+	for i := 0; i < batchSize; i++ {
+		cs := m.jukeboxQueue[i]
+		urls[i] = cs.AudioPath
+		songs[i] = cs.ToSong()
+	}
+
+	m.jukeboxQueue = m.jukeboxQueue[batchSize:]
+
+	if err := m.mpvBackend.Start(urls); err != nil {
+		logger.Printf("Failed to start MPV for jukebox: %v", err)
+		return m, setStatus(&m, fmt.Sprintf("Error: %v", err), true)
+	}
+
+	m.songs = songs
+	m.currentSongIndex = 0
+	m.playlistStartIdx = 0
+	m.isPlaying = true
+	m.initialized = true
+	m.jukeboxPlayed = 1
+
+	logger.Printf("Jukebox: started batch of %d songs, %d remaining", batchSize, len(m.jukeboxQueue))
+
+	return m, tea.Batch(clearKittyImagesCmd(), setStatus(&m, fmt.Sprintf("🎶 Jukebox: %d songs", m.jukeboxTotal), false), m.songChangedCmds())
+}
+
+// refillJukeboxBatch appends the next batch of songs to the MPV playlist
+func (m *Model) refillJukeboxBatch() {
+	if len(m.jukeboxQueue) == 0 {
+		return
+	}
+
+	batchSize := m.jukeboxBatchSize
+	if batchSize > len(m.jukeboxQueue) {
+		batchSize = len(m.jukeboxQueue)
+	}
+
+	urls := make([]string, batchSize)
+	songs := make([]*models.Song, batchSize)
+	for i := 0; i < batchSize; i++ {
+		cs := m.jukeboxQueue[i]
+		urls[i] = cs.AudioPath
+		songs[i] = cs.ToSong()
+	}
+
+	m.jukeboxQueue = m.jukeboxQueue[batchSize:]
+
+	if err := m.mpvBackend.AppendToPlaylist(urls); err != nil {
+		logger.Printf("Failed to append jukebox batch: %v", err)
+		return
+	}
+
+	m.songs = append(m.songs, songs...)
+
+	logger.Printf("Jukebox: refilled %d songs, %d remaining", batchSize, len(m.jukeboxQueue))
+}
+
+// reshuffleJukebox reshuffles all favorites for repeat mode
+func (m *Model) reshuffleJukebox() {
+	favorites, err := m.cacheManager.GetFavorites()
+	if err != nil {
+		logger.Printf("Failed to reload favorites for reshuffle: %v", err)
+		return
+	}
+
+	m.jukeboxQueue = favorites
+	m.jukeboxTotal = len(favorites)
+	m.jukeboxPlayed = 0
+	rand.Shuffle(len(m.jukeboxQueue), func(i, j int) {
+		m.jukeboxQueue[i], m.jukeboxQueue[j] = m.jukeboxQueue[j], m.jukeboxQueue[i]
+	})
+
+	logger.Printf("Jukebox: reshuffled %d songs", len(m.jukeboxQueue))
+}
+
+// checkJukeboxRefill checks if we need to append more songs to the MPV playlist
+func (m *Model) checkJukeboxRefill() tea.Cmd {
+	if !m.jukeboxMode || len(m.jukeboxQueue) == 0 {
+		return nil
+	}
+
+	// Count how many songs are left in the MPV playlist from our current batch
+	remainingInPlaylist := len(m.songs) - 1 - m.currentSongIndex
+	if remainingInPlaylist < m.jukeboxBatchSize/2 {
+		m.refillJukeboxBatch()
+		m.updatePlaylist()
+	}
+	return nil
+}
+
+// fadeVolumeIn gradually increases volume from current to target over duration
+func (m *Model) fadeVolumeIn(target float64, durationSecs float64) {
+	steps := 20
+	interval := time.Duration(float64(durationSecs) / float64(steps) * float64(time.Second))
+	stepSize := target / float64(steps)
+
+	for i := 1; i <= steps; i++ {
+		vol := stepSize * float64(i)
+		if vol > target {
+			vol = target
+		}
+		m.mpvBackend.SetVolume(vol)
+		time.Sleep(interval)
+	}
+}
+
 // handleBlockFetched handles the block fetched message
 func (m Model) handleBlockFetched(msg blockFetchedMsg) (tea.Model, tea.Cmd) {
+	// No-op in jukebox mode
+	if m.jukeboxMode {
+		return m, nil
+	}
+
 	if msg.err != nil {
 		if !m.initialized {
 			// Fatal on startup — can't play without a block
@@ -1388,12 +1697,57 @@ func (m Model) handleProgressTick(msg progressTickMsg) (tea.Model, tea.Cmd) {
 				}
 				return m, tea.Batch(cmds...)
 			}
+			// In jukebox mode, update played counter on transition
+			if m.jukeboxMode {
+				m.jukeboxPlayed++
+				m.checkJukeboxRefill()
+			}
 			cmds = append(cmds, m.songChangedCmds())
 		}
 	}
 
-	// Start polling when on last song with ≤2 min remaining
-	if !m.pollingNextBlock && m.currentSongIndex >= len(m.songs)-1 && m.currentSong != nil && err == nil {
+	// Jukebox mode: handle end of playlist
+	if m.jukeboxMode && !m.mpvBackend.IsRunning() && !m.mpvBackend.IsPaused() && m.currentSongIndex >= len(m.songs)-1 {
+		m.jukeboxPlayed = len(m.songs)
+		if len(m.jukeboxQueue) > 0 || m.config.Jukebox.Repeat {
+			// More songs available or repeat enabled - refill and continue
+			if len(m.jukeboxQueue) == 0 && m.config.Jukebox.Repeat {
+				m.reshuffleJukebox()
+			}
+			if len(m.jukeboxQueue) > 0 {
+				m.refillJukeboxBatch()
+				m.updatePlaylist()
+			}
+		} else {
+			// No more songs and repeat disabled
+			return m, setStatus(&m, fmt.Sprintf("Jukebox complete: played %d songs", m.jukeboxTotal), false)
+		}
+	}
+
+	// Jukebox mode: pseudo-crossfade volume ramp
+	if m.jukeboxMode && m.config.Jukebox.CrossfadeDuration > 0 && !m.isPaused && err == nil {
+		crossfadeDur := m.config.Jukebox.CrossfadeDuration
+		songDuration := float64(m.currentSong.Duration) / 1000.0
+		timeRemaining := songDuration - m.playbackPos.TimePos
+
+		if timeRemaining <= crossfadeDur && timeRemaining > 0 {
+			// Fade out: ramp volume down as song approaches end
+			fadePercent := timeRemaining / crossfadeDur
+			vol := fadePercent * 100.0
+			if vol < 5 {
+				vol = 5
+			}
+			m.mpvBackend.SetVolume(vol)
+			m.crossfading = true
+		} else if m.crossfading && timeRemaining > crossfadeDur {
+			// Song just transitioned - fade back in
+			m.crossfading = false
+			go m.fadeVolumeIn(100.0, m.config.Jukebox.CrossfadeDuration)
+		}
+	}
+
+	// Start polling when on last song with ≤2 min remaining (skip in jukebox mode)
+	if !m.jukeboxMode && !m.pollingNextBlock && m.currentSongIndex >= len(m.songs)-1 && m.currentSong != nil && err == nil {
 		songDuration := float64(m.currentSong.Duration) / 1000.0
 		timeRemaining := songDuration - m.playbackPos.TimePos
 		if timeRemaining <= 120 && timeRemaining > 0 {
@@ -2595,6 +2949,9 @@ func (m Model) View() tea.View {
 		m.connErrorMsg,
 		m.config.MinFavorites,
 		len(m.favoritesQueue),
+		m.jukeboxMode,
+		m.jukeboxPlayed,
+		m.jukeboxTotal,
 	)
 
 	var b strings.Builder
@@ -2670,6 +3027,7 @@ func (m Model) View() tea.View {
 		m.scrobbleFlashState = flashOff
 	}
 	m.footerWidget.SetFlashState(m.scrobbleFlashState)
+	m.footerWidget.SetJukeboxMode(m.jukeboxMode)
 	footer := m.footerWidget.View()
 
 	b.WriteString(footer)
