@@ -157,6 +157,7 @@ func (h Footer) View() string {
 	controlsLine := renderLine(h.keys)
 	if h.jukeboxMode {
 		controlsLine = renderLine(h.jukeKeys)
+		return controlsLine + "\n"
 	}
 
 	// Append scrobble indicator to the right of controls line
