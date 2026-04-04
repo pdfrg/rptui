@@ -115,3 +115,13 @@ func (s *Song) GetDurationFormatted() string {
 	}
 	return fmt.Sprintf("%02d:%02d", minutes, seconds)
 }
+
+// FormatDisplayInfo returns a formatted string with artist, album, year, and title
+// suitable for copying to clipboard
+func (s *Song) FormatDisplayInfo() string {
+	albumYear := s.Album
+	if s.Year != "" && s.Year != "—" {
+		albumYear = fmt.Sprintf("%s (%s)", s.Album, s.Year)
+	}
+	return fmt.Sprintf("%s - %s - %s", s.Artist, albumYear, s.Title)
+}

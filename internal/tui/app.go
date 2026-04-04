@@ -1022,6 +1022,22 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.viewport.GotoBottom()
 		}
 		return m, nil
+
+	case "c":
+		// Copy current song info to clipboard
+		if m.currentSong != nil {
+			m.statusMsg = "Copied to clipboard"
+			m.statusIsError = false
+			m.statusSeq++
+			seq := m.statusSeq
+			return m, tea.Batch(
+				copyToClipboardCmd(m.currentSong),
+				tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+					return statusClearMsg{seq: seq}
+				}),
+			)
+		}
+		return m, nil
 	}
 
 	return m, nil
