@@ -556,7 +556,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return handle(m, renderAlbumArtAfterDelay())
 
 	case modals.FavoritesMsg:
-		m.activeModal = ModalNone
+		if !msg.StayOpen {
+			m.activeModal = ModalNone
+		}
 		if msg.PlayEventID != nil {
 			fav, err := m.cacheManager.GetFavoriteByEventID(*msg.PlayEventID)
 			if err == nil && fav != nil {
@@ -568,6 +570,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				if err := m.mpvBackend.Start([]string{song.GaplessURL}); err == nil {
 					return handle(m, tea.Batch(setStatus(&m, "Playing favorite", false), m.songChangedCmds()))
+				}
+			}
+		} else if msg.EnqueueEventID != nil {
+			fav, err := m.cacheManager.GetFavoriteByEventID(*msg.EnqueueEventID)
+			if err == nil && fav != nil {
+				song := fav.ToSong()
+				song.IsFromFavorite = true
+				url := song.GaplessURL
+				if fav.AudioPath != "" {
+					url = fav.AudioPath
+				}
+				if err := m.mpvBackend.AppendToPlaylist([]string{url}); err == nil {
+					m.songs = append(m.songs, song)
+					m.updatePlaylist()
+					if msg.StayOpen {
+						m.favoritesModal.SetToastMessage("Favorite enqueued")
+					}
+					return handle(m, setStatus(&m, "Favorite enqueued", false))
 				}
 			}
 		}

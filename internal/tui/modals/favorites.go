@@ -3,8 +3,10 @@ package modals
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"rptui-bubbletea/internal/cache"
@@ -13,8 +15,10 @@ import (
 
 // FavoritesMsg is sent when the favorites modal closes
 type FavoritesMsg struct {
-	PlayEventID *int64 // If set, play this favorite
-	Closed      bool
+	PlayEventID    *int64
+	EnqueueEventID *int64
+	StayOpen       bool
+	Closed         bool
 }
 
 // Tab constants for favorites modal
@@ -34,6 +38,9 @@ type Favorites struct {
 	blocklist    []cache.CachedSong
 	termWidth    int
 	termHeight   int
+	searchInput  textinput.Model
+	isSearching  bool
+	toastMessage string
 }
 
 // NewFavorites creates a new Favorites modal
@@ -43,7 +50,12 @@ func NewFavorites(styles *config.ThemeStyles, cacheManager *cache.CacheManager, 
 		cacheManager: cacheManager,
 		termWidth:    termWidth,
 		termHeight:   termHeight,
+		searchInput:  textinput.New(),
 	}
+	f.searchInput.Placeholder = "Search favorites..."
+	f.searchInput.CharLimit = 64
+	f.searchInput.SetWidth(termWidth - 20)
+	f.searchInput.Prompt = ""
 	f.loadData()
 	return f
 }
@@ -51,9 +63,15 @@ func NewFavorites(styles *config.ThemeStyles, cacheManager *cache.CacheManager, 
 func (f *Favorites) loadData() {
 	if favs, err := f.cacheManager.GetFavorites(); err == nil {
 		f.favorites = favs
+		slices.SortFunc(f.favorites, func(a, b cache.CachedSong) int {
+			return strings.Compare(strings.ToLower(a.Title), strings.ToLower(b.Title))
+		})
 	}
 	if blocks, err := f.cacheManager.GetBlocklist(); err == nil {
 		f.blocklist = blocks
+		slices.SortFunc(f.blocklist, func(a, b cache.CachedSong) int {
+			return strings.Compare(strings.ToLower(a.Title), strings.ToLower(b.Title))
+		})
 	}
 }
 
@@ -62,6 +80,32 @@ func (f *Favorites) activeItems() []cache.CachedSong {
 		return f.favorites
 	}
 	return f.blocklist
+}
+
+func (f *Favorites) filteredItems() []cache.CachedSong {
+	items := f.activeItems()
+	if f.activeTab != TabFavorites || f.searchInput.Value() == "" {
+		return items
+	}
+	query := strings.ToLower(f.searchInput.Value())
+	filtered := make([]cache.CachedSong, 0, len(items))
+	for _, item := range items {
+		if strings.Contains(strings.ToLower(item.Title), query) ||
+			strings.Contains(strings.ToLower(item.Artist), query) ||
+			strings.Contains(strings.ToLower(item.Album), query) {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
+}
+
+func (f *Favorites) applyFilter() {
+	f.cursor = 0
+	f.scrollOffset = 0
+}
+
+func (f *Favorites) SetToastMessage(msg string) {
+	f.toastMessage = msg
 }
 
 func (f *Favorites) visibleRows() int {
@@ -74,19 +118,68 @@ func (f *Favorites) visibleRows() int {
 
 // Update handles messages
 func (f *Favorites) Update(msg tea.Msg) tea.Cmd {
+	if f.isSearching {
+		if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
+			switch keyMsg.String() {
+			case "enter":
+				f.isSearching = false
+				f.searchInput.Blur()
+				f.cursor = 0
+				f.scrollOffset = 0
+				return nil
+			case "esc":
+				f.isSearching = false
+				f.searchInput.SetValue("")
+				f.searchInput.Blur()
+				f.cursor = 0
+				f.scrollOffset = 0
+				return nil
+			case "ctrl+c":
+				f.isSearching = false
+				f.searchInput.SetValue("")
+				f.searchInput.Blur()
+				f.cursor = 0
+				f.scrollOffset = 0
+				return func() tea.Msg { return FavoritesMsg{Closed: true} }
+			}
+		}
+		var cmd tea.Cmd
+		f.searchInput, cmd = f.searchInput.Update(msg)
+		f.applyFilter()
+		return cmd
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
-		items := f.activeItems()
+		f.toastMessage = ""
+		items := f.filteredItems()
 		visible := f.visibleRows()
 
 		switch msg.String() {
 		case "esc", "q":
+			if f.searchInput.Value() != "" {
+				f.searchInput.SetValue("")
+				f.cursor = 0
+				f.scrollOffset = 0
+				return nil
+			}
 			return func() tea.Msg { return FavoritesMsg{Closed: true} }
 
 		case "tab":
 			f.activeTab = (f.activeTab + 1) % 2
 			f.cursor = 0
 			f.scrollOffset = 0
+			return nil
+
+		case "/":
+			if f.activeTab == TabFavorites && len(f.favorites) > 0 {
+				f.isSearching = true
+				f.searchInput.SetValue("")
+				f.searchInput.Focus()
+				f.cursor = 0
+				f.scrollOffset = 0
+				return nil
+			}
 			return nil
 
 		case "up", "k":
@@ -114,7 +207,7 @@ func (f *Favorites) Update(msg tea.Msg) tea.Cmd {
 					f.cacheManager.RemoveBlocklist(item.EventID)
 				}
 				f.loadData()
-				items = f.activeItems()
+				items = f.filteredItems()
 				if f.cursor >= len(items) && f.cursor > 0 {
 					f.cursor--
 				}
@@ -129,6 +222,20 @@ func (f *Favorites) Update(msg tea.Msg) tea.Cmd {
 				eventID := items[f.cursor].EventID
 				return func() tea.Msg {
 					return FavoritesMsg{PlayEventID: &eventID}
+				}
+			}
+			return nil
+
+		case "e":
+			if f.activeTab == TabFavorites && len(items) > 0 && f.cursor < len(items) {
+				eventID := items[f.cursor].EventID
+				if f.searchInput.Value() != "" && len(items) == 1 {
+					f.searchInput.SetValue("")
+					f.cursor = 0
+					f.scrollOffset = 0
+				}
+				return func() tea.Msg {
+					return FavoritesMsg{EnqueueEventID: &eventID, StayOpen: true}
 				}
 			}
 			return nil
@@ -185,9 +292,28 @@ func (f Favorites) View() string {
 	b.WriteString("\n")
 
 	// Stats line
-	stats := mutedStyle.Render(fmt.Sprintf("%d favorites  %d blocklisted", len(f.favorites), len(f.blocklist)))
-	b.WriteString(centerStyled(stats, contentWidth))
+	isFiltered := f.activeTab == TabFavorites && f.searchInput.Value() != ""
+	if isFiltered {
+		filtered := f.filteredItems()
+		stats := mutedStyle.Render(fmt.Sprintf("%d of %d favorites", len(filtered), len(f.favorites)))
+		b.WriteString(centerStyled(stats, contentWidth))
+	} else {
+		stats := mutedStyle.Render(fmt.Sprintf("%d favorites  %d blocklisted", len(f.favorites), len(f.blocklist)))
+		b.WriteString(centerStyled(stats, contentWidth))
+	}
 	b.WriteString("\n\n")
+
+	// Search bar (only on Favorites tab when actively searching)
+	if f.activeTab == TabFavorites && f.isSearching {
+		searchWidth := contentWidth - 2
+		searchBar := f.searchInput.View()
+		if lipgloss.Width(searchBar) > searchWidth {
+			f.searchInput.SetWidth(searchWidth)
+			searchBar = f.searchInput.View()
+		}
+		b.WriteString("  " + searchBar)
+		b.WriteString("\n\n")
+	}
 
 	// Column headers
 	headerStyle := lipgloss.NewStyle().
@@ -200,11 +326,14 @@ func (f Favorites) View() string {
 	b.WriteString("\n")
 
 	// List items
-	items := f.activeItems()
+	items := f.filteredItems()
 	if len(items) == 0 {
 		emptyMsg := "No favorites yet. Press f to add favorites."
 		if f.activeTab == TabBlocklist {
 			emptyMsg = "No blocklisted songs. Press b to blocklist."
+		}
+		if isFiltered {
+			emptyMsg = "No matches for \"" + f.searchInput.Value() + "\""
 		}
 		b.WriteString("\n")
 		b.WriteString(centerStyled(mutedStyle.Render(emptyMsg), contentWidth))
@@ -254,13 +383,32 @@ func (f Favorites) View() string {
 	}
 	if f.activeTab == TabFavorites {
 		helpParts = append(helpParts, accentStyle.Render("enter")+mutedStyle.Render(" play"))
+		helpParts = append(helpParts, accentStyle.Render("e")+mutedStyle.Render(" enqueue"))
+		if f.isSearching {
+			helpParts = append(helpParts, accentStyle.Render("enter")+mutedStyle.Render(" apply"))
+		} else {
+			helpParts = append(helpParts, accentStyle.Render("/")+mutedStyle.Render(" search"))
+		}
 	}
 	helpParts = append(helpParts,
 		accentStyle.Render("tab")+mutedStyle.Render(" switch"),
+	)
+	if f.searchInput.Value() != "" && !f.isSearching {
+		helpParts = append(helpParts, accentStyle.Render("esc")+mutedStyle.Render(" clear filter"))
+	}
+	helpParts = append(helpParts,
 		accentStyle.Render("esc")+mutedStyle.Render(" close"),
 	)
 	helpText := strings.Join(helpParts, mutedStyle.Render("  "))
 	b.WriteString(centerStyled(helpText, contentWidth))
+
+	if f.toastMessage != "" {
+		toast := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(f.styles.Cursor)).
+			Render(f.toastMessage)
+		b.WriteString("\n")
+		b.WriteString(centerStyled(toast, contentWidth))
+	}
 
 	modalStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
