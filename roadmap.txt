@@ -20,16 +20,16 @@ search and play/enqueue favorites directly
 	add search to manage modal
 
 desktop notifications
-	notify-send?
+	what to use? notify-send?
 	albumart thumbnail on left
 	text on right
 		rptui - Radio Paradise
-		<station name> (full, not abbreviated)
 		<song>
 		<artist>
 		<album (year)>
+		<station name> (full, not abbreviated)
 		same colors as in app, if that's possible with notify-send or whatever	
-	at least 3 seconds, maybe 5, if that's also configurable	
+	show 5 seconds, if that's also configurable	
 
 cache for offline listening (good for flights, etc)
 	different than favorites, though jukebox mode can run offline (I think)

@@ -12,13 +12,15 @@ import (
 
 // OptionsMsg is sent when user applies options or closes the modal
 type OptionsMsg struct {
-	Station        *int
-	Bitrate        *int
-	ShowAlbumArt   *bool
-	ShowSkipWarn   *bool
-	CopyAlbumArt   *bool
-	VisualizerMode *string
-	Closed         bool
+	Station              *int
+	Bitrate              *int
+	ShowAlbumArt         *bool
+	ShowSkipWarn         *bool
+	CopyAlbumArt         *bool
+	NotificationsEnabled *bool
+	NotificationsShowArt *bool
+	VisualizerMode       *string
+	Closed               bool
 }
 
 // Option item types
@@ -28,6 +30,8 @@ const (
 	optShowAlbumArt
 	optShowSkipWarning
 	optCopyAlbumArt
+	optNotificationsEnabled
+	optNotificationsShowArt
 	optVisualizerMode
 	optCount // number of items
 )
@@ -44,20 +48,24 @@ type Options struct {
 	cursor int // which row is selected
 
 	// Current values (editable)
-	stationIdx   int // index into stationIDs
-	bitrateIdx   int // index into bitrateIDs
-	showAlbumArt bool
-	showSkipWarn bool
-	copyAlbumArt bool
-	visModeIdx   int // index into visualizer mode names
+	stationIdx           int // index into stationIDs
+	bitrateIdx           int // index into bitrateIDs
+	showAlbumArt         bool
+	showSkipWarn         bool
+	copyAlbumArt         bool
+	notificationsEnabled bool
+	notificationsShowArt bool
+	visModeIdx           int // index into visualizer mode names
 
 	// Original values for change detection
-	origStationIdx int
-	origBitrateIdx int
-	origAlbumArt   bool
-	origSkipWarn   bool
-	origCopyArt    bool
-	origVisModeIdx int
+	origStationIdx   int
+	origBitrateIdx   int
+	origAlbumArt     bool
+	origSkipWarn     bool
+	origCopyArt      bool
+	origNotifEnabled bool
+	origNotifShowArt bool
+	origVisModeIdx   int
 }
 
 // visualizerModeNames returns the display names of all visualizer modes.
@@ -66,7 +74,7 @@ func visualizerModeNames() []string {
 }
 
 // NewOptions creates a new Options modal
-func NewOptions(styles *config.ThemeStyles, currentStation, currentBitrate int, showAlbumArt, showSkipWarn, copyAlbumArt bool, visMode string) *Options {
+func NewOptions(styles *config.ThemeStyles, currentStation, currentBitrate int, showAlbumArt, showSkipWarn, copyAlbumArt, notificationsEnabled, notificationsShowArt bool, visMode string) *Options {
 	// Find index of current station in stationIDs
 	stationIdx := 0
 	for i, id := range stationIDs {
@@ -96,19 +104,23 @@ func NewOptions(styles *config.ThemeStyles, currentStation, currentBitrate int, 
 	}
 
 	return &Options{
-		styles:         styles,
-		stationIdx:     stationIdx,
-		bitrateIdx:     bitrateIdx,
-		showAlbumArt:   showAlbumArt,
-		showSkipWarn:   showSkipWarn,
-		copyAlbumArt:   copyAlbumArt,
-		visModeIdx:     visModeIdx,
-		origStationIdx: stationIdx,
-		origBitrateIdx: bitrateIdx,
-		origAlbumArt:   showAlbumArt,
-		origSkipWarn:   showSkipWarn,
-		origCopyArt:    copyAlbumArt,
-		origVisModeIdx: visModeIdx,
+		styles:               styles,
+		stationIdx:           stationIdx,
+		bitrateIdx:           bitrateIdx,
+		showAlbumArt:         showAlbumArt,
+		showSkipWarn:         showSkipWarn,
+		copyAlbumArt:         copyAlbumArt,
+		notificationsEnabled: notificationsEnabled,
+		notificationsShowArt: notificationsShowArt,
+		visModeIdx:           visModeIdx,
+		origStationIdx:       stationIdx,
+		origBitrateIdx:       bitrateIdx,
+		origAlbumArt:         showAlbumArt,
+		origSkipWarn:         showSkipWarn,
+		origCopyArt:          copyAlbumArt,
+		origNotifEnabled:     notificationsEnabled,
+		origNotifShowArt:     notificationsShowArt,
+		origVisModeIdx:       visModeIdx,
 	}
 }
 
@@ -149,6 +161,10 @@ func (o *Options) Update(msg tea.Msg) tea.Cmd {
 				o.showSkipWarn = !o.showSkipWarn
 			case optCopyAlbumArt:
 				o.copyAlbumArt = !o.copyAlbumArt
+			case optNotificationsEnabled:
+				o.notificationsEnabled = !o.notificationsEnabled
+			case optNotificationsShowArt:
+				o.notificationsShowArt = !o.notificationsShowArt
 			case optVisualizerMode:
 				o.cycleRight()
 			}
@@ -180,6 +196,10 @@ func (o *Options) cycleLeft() {
 		o.showSkipWarn = !o.showSkipWarn
 	case optCopyAlbumArt:
 		o.copyAlbumArt = !o.copyAlbumArt
+	case optNotificationsEnabled:
+		o.notificationsEnabled = !o.notificationsEnabled
+	case optNotificationsShowArt:
+		o.notificationsShowArt = !o.notificationsShowArt
 	case optVisualizerMode:
 		visNames := visualizerModeNames()
 		if o.visModeIdx > 0 {
@@ -210,6 +230,10 @@ func (o *Options) cycleRight() {
 		o.showSkipWarn = !o.showSkipWarn
 	case optCopyAlbumArt:
 		o.copyAlbumArt = !o.copyAlbumArt
+	case optNotificationsEnabled:
+		o.notificationsEnabled = !o.notificationsEnabled
+	case optNotificationsShowArt:
+		o.notificationsShowArt = !o.notificationsShowArt
 	case optVisualizerMode:
 		visNames := visualizerModeNames()
 		if o.visModeIdx < len(visNames)-1 {
@@ -227,9 +251,11 @@ func (o *Options) applyChanges() tea.Cmd {
 	albumArtChanged := o.showAlbumArt != o.origAlbumArt
 	skipWarnChanged := o.showSkipWarn != o.origSkipWarn
 	copyArtChanged := o.copyAlbumArt != o.origCopyArt
+	notifEnabledChanged := o.notificationsEnabled != o.origNotifEnabled
+	notifShowArtChanged := o.notificationsShowArt != o.origNotifShowArt
 	visModeChanged := o.visModeIdx != o.origVisModeIdx
 
-	if !stationChanged && !bitrateChanged && !albumArtChanged && !skipWarnChanged && !copyArtChanged && !visModeChanged {
+	if !stationChanged && !bitrateChanged && !albumArtChanged && !skipWarnChanged && !copyArtChanged && !notifEnabledChanged && !notifShowArtChanged && !visModeChanged {
 		return func() tea.Msg { return OptionsMsg{Closed: true} }
 	}
 
@@ -253,6 +279,14 @@ func (o *Options) applyChanges() tea.Cmd {
 	if copyArtChanged {
 		v := o.copyAlbumArt
 		msg.CopyAlbumArt = &v
+	}
+	if notifEnabledChanged {
+		v := o.notificationsEnabled
+		msg.NotificationsEnabled = &v
+	}
+	if notifShowArtChanged {
+		v := o.notificationsShowArt
+		msg.NotificationsShowArt = &v
 	}
 	if visModeChanged {
 		visNames := visualizerModeNames()
@@ -295,6 +329,8 @@ func (o Options) View() string {
 		{"Show album art", o.renderToggle(o.showAlbumArt, o.cursor == optShowAlbumArt)},
 		{"Show skip warning", o.renderToggle(o.showSkipWarn, o.cursor == optShowSkipWarning)},
 		{"Copy album art", o.renderToggle(o.copyAlbumArt, o.cursor == optCopyAlbumArt)},
+		{"Desktop notifications", o.renderToggle(o.notificationsEnabled, o.cursor == optNotificationsEnabled)},
+		{"  Show album art", o.renderToggle(o.notificationsShowArt, o.cursor == optNotificationsShowArt)},
 		{"Visualizer mode", o.renderPicker(visModeName, o.cursor == optVisualizerMode)},
 	}
 

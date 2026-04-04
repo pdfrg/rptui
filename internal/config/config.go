@@ -54,6 +54,10 @@ type Config struct {
 
 	// Visualizer settings
 	Visualizer VisualizerConfig `toml:"visualizer" comment:"audio visualizer settings"`
+
+	// Desktop notifications
+	NotificationsEnabled bool `toml:"notifications_enabled" comment:"show desktop notifications on song changes (default: false)"`
+	NotificationsShowArt bool `toml:"notifications_show_art" comment:"include album art thumbnail in notifications (default: true)"`
 }
 
 // LastFMConfig holds Last.fm scrobble settings
@@ -96,6 +100,8 @@ func DefaultConfig() *Config {
 			InfoDuration: 5,
 			RealAudio:    true,
 		},
+		NotificationsEnabled: false,
+		NotificationsShowArt: true,
 	}
 }
 

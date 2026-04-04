@@ -232,6 +232,9 @@ type Model struct {
 	// Terminal cell ratio for album art aspect ratio correction
 	cellRatio float64
 
+	// Notification tracking
+	notifSentForSong bool // true once desktop notification fired for current song
+
 	// Visualizer state
 	vis            *visualizer.Visualizer // visualizer engine
 	visFullscreen  bool                   // visualizer is in fullscreen mode
@@ -291,7 +294,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme) *Model {
 	playlistWidget := widgets.NewPlaylist(styles)
 
 	// Initialize modal widgets
-	optionsModal := modals.NewOptions(styles, cfg.Channel, cfg.Bitrate, cfg.ShowAlbumArt, cfg.ShowSkipWarning, cfg.CopyAlbumArt, cfg.Visualizer.Mode)
+	optionsModal := modals.NewOptions(styles, cfg.Channel, cfg.Bitrate, cfg.ShowAlbumArt, cfg.ShowSkipWarning, cfg.CopyAlbumArt, cfg.NotificationsEnabled, cfg.NotificationsShowArt, cfg.Visualizer.Mode)
 	skipWarningModal := modals.NewSkipWarning(styles, cfg.MinFavorites)
 
 	// Initialize viewport for bottom views
@@ -474,6 +477,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.CopyAlbumArt != nil {
 			m.config.CopyAlbumArt = *msg.CopyAlbumArt
 		}
+		if msg.NotificationsEnabled != nil {
+			m.config.NotificationsEnabled = *msg.NotificationsEnabled
+		}
+		if msg.NotificationsShowArt != nil {
+			m.config.NotificationsShowArt = *msg.NotificationsShowArt
+		}
 		if msg.VisualizerMode != nil {
 			m.config.Visualizer.Mode = *msg.VisualizerMode
 			if m.vis != nil {
@@ -634,6 +643,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 		}
+
+	case notificationSentMsg:
+		m.notifSentForSong = true
+		return m, nil
 
 	case visTickMsg:
 		if m.vis != nil && m.bottomViewMode == ViewVisualizer {
@@ -919,7 +932,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.visFullscreen {
 			return m, nil
 		}
-		m.optionsModal = modals.NewOptions(m.styles, m.config.Channel, m.config.Bitrate, m.config.ShowAlbumArt, m.config.ShowSkipWarning, m.config.CopyAlbumArt, m.config.Visualizer.Mode)
+		m.optionsModal = modals.NewOptions(m.styles, m.config.Channel, m.config.Bitrate, m.config.ShowAlbumArt, m.config.ShowSkipWarning, m.config.CopyAlbumArt, m.config.NotificationsEnabled, m.config.NotificationsShowArt, m.config.Visualizer.Mode)
 		m.activeModal = ModalOptions
 		return m, clearKittyImagesCmd()
 
@@ -1412,6 +1425,18 @@ func (m Model) handleConnRetryTick(msg connRetryTickMsg) (tea.Model, tea.Cmd) {
 	return m, m.fetchBlockCmd
 }
 
+// sendNotificationCmd returns a tea.Cmd that sends a desktop notification.
+// withImage controls whether to include the album art thumbnail.
+func (m *Model) sendNotificationCmd(withImage bool) tea.Cmd {
+	song := m.currentSong
+	stationName := config.StationNames[m.config.Channel]
+	cfg := m.config
+	return func() tea.Msg {
+		api.SendDesktopNotification(song, stationName, cfg, withImage)
+		return notificationSentMsg{}
+	}
+}
+
 // handleImageLoaded handles image loading completion
 func (m Model) handleImageLoaded(msg imageLoadedMsg) (tea.Model, tea.Cmd) {
 	// Discard stale result from a previous song
@@ -1420,6 +1445,10 @@ func (m Model) handleImageLoaded(msg imageLoadedMsg) (tea.Model, tea.Cmd) {
 	}
 	if msg.err != nil {
 		logger.Printf("Image load error: %v", msg.err)
+		// Send notification without image if not already sent
+		if m.config.NotificationsEnabled && !m.notifSentForSong {
+			return m, m.sendNotificationCmd(false)
+		}
 		return m, nil
 	}
 
@@ -1427,6 +1456,10 @@ func (m Model) handleImageLoaded(msg imageLoadedMsg) (tea.Model, tea.Cmd) {
 	img, format, err := image.Decode(bytes.NewReader(msg.imageData))
 	if err != nil {
 		logger.Printf("Image decode error: %v", err)
+		// Send notification without image if not already sent
+		if m.config.NotificationsEnabled && !m.notifSentForSong {
+			return m, m.sendNotificationCmd(false)
+		}
 		return m, nil
 	}
 
@@ -1437,6 +1470,11 @@ func (m Model) handleImageLoaded(msg imageLoadedMsg) (tea.Model, tea.Cmd) {
 		if err := os.WriteFile(m.config.AlbumArtPath, msg.imageData, 0644); err != nil {
 			logger.Printf("Warning: failed to copy album art to %s: %v", m.config.AlbumArtPath, err)
 		}
+	}
+
+	// Save album art for desktop notifications
+	if m.config.NotificationsEnabled && m.config.NotificationsShowArt {
+		api.SaveNotifyArt(msg.imageData)
 	}
 
 	// Clear go-termimg's global resize cache before rendering. The cache keys
@@ -1463,13 +1501,24 @@ func (m Model) handleImageLoaded(msg imageLoadedMsg) (tea.Model, tea.Cmd) {
 	rendered, err := tiImg.Render()
 	if err != nil {
 		logger.Printf("Album art render error: %v", err)
+		// Send notification without image if not already sent
+		if m.config.NotificationsEnabled && !m.notifSentForSong {
+			return m, m.sendNotificationCmd(false)
+		}
 		return m, nil
 	}
 
 	logger.Printf("Album art loaded for: %s (len=%d)", m.currentSong.Title, len(rendered))
 	m.albumArtStr = rendered
 	m.albumArtLoaded = true
-	return m, renderAlbumArtAfterDelay()
+
+	// Send desktop notification with album art
+	var cmds []tea.Cmd
+	if m.config.NotificationsEnabled && !m.notifSentForSong {
+		cmds = append(cmds, m.sendNotificationCmd(true))
+	}
+	cmds = append(cmds, renderAlbumArtAfterDelay())
+	return m, tea.Batch(cmds...)
 }
 
 // handleLyricsFetched handles lyrics fetch completion.
@@ -1854,6 +1903,7 @@ func (m *Model) songChangedCmds() tea.Cmd {
 	m.syncedLyrics = nil
 	m.albumArtStr = ""
 	m.albumArtLoaded = false
+	m.notifSentForSong = false
 	// Don't clear m.artistArtStr — keep displayed artist thumbnail
 	m.playbackPos = mpv.PlaybackPosition{}
 
@@ -1938,6 +1988,10 @@ func (m *Model) songChangedCmds() tea.Cmd {
 		cmds = append(cmds, m.loadImageCmd(m.currentSong.CoverLarge))
 	} else {
 		logger.Printf("No album art URL for song: %s", m.currentSong.Title)
+		// No art URL — send notification without image if enabled
+		if m.config.NotificationsEnabled && !m.notifSentForSong {
+			cmds = append(cmds, m.sendNotificationCmd(false))
+		}
 	}
 
 	// Always fetch lyrics and artist info (not gated on album art)
