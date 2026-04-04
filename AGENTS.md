@@ -16,6 +16,9 @@ copied directly to this repo.  Much of other code should be easily adapted.
 **Source Repository:** `/home/mds/Projects/rptui-go/` (Go, tview framerwork, no image support)  
 **Target Repository:** `/home/mds/Projects/rptui-bubbletea/` (Go, active development)
 
+Current bubbletea implementation now far surpasses old Python and tview based code.  No need to
+reference old python and tview code for new features or routine fixes.
+
 ---
 
 ## Key documentation sources for reference
@@ -39,27 +42,7 @@ Read source files directly at ~/go/pkg/mod/ to understand behavior!
   READ THAT AGAIN:  ONLY WHEN MANUALLY TESTED AND CONFIRMED WORKING!!!
 - **Commit message format:** `feat: description` or `fix: description` or `refactor: description`
 
-
-### Python Code Reference
-
-**CRITICAL GUIDELINE:** When implementing any feature or fixing any issue, ALWAYS:
-
-1. **First check the Python and Go tview implementation** in Source Respositories above.
-2. **Understand the logic** - how it handles edge cases, timing, state management
-3. **Replicate the behavior** in Go unless there's a compelling reason to differ
-4. **If proposing a different approach**, document:
-   - Python and tview-based approach and why it works
-   - Proposed bubbletea approach and why it's better
-   - Trade-offs of each approach
-   - Recommendation with justification
-
-**Example:** For progress updates, the Python app:
-- Updates progress bar/time every 1 second via `set_interval(1.0, self.update_progress)`
-- Polls for next block every 5 seconds via `set_interval(5.0, self.poll_wrapper)`
-- Detects natural song transitions via MPV playlist position polling
-- Updates all UI elements when song changes
-
-The bubbletea implementation should mirror this timing and logic unless a better pattern is identified.
+---
 
 ### Debugging with Bash Commands
 
@@ -336,5 +319,5 @@ If uncertain about implementation details:
 
 ## Known bugs/Roadmap
 
-user generated text file: fixes.txt
+user generated text files: fixes.txt, roadmap.txt
 OK to edit to keep up to date

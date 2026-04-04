@@ -14,11 +14,6 @@ crossfade on station changes, jukebox mode
 			however, since we aren't playing back in the same order, they won't match
 			some type of crossfade should make this less apparent
 
-search and play/enqueue favorites directly
-	play is working through options modal
-	add enqueue option
-	add search to manage modal
-
 cache for offline listening (good for flights, etc)
 	different than favorites, though jukebox mode can run offline (I think)
 	possibly just launch from cli without running full tui
@@ -31,24 +26,33 @@ cache for offline listening (good for flights, etc)
 		would need a cache manager
 			could just add to manage modal with faves and blocklist items
 		give hint as to how much disk space used per hour for each quality
+			AAC 64k 128k 320k should be able to calculate easily
+			do FLAC bitrates vary?  can use examples in ~/.cache/rptui/favorites
+				ZZ Top song is 4:37, Pearl Jam 4:15
+		should be able to save and play multiple saves
+			grab a 2h block of main mix, and a 2h block of rock mix
 
 implement command line switches (override config file)
 	already  have --lastfm-auth
-	size small (no album art, no playlist -- like toggle "v" to off) -s s or -s small
-	size medium (no playlist) -s m or -s medium
-	size large (default, show all) -s l or -s large
+	size small (no album art, no playlist -- like toggle "v" to off) -s small or --size small
+	size medium (no playlist)
+	size large (default, show all)
 	size narrow (like medium, but albumart on top, like mobile apps)
 	if run from launcher, can we open terminal of just that size?
 	if run from within terminal, no resize
+	I can do manual tests, changing display and manually resizing terminal, then check terminal size
 
-favorites "jukebox" mode -- queue all faves random and play, at end repeat all
+favorites "jukebox" mode -- queue all faves random and play, at end optionally shuffle all and repeat
 	--jukebox or -j
 	no API queries
-	jukebox_min_faves = 50 (setting in config file, not editable from app)
+	[jukebox]
+	min_faves = 20 (setting in config file, not editable from app)
+	repeat = false (whether to reshuffle and repeat)
 	also add "j" hotkey for "Juke"
 		clears playlist, enters jukebox mode just like from command line
+		press "j" again to exit jukebox mode, clear playlist, start in normal mode
 	need to decide how to handle playlist
-		add all to playlist, but would then have to scroll
-		add a given number of songs, then when near end, add more, prune as needed, similar to normal mode
+		add all to playlist, but would then have to scroll the playlist view?
+		add a given number of songs, then when near end, add more, prune as needed, similar to normal mode?
 	would need to show status jukebox mode or similar. is there a jukebox emoji?
-
+	if total favorites > jukebox.min_faves then print status "Save <min_faves> to enable jukebox mode"
