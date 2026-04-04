@@ -46,7 +46,7 @@ func NewFooter(accentStyle, mutedStyle lipgloss.Style) *Footer {
 			{Key: "c", Icon: "", Label: "Copy"},
 			{Key: "o", Icon: "", Label: "Opt"},
 			{Key: "m", Icon: "", Label: "Manage"},
-			{Key: "$", Icon: "", Label: "Support RP"},
+			{Key: "$", Icon: "", Label: "Support"},
 			{Key: "q", Icon: "", Label: "Quit"},
 		},
 		jukeKeys: []KeyBinding{
@@ -58,7 +58,7 @@ func NewFooter(accentStyle, mutedStyle lipgloss.Style) *Footer {
 			{Key: "v", Icon: "", Label: "View"},
 			{Key: "c", Icon: "", Label: "Copy"},
 			{Key: "o", Icon: "", Label: "Opt"},
-			{Key: "$", Icon: "", Label: "Support RP"},
+			{Key: "$", Icon: "", Label: "Support"},
 			{Key: "J", Icon: "", Label: "Normal"},
 			{Key: "q", Icon: "", Label: "Quit"},
 		},

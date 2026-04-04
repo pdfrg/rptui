@@ -795,10 +795,22 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				m.currentSongIndex++
 				if m.jukeboxMode {
 					m.jukeboxPlayed++
+					m.checkJukeboxRefill()
 				}
 				return m, m.songChangedCmds()
 			}
 		} else {
+			// In jukebox mode, try refilling before giving up
+			if m.jukeboxMode {
+				m.checkJukeboxRefill()
+				if len(m.songs) > m.currentSongIndex+1 {
+					if err := m.mpvBackend.SkipNext(); err == nil {
+						m.currentSongIndex++
+						m.jukeboxPlayed++
+						return m, m.songChangedCmds()
+					}
+				}
+			}
 			return m, setStatus(&m, "No more songs in block", false)
 		}
 		return m, nil
@@ -1269,6 +1281,7 @@ func (m Model) toggleJukeboxMode() (tea.Model, tea.Cmd) {
 
 // exitJukeboxMode stops jukebox mode and clears playlist
 func (m Model) exitJukeboxMode() (tea.Model, tea.Cmd) {
+	logger.Printf("DEBUG: exitJukeboxMode called, setting initialized=false")
 	m.mpvBackend.Stop()
 
 	m.songs = nil
@@ -1295,6 +1308,7 @@ func (m Model) exitJukeboxMode() (tea.Model, tea.Cmd) {
 	m.connState = ""
 	m.consecutiveFailures = 0
 	m.retryInterval = 0
+	m.playbackPos = mpv.PlaybackPosition{}
 
 	m.jukeboxMode = false
 	m.jukeboxQueue = nil
@@ -1307,6 +1321,7 @@ func (m Model) exitJukeboxMode() (tea.Model, tea.Cmd) {
 	m.mpvBackend.SetVolume(100.0)
 
 	return m, tea.Batch(
+		tickProgressCmd(),
 		clearKittyImagesCmd(),
 		setStatus(&m, "Jukebox mode off", false),
 		m.fetchBlockCmd,
@@ -1356,25 +1371,26 @@ func (m Model) startJukeboxPlayback() (tea.Model, tea.Cmd) {
 }
 
 // refillJukeboxBatch appends the next batch of songs to the MPV playlist
+// and prunes old songs from the front to keep the playlist manageable
 func (m *Model) refillJukeboxBatch() {
 	if len(m.jukeboxQueue) == 0 {
 		return
 	}
 
-	batchSize := m.jukeboxBatchSize
-	if batchSize > len(m.jukeboxQueue) {
-		batchSize = len(m.jukeboxQueue)
+	addCount := 5
+	if addCount > len(m.jukeboxQueue) {
+		addCount = len(m.jukeboxQueue)
 	}
 
-	urls := make([]string, batchSize)
-	songs := make([]*models.Song, batchSize)
-	for i := 0; i < batchSize; i++ {
+	urls := make([]string, addCount)
+	songs := make([]*models.Song, addCount)
+	for i := 0; i < addCount; i++ {
 		cs := m.jukeboxQueue[i]
 		urls[i] = cs.AudioPath
 		songs[i] = cs.ToSong()
 	}
 
-	m.jukeboxQueue = m.jukeboxQueue[batchSize:]
+	m.jukeboxQueue = m.jukeboxQueue[addCount:]
 
 	if err := m.mpvBackend.AppendToPlaylist(urls); err != nil {
 		logger.Printf("Failed to append jukebox batch: %v", err)
@@ -1383,7 +1399,19 @@ func (m *Model) refillJukeboxBatch() {
 
 	m.songs = append(m.songs, songs...)
 
-	logger.Printf("Jukebox: refilled %d songs, %d remaining", batchSize, len(m.jukeboxQueue))
+	// Prune played songs from the front to keep playlist at ~10 items
+	pruneCount := addCount
+	if pruneCount > m.currentSongIndex {
+		pruneCount = m.currentSongIndex
+	}
+	if pruneCount > 0 {
+		m.songs = m.songs[pruneCount:]
+		m.currentSongIndex -= pruneCount
+		m.playlistStartIdx -= pruneCount
+		logger.Printf("Jukebox: pruned %d songs from front", pruneCount)
+	}
+
+	logger.Printf("Jukebox: added %d songs, playlist now %d, %d remaining in queue", addCount, len(m.songs), len(m.jukeboxQueue))
 }
 
 // reshuffleJukebox reshuffles all favorites for repeat mode
@@ -1410,9 +1438,9 @@ func (m *Model) checkJukeboxRefill() tea.Cmd {
 		return nil
 	}
 
-	// Count how many songs are left in the MPV playlist from our current batch
+	// Refill when 2 or fewer songs remain in the playlist
 	remainingInPlaylist := len(m.songs) - 1 - m.currentSongIndex
-	if remainingInPlaylist < m.jukeboxBatchSize/2 {
+	if remainingInPlaylist <= 2 {
 		m.refillJukeboxBatch()
 		m.updatePlaylist()
 	}
@@ -1565,7 +1593,7 @@ func (m Model) handleBlockFetched(msg blockFetchedMsg) (tea.Model, tea.Cmd) {
 
 		if mpvWasStopped {
 			// MPV has stopped - restart with new block
-			logger.Printf("MPV stopped, restarting playback with new block")
+			logger.Printf("DEBUG: handleBlockFetched mpvWasStopped path, setting initialized=true")
 			m.currentSongIndex = len(m.songs) // will point to first new song
 			m.songs = append(m.songs, msg.songs...)
 			m.playlistStartIdx = m.currentSongIndex
@@ -1574,6 +1602,8 @@ func (m Model) handleBlockFetched(msg blockFetchedMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.isPlaying = true
+			m.initialized = true
+			m.connectedAt = time.Now()
 		} else {
 			// MPV still running - append to playlist
 			if err := m.mpvBackend.AppendToPlaylist(urls); err != nil {
@@ -1606,6 +1636,7 @@ func (m Model) handleBlockFetched(msg blockFetchedMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// First load (not initialized yet) — start MPV
+	logger.Printf("DEBUG: handleBlockFetched first load path, initialized=%v", m.initialized)
 	urls := make([]string, len(msg.songs))
 	for i, song := range msg.songs {
 		urls[i] = song.GaplessURL
@@ -1639,8 +1670,8 @@ func (m Model) handleProgressTick(msg progressTickMsg) (tea.Model, tea.Cmd) {
 	// Get playback position from MPV and store in model (avoid IPC in View)
 	pos, err := m.mpvBackend.GetPlaybackPosition()
 	if err != nil {
-		// MPV has stopped - if on last song, enable polling
-		if m.currentSongIndex >= len(m.songs)-1 {
+		// MPV has stopped - if on last song, enable polling (skip in jukebox mode)
+		if !m.jukeboxMode && m.currentSongIndex >= len(m.songs)-1 {
 			if !m.pollingNextBlock {
 				logger.Printf("Playback stopped at end of playlist, enabling polling")
 				m.pollingNextBlock = true
@@ -1708,7 +1739,6 @@ func (m Model) handleProgressTick(msg progressTickMsg) (tea.Model, tea.Cmd) {
 
 	// Jukebox mode: handle end of playlist
 	if m.jukeboxMode && !m.mpvBackend.IsRunning() && !m.mpvBackend.IsPaused() && m.currentSongIndex >= len(m.songs)-1 {
-		m.jukeboxPlayed = len(m.songs)
 		if len(m.jukeboxQueue) > 0 || m.config.Jukebox.Repeat {
 			// More songs available or repeat enabled - refill and continue
 			if len(m.jukeboxQueue) == 0 && m.config.Jukebox.Repeat {
@@ -1720,7 +1750,8 @@ func (m Model) handleProgressTick(msg progressTickMsg) (tea.Model, tea.Cmd) {
 			}
 		} else {
 			// No more songs and repeat disabled
-			return m, setStatus(&m, fmt.Sprintf("Jukebox complete: played %d songs", m.jukeboxTotal), false)
+			cmds = append(cmds, setStatus(&m, fmt.Sprintf("Jukebox complete: played %d songs", m.jukeboxTotal), false))
+			return m, tea.Batch(cmds...)
 		}
 	}
 
@@ -1756,8 +1787,8 @@ func (m Model) handleProgressTick(msg progressTickMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// MPV stopped on last song - ensure polling is active and start spinner
-	if !m.mpvBackend.IsRunning() && !m.mpvBackend.IsPaused() && m.currentSongIndex >= len(m.songs)-1 {
+	// MPV stopped on last song - ensure polling is active and start spinner (skip in jukebox mode)
+	if !m.jukeboxMode && !m.mpvBackend.IsRunning() && !m.mpvBackend.IsPaused() && m.currentSongIndex >= len(m.songs)-1 {
 		if !m.pollingNextBlock {
 			logger.Printf("MPV stopped on last song, enabling polling")
 			m.pollingNextBlock = true
@@ -2979,6 +3010,9 @@ func (m Model) View() tea.View {
 	// Visualizer renders now that we know the available height
 	var bottomSection string
 	if m.bottomViewMode == ViewPlaylist {
+		if remainingHeight > 0 {
+			m.playlistWidget.SetSize(m.width, remainingHeight)
+		}
 		bottomSection = m.playlistWidget.View()
 	} else if m.bottomViewMode == ViewVisualizer && m.vis != nil {
 		m.vis.SetRows(max(3, remainingHeight))
