@@ -298,7 +298,8 @@ func (f Favorites) View() string {
 		stats := mutedStyle.Render(fmt.Sprintf("%d of %d favorites", len(filtered), len(f.favorites)))
 		b.WriteString(centerStyled(stats, contentWidth))
 	} else {
-		stats := mutedStyle.Render(fmt.Sprintf("%d favorites  %d blocklisted", len(f.favorites), len(f.blocklist)))
+		diskSpace := f.cacheManager.GetFavoritesDiskSpace()
+		stats := mutedStyle.Render(fmt.Sprintf("%d favorites  %d blocklisted  %s disk", len(f.favorites), len(f.blocklist), diskSpace))
 		b.WriteString(centerStyled(stats, contentWidth))
 	}
 	b.WriteString("\n\n")
