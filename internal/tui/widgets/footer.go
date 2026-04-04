@@ -59,7 +59,7 @@ func NewFooter(accentStyle, mutedStyle lipgloss.Style) *Footer {
 			{Key: "c", Icon: "", Label: "Copy"},
 			{Key: "o", Icon: "", Label: "Opt"},
 			{Key: "$", Icon: "", Label: "Support RP"},
-			{Key: "J", Icon: "", Label: "Exit Jukebox"},
+			{Key: "J", Icon: "", Label: "Normal"},
 			{Key: "q", Icon: "", Label: "Quit"},
 		},
 		stationKeys: []KeyBinding{
@@ -155,19 +155,18 @@ func (h Footer) View() string {
 
 	stationLine := renderLine(h.stationKeys)
 	controlsLine := renderLine(h.keys)
+
 	if h.jukeboxMode {
-		controlsLine = renderLine(h.jukeKeys)
-		return controlsLine + "\n"
+		jukeLine := renderLine(h.jukeKeys)
+		if ind := h.scrobbleIndicator(); ind != "" {
+			jukeLine += "  " + ind
+		}
+		return "\n" + jukeLine
 	}
 
-	// Append scrobble indicator to the right of controls line
-	if ind := h.scrobbleIndicator(); ind != "" && h.width > 0 {
-		lineWidth := lipgloss.Width(controlsLine)
-		indWidth := lipgloss.Width(ind)
-		space := h.width - lineWidth - indWidth - 1
-		if space > 0 {
-			controlsLine += strings.Repeat(" ", space) + ind
-		}
+	// Append scrobble indicator right after station line in normal mode
+	if ind := h.scrobbleIndicator(); ind != "" {
+		stationLine += "  " + ind
 	}
 
 	return stationLine + "\n" + controlsLine
