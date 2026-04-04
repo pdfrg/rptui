@@ -332,6 +332,32 @@ func (c *CacheManager) GetBlocklistCount() (int, error) {
 	return len(c.blocklist), nil
 }
 
+// GetFavoritesDiskSpace calculates total disk space used by favorites
+func (c *CacheManager) GetFavoritesDiskSpace() string {
+	var total int64
+	entries, err := os.ReadDir(c.favoritesDir)
+	if err != nil {
+		return "?"
+	}
+	for _, entry := range entries {
+		if entry.Type().IsRegular() {
+			info, err := entry.Info()
+			if err != nil {
+				continue
+			}
+			total += info.Size()
+		}
+	}
+	if total < 1024 {
+		return fmt.Sprintf("%d B", total)
+	} else if total < 1024*1024 {
+		return fmt.Sprintf("%.1f KB", float64(total)/1024)
+	} else if total < 1024*1024*1024 {
+		return fmt.Sprintf("%.1f MB", float64(total)/(1024*1024))
+	}
+	return fmt.Sprintf("%.2f GB", float64(total)/(1024*1024*1024))
+}
+
 // GetFavoriteByEventID returns a favorite song by event ID
 func (c *CacheManager) GetFavoriteByEventID(eventID int64) (*CachedSong, error) {
 	c.mu.RLock()
