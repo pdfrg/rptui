@@ -92,6 +92,9 @@ type scrobbleResultMsg struct {
 // visTickMsg is sent every 50ms to update the visualizer animation
 type visTickMsg time.Time
 
+// notificationSentMsg is sent when a desktop notification has been dispatched
+type notificationSentMsg struct{}
+
 // Command functions
 
 // renderAlbumArtAfterDelay returns a command that triggers album art re-render
