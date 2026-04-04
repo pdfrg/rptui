@@ -217,6 +217,10 @@ type Model struct {
 	// Modal state
 	activeModal int
 
+	// Favorite download tracking
+	downloadResults chan favoriteDownloadMsg
+	downloadingFav  int64 // eventID of song currently being downloaded (0 = none)
+
 	// Initialization complete
 	initialized bool
 
@@ -340,6 +344,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme) *Model {
 		help:              help,
 		spinner:           sp,
 		cellRatio:         cellRatio,
+		downloadResults:   make(chan favoriteDownloadMsg, 1),
 	}
 }
 
@@ -350,6 +355,7 @@ func (m Model) Init() tea.Cmd {
 		tickProgressCmd(),
 		tickPollCmd(),
 		tea.RequestBackgroundColor,
+		m.downloadResultsCmd(),
 	}
 	if m.themeWatcher != nil {
 		cmds = append(cmds, watchThemeCmd(m.themeWatcher))
@@ -374,16 +380,13 @@ func (m Model) fetchBlockCmd() tea.Msg {
 	if block.BlockID != "" {
 		fmt.Sscanf(block.BlockID, "%d", &blockID)
 	}
+	return blockFetchedMsg{songs: songs, imageBase: imageBase, blockID: blockID}
+}
 
-	// Stamp each song with its block ID for pruning decisions
-	for i := range songs {
-		songs[i].BlockID = int64(blockID)
-	}
-
-	return blockFetchedMsg{
-		songs:     songs,
-		imageBase: imageBase,
-		blockID:   blockID,
+// downloadResultsCmd returns a persistent command that reads from the download results channel.
+func (m Model) downloadResultsCmd() tea.Cmd {
+	return func() tea.Msg {
+		return <-m.downloadResults
 	}
 }
 
@@ -644,6 +647,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+	case favoriteDownloadMsg:
+		m.downloadingFav = 0
+		m.updatePlaylist()
+		if msg.success {
+			return m, setStatus(&m, "Added to favorites", false)
+		}
+		return m, setStatus(&m, "Failed to download favorite", true)
+
 	case notificationSentMsg:
 		m.notifSentForSong = true
 		return m, nil
@@ -701,6 +712,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, watchThemeCmd(m.themeWatcher)
 	}
 
+	cmds = append(cmds, m.downloadResultsCmd())
 	return m, tea.Batch(cmds...)
 }
 
@@ -708,6 +720,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "q", "ctrl+c":
+		// Wait for in-progress favorite downloads
+		m.cacheManager.WaitForDownloads(60 * time.Second)
 		// Scrobble current song if eligible before quitting
 		if m.currentSong != nil && m.scrobbleEligible && m.scrobbler.Enabled() {
 			go m.scrobbler.Scrobble(context.Background(), *m.currentSong, m.songStartTime)
@@ -888,23 +902,26 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case "f":
 		// Toggle favorite
-		var statusCmd tea.Cmd
 		if m.currentSong != nil {
-			fileExt := m.rpAPI.GetFileExtension()
-			added, audioPath, err := m.cacheManager.ToggleFavorite(m.currentSong, fileExt)
-			if err == nil {
-				if added {
-					statusCmd = setStatus(&m, "Added to favorites", false)
-					if audioPath != "" {
-						m.cacheManager.DownloadFavorite(audioPath, m.currentSong.GaplessURL, m.currentSong.EventID)
-					}
-				} else {
-					statusCmd = setStatus(&m, "Removed from favorites", false)
+			if m.cacheManager.IsFavorite(m.currentSong) {
+				// Remove favorite
+				if err := m.cacheManager.RemoveFavorite(m.currentSong.EventID); err == nil {
+					m.updatePlaylist()
+					return m, setStatus(&m, "Removed from favorites", false)
 				}
+			} else if m.downloadingFav == m.currentSong.EventID {
+				return m, setStatus(&m, "Already downloading favorite", false)
+			} else {
+				// Start download
+				m.downloadingFav = m.currentSong.EventID
 				m.updatePlaylist()
+				return m, tea.Batch(
+					setStatus(&m, "Downloading favorite...", false),
+					favoriteDownloadCmd(m.cacheManager, m.currentSong, m.rpAPI.GetFileExtension(), m.downloadResults),
+				)
 			}
 		}
-		return m, statusCmd
+		return m, nil
 
 	case "b":
 		// Toggle blocklist
@@ -1678,7 +1695,9 @@ func (m *Model) updatePlaylist() {
 	rows := make([]table.Row, len(m.songs))
 	for i, song := range m.songs {
 		prefix := ""
-		if m.cacheManager.IsFavorite(song) {
+		if song.EventID == m.downloadingFav {
+			prefix = "⏳ "
+		} else if m.cacheManager.IsFavorite(song) {
 			prefix = "⭐ "
 		} else if m.cacheManager.IsBlocked(song) {
 			prefix = "🚫 "

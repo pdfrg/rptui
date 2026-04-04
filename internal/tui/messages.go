@@ -9,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"rptui-bubbletea/internal/api"
+	"rptui-bubbletea/internal/cache"
 	"rptui-bubbletea/internal/config"
 	"rptui-bubbletea/internal/models"
 )
@@ -95,6 +96,11 @@ type visTickMsg time.Time
 
 // notificationSentMsg is sent when a desktop notification has been dispatched
 type notificationSentMsg struct{}
+
+// favoriteDownloadMsg is sent when a favorite audio download completes
+type favoriteDownloadMsg struct {
+	success bool
+}
 
 // Command functions
 
@@ -206,6 +212,16 @@ func copyToClipboardCmd(song *models.Song) tea.Cmd {
 			}
 		}
 
+		return nil
+	}
+}
+
+// favoriteDownloadCmd starts a favorite download and returns a command
+func favoriteDownloadCmd(cmgr *cache.CacheManager, song *models.Song, fileExt string, results chan<- favoriteDownloadMsg) tea.Cmd {
+	return func() tea.Msg {
+		cmgr.StartFavoriteDownload(song, fileExt, func(success bool) {
+			results <- favoriteDownloadMsg{success: success}
+		})
 		return nil
 	}
 }

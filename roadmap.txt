@@ -52,8 +52,3 @@ favorites "jukebox" mode -- queue all faves random and play, at end repeat all
 		add a given number of songs, then when near end, add more, prune as needed, similar to normal mode
 	would need to show status jukebox mode or similar. is there a jukebox emoji?
 
-copy current artist - album (year) - song to clipboard
-	hotkey ideas?
-		"y" to yank
-		"c" to copy
-		
