@@ -4,6 +4,7 @@ package tui
 import (
 	"context"
 	"os/exec"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -181,5 +182,30 @@ func scrobbleCmd(scrobbler *api.Scrobbler, song models.Song, startTime time.Time
 	return func() tea.Msg {
 		results := scrobbler.ScrobbleWithResult(context.Background(), song, startTime)
 		return scrobbleResultMsg{results: results}
+	}
+}
+
+// copyToClipboardCmd copies formatted song info to the system clipboard.
+// It tries wl-copy (Wayland), xclip/xsel (X11), then pbcopy (macOS) in order.
+func copyToClipboardCmd(song *models.Song) tea.Cmd {
+	return func() tea.Msg {
+		info := song.FormatDisplayInfo()
+
+		clipboardCmds := [][]string{
+			{"wl-copy"},
+			{"xclip", "-selection", "clipboard"},
+			{"xsel", "--clipboard", "--input"},
+			{"pbcopy"},
+		}
+
+		for _, args := range clipboardCmds {
+			cmd := exec.Command(args[0], args[1:]...)
+			cmd.Stdin = strings.NewReader(info)
+			if err := cmd.Run(); err == nil {
+				return nil
+			}
+		}
+
+		return nil
 	}
 }
