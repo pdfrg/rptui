@@ -4,6 +4,7 @@ package tui
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"image"
 	_ "image/jpeg"
@@ -13,6 +14,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -252,6 +254,14 @@ type Model struct {
 	jukeboxTotal     int                // total songs in this jukebox session
 	jukeboxBatchSize int                // how many songs to queue at once
 	crossfading      bool               // whether currently doing a crossfade volume ramp
+
+	// Offline mode
+	offlineMode    bool               // whether offline mode is active
+	offlineCache   string             // name of the offline cache being played
+	offlineSongs   []cache.CachedSong // all songs in the offline cache
+	offlineIndex   int                // current position in offlineSongs
+	offlineStation int                // station from cache config
+	offlineBitrate int                // bitrate from cache config
 }
 
 // NewModel creates a new TUI model
@@ -290,6 +300,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool) *
 		cfg.GetBlocklistDir(),
 		cfg.MaxFavorites,
 	)
+	cacheManager.SetOfflineDir(filepath.Join(filepath.Dir(cfg.GetFavoritesDir()), "offline"))
 	scrobbler := api.NewScrobbler(cfg)
 	if scrobbler.Enabled() {
 		logger.Printf("Scrobble enabled: %v", scrobbler.ServiceNames())
@@ -358,6 +369,133 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool) *
 	}
 }
 
+// NewOfflineModel creates a new TUI model for offline playback
+func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache.CachedSong, cacheName string) *Model {
+	styles := config.NewThemeStyles(theme)
+
+	themeWatcher := config.NewThemeWatcher(cfg.ColorsFile)
+	if err := themeWatcher.Start(); err != nil {
+		logger.Printf("Warning: failed to start theme watcher: %v", err)
+	}
+
+	// Initialize terminal cell ratio for album art
+	features := termimg.QueryTerminalFeatures()
+	cellRatio := float64(features.FontHeight) / float64(features.FontWidth)
+	if cellRatio <= 0 {
+		cellRatio = 2.0
+	}
+
+	// Initialize API clients (lyrics, artist info still available for lookups)
+	rpAPI := api.NewRadioParadiseAPI(cfg.Channel, cfg.Bitrate)
+	lyricsClient := api.NewLRCLibClient()
+	wikipediaClient := api.NewWikipediaClient()
+	discogsClient := api.NewDiscogsClient(cfg.DiscogsToken, cfg.DiscogsKey, cfg.DiscogsSecret)
+	musicbrainzClient := api.NewMusicBrainzClient()
+	theaudiodbClient := api.NewTheAudioDBClient()
+	mpvBackend := mpv.NewMPVBackend()
+	cacheManager := cache.NewCacheManager(
+		cfg.GetFavoritesDir(),
+		cfg.GetBlocklistDir(),
+		cfg.MaxFavorites,
+	)
+	cacheManager.SetOfflineDir(filepath.Join(filepath.Dir(cfg.GetFavoritesDir()), "offline"))
+	scrobbler := api.NewScrobbler(cfg)
+	if err := cacheManager.EnsureDirectories(); err != nil {
+		logger.Printf("Warning: failed to create cache directories: %v", err)
+	}
+
+	// Initialize custom widgets
+	headerWidget := widgets.NewHeader(styles.Header, "rptui - Radio Paradise (Offline)")
+	footerWidget := widgets.NewFooter(styles.AccentStyle, styles.MutedStyle)
+	footerWidget.SetScrobbleServices(scrobbler.ServiceNames())
+	nowPlayingWidget := widgets.NewNowPlaying(styles.ForegroundStyle, styles.AccentStyle, styles.MutedStyle, theme.Accent, theme.Cursor, theme.Background)
+	playlistWidget := widgets.NewPlaylist(styles)
+
+	// Initialize modal widgets
+	optionsModal := modals.NewOptions(styles, cfg.Channel, cfg.Bitrate, cfg.ShowAlbumArt, cfg.ShowSkipWarning, cfg.CopyAlbumArt, cfg.NotificationsEnabled, cfg.NotificationsShowArt, cfg.Visualizer.Mode)
+	skipWarningModal := modals.NewSkipWarning(styles, cfg.MinFavorites)
+
+	// Initialize viewport for bottom views
+	viewport := viewport.New(
+		viewport.WithWidth(100),
+		viewport.WithHeight(15),
+	)
+	viewport.SoftWrap = true
+	viewport.Style = lipgloss.NewStyle().
+		Background(lipgloss.Color(theme.Background)).
+		Foreground(lipgloss.Color(theme.Foreground))
+
+	// Initialize help
+	help := help.New()
+
+	// Initialize spinner
+	sp := spinner.New()
+	sp.Spinner = spinner.Points
+	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Accent))
+
+	// Convert CachedSong to models.Song for playlist display
+	var modelSongs []*models.Song
+	for _, cs := range songs {
+		s := cs.ToSong()
+		modelSongs = append(modelSongs, s)
+	}
+
+	// Read cache config for station/bitrate display
+	offlineStation := cfg.Channel
+	offlineBitrate := cfg.Bitrate
+	if len(songs) > 0 {
+		// Try to read from config.json in cache directory
+		offlineDir := filepath.Join(filepath.Dir(cfg.GetFavoritesDir()), "offline", cacheName)
+		configPath := filepath.Join(offlineDir, "config.json")
+		if data, err := os.ReadFile(configPath); err == nil {
+			var cacheConfig struct {
+				Station int `json:"station"`
+				Bitrate int `json:"bitrate"`
+			}
+			if err := json.Unmarshal(data, &cacheConfig); err == nil {
+				offlineStation = cacheConfig.Station
+				offlineBitrate = cacheConfig.Bitrate
+			}
+		}
+	}
+
+	return &Model{
+		config:            cfg,
+		theme:             theme,
+		styles:            styles,
+		themeWatcher:      themeWatcher,
+		rpAPI:             rpAPI,
+		lyricsClient:      lyricsClient,
+		wikipediaClient:   wikipediaClient,
+		discogsClient:     discogsClient,
+		musicbrainzClient: musicbrainzClient,
+		theaudiodbClient:  theaudiodbClient,
+		mpvBackend:        mpvBackend,
+		cacheManager:      cacheManager,
+		scrobbler:         scrobbler,
+		bottomViewMode:    ViewPlaylist,
+		headerWidget:      headerWidget,
+		footerWidget:      footerWidget,
+		nowPlayingWidget:  nowPlayingWidget,
+		playlistWidget:    playlistWidget,
+		optionsModal:      optionsModal,
+		skipWarningModal:  skipWarningModal,
+		viewport:          viewport,
+		help:              help,
+		spinner:           sp,
+		cellRatio:         cellRatio,
+		downloadResults:   make(chan favoriteDownloadMsg, 1),
+		offlineMode:       true,
+		offlineCache:      cacheName,
+		offlineSongs:      songs,
+		offlineIndex:      0,
+		offlineStation:    offlineStation,
+		offlineBitrate:    offlineBitrate,
+		songs:             modelSongs,
+		currentSongIndex:  0,
+	}
+}
+
 // Init initializes the TUI model
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{
@@ -373,6 +511,8 @@ func (m Model) Init() tea.Cmd {
 	// In jukebox mode, trigger jukebox start instead of fetching API block
 	if m.jukeboxMode {
 		cmds = append(cmds, startJukeboxCmd())
+	} else if m.offlineMode {
+		cmds = append(cmds, startOfflineCmd())
 	} else {
 		cmds = append(cmds, m.fetchBlockCmd)
 	}
@@ -632,6 +772,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case jukeboxStartMsg:
 		return handle(m.handleJukeboxStart())
+
+	case offlineStartMsg:
+		return handle(m.handleOfflineStart())
 
 	case progressTickMsg:
 		return handle(m.handleProgressTick(msg))
@@ -1003,7 +1146,10 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, statusCmd
 
 	case "0", "1", "2", "3", "5":
-		// Station hotkeys
+		// Station hotkeys — disabled in offline and jukebox mode
+		if m.offlineMode || m.jukeboxMode {
+			return m, nil
+		}
 		station := int(msg.String()[0] - '0')
 		return m.switchStation(station)
 
@@ -1158,6 +1304,48 @@ func (m Model) handleJukeboxStart() (tea.Model, tea.Cmd) {
 	logger.Printf("Jukebox mode: %d songs loaded", len(shuffled))
 
 	return m.startJukeboxPlayback()
+}
+
+// handleOfflineStart initializes offline playback
+func (m Model) handleOfflineStart() (tea.Model, tea.Cmd) {
+	if len(m.offlineSongs) == 0 {
+		return m, setStatus(&m, "No songs in offline cache", true)
+	}
+
+	// Build initial playlist (batch of songs, like jukebox)
+	batchSize := 10
+	if len(m.offlineSongs) < batchSize {
+		batchSize = len(m.offlineSongs)
+	}
+
+	var urls []string
+	var batchSongs []*models.Song
+	for i := 0; i < batchSize; i++ {
+		cs := m.offlineSongs[i]
+		s := cs.ToSong()
+		urls = append(urls, cs.AudioPath)
+		batchSongs = append(batchSongs, s)
+	}
+
+	m.songs = batchSongs
+	m.currentSongIndex = 0
+	m.playlistStartIdx = 0
+	m.connectedAt = time.Now()
+	m.isPlaying = true
+	m.initialized = true
+
+	logger.Printf("Offline mode: %d songs loaded from cache '%s'", len(m.offlineSongs), m.offlineCache)
+
+	m.mpvBackend.Start(urls)
+	m.updatePlaylist()
+
+	logger.Printf("Offline mode: %d songs loaded from cache '%s'", len(m.offlineSongs), m.offlineCache)
+
+	return m, tea.Batch(
+		setStatus(&m, fmt.Sprintf("Offline: %s", m.offlineCache), false),
+		tickProgressCmd(),
+		m.songChangedCmds(),
+	)
 }
 
 // toggleJukeboxMode enters or exits jukebox mode
@@ -1463,10 +1651,58 @@ func (m *Model) fadeVolumeIn(target float64, durationSecs float64) {
 	}
 }
 
+// checkOfflineRefill checks if we need to add more songs from the offline cache
+func (m *Model) checkOfflineRefill() tea.Cmd {
+	if !m.offlineMode {
+		return nil
+	}
+
+	// Calculate next index to add
+	nextIdx := len(m.songs)
+	if nextIdx >= len(m.offlineSongs) {
+		return nil // All songs already in playlist
+	}
+
+	// Refill when 2 or fewer songs remain in the playlist
+	remainingInPlaylist := len(m.songs) - 1 - m.currentSongIndex
+	if remainingInPlaylist <= 2 {
+		m.refillOfflineBatch()
+		m.updatePlaylist()
+	}
+	return nil
+}
+
+// refillOfflineBatch adds the next batch of songs from the offline cache to MPV's playlist
+func (m *Model) refillOfflineBatch() {
+	batchSize := 5
+	nextIdx := len(m.songs)
+
+	// Determine how many songs to add
+	addCount := batchSize
+	if nextIdx+addCount > len(m.offlineSongs) {
+		addCount = len(m.offlineSongs) - nextIdx
+	}
+
+	if addCount <= 0 {
+		return
+	}
+
+	var urls []string
+	for i := 0; i < addCount; i++ {
+		cs := m.offlineSongs[nextIdx+i]
+		urls = append(urls, cs.AudioPath)
+		s := cs.ToSong()
+		m.songs = append(m.songs, s)
+	}
+
+	m.mpvBackend.AppendToPlaylist(urls)
+	logger.Printf("Offline refill: added %d songs", addCount)
+}
+
 // handleBlockFetched handles the block fetched message
 func (m Model) handleBlockFetched(msg blockFetchedMsg) (tea.Model, tea.Cmd) {
-	// No-op in jukebox mode
-	if m.jukeboxMode {
+	// No-op in jukebox or offline mode
+	if m.jukeboxMode || m.offlineMode {
 		return m, nil
 	}
 
@@ -1707,6 +1943,11 @@ func (m Model) handleProgressTick(msg progressTickMsg) (tea.Model, tea.Cmd) {
 					m.mpvBackend.SkipNext()
 				} else {
 					// Last song is blocked
+					if m.offlineMode {
+						// In offline mode, just skip to end
+						cmds = append(cmds, setStatus(&m, "Last song is blocklisted", false))
+						return m, tea.Batch(cmds...)
+					}
 					favCount, _ := m.cacheManager.GetFavoriteCount()
 					if favCount >= m.config.MinFavorites {
 						// Queue a favorite and skip to it
@@ -1733,6 +1974,10 @@ func (m Model) handleProgressTick(msg progressTickMsg) (tea.Model, tea.Cmd) {
 				m.jukeboxPlayed++
 				m.checkJukeboxRefill()
 			}
+			// In offline mode, refill from sequential queue
+			if m.offlineMode {
+				m.checkOfflineRefill()
+			}
 			cmds = append(cmds, m.songChangedCmds())
 		}
 	}
@@ -1751,6 +1996,19 @@ func (m Model) handleProgressTick(msg progressTickMsg) (tea.Model, tea.Cmd) {
 		} else {
 			// No more songs and repeat disabled
 			cmds = append(cmds, setStatus(&m, fmt.Sprintf("Jukebox complete: played %d songs", m.jukeboxTotal), false))
+			return m, tea.Batch(cmds...)
+		}
+	}
+
+	// Offline mode: handle end of playlist
+	if m.offlineMode && !m.mpvBackend.IsRunning() && !m.mpvBackend.IsPaused() && m.currentSongIndex >= len(m.songs)-1 {
+		if len(m.songs) < len(m.offlineSongs) {
+			// More songs in cache - refill
+			m.refillOfflineBatch()
+			m.updatePlaylist()
+		} else {
+			// All songs played
+			cmds = append(cmds, setStatus(&m, fmt.Sprintf("Offline cache complete: %d songs", len(m.offlineSongs)), false))
 			return m, tea.Batch(cmds...)
 		}
 	}
@@ -1777,8 +2035,8 @@ func (m Model) handleProgressTick(msg progressTickMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Start polling when on last song with ≤2 min remaining (skip in jukebox mode)
-	if !m.jukeboxMode && !m.pollingNextBlock && m.currentSongIndex >= len(m.songs)-1 && m.currentSong != nil && err == nil {
+	// Start polling when on last song with ≤2 min remaining (skip in jukebox and offline mode)
+	if !m.jukeboxMode && !m.offlineMode && !m.pollingNextBlock && m.currentSongIndex >= len(m.songs)-1 && m.currentSong != nil && err == nil {
 		songDuration := float64(m.currentSong.Duration) / 1000.0
 		timeRemaining := songDuration - m.playbackPos.TimePos
 		if timeRemaining <= 120 && timeRemaining > 0 {
@@ -1787,8 +2045,8 @@ func (m Model) handleProgressTick(msg progressTickMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// MPV stopped on last song - ensure polling is active and start spinner (skip in jukebox mode)
-	if !m.jukeboxMode && !m.mpvBackend.IsRunning() && !m.mpvBackend.IsPaused() && m.currentSongIndex >= len(m.songs)-1 {
+	// MPV stopped on last song - ensure polling is active and start spinner (skip in jukebox and offline mode)
+	if !m.jukeboxMode && !m.offlineMode && !m.mpvBackend.IsRunning() && !m.mpvBackend.IsPaused() && m.currentSongIndex >= len(m.songs)-1 {
 		if !m.pollingNextBlock {
 			logger.Printf("MPV stopped on last song, enabling polling")
 			m.pollingNextBlock = true
@@ -1796,9 +2054,11 @@ func (m Model) handleProgressTick(msg progressTickMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Check if we should auto-queue a favorite
-	if cmd := m.checkAndQueueFavorite(); cmd != nil {
-		cmds = append(cmds, cmd)
+	// Check if we should auto-queue a favorite (skip in offline mode)
+	if !m.offlineMode {
+		if cmd := m.checkAndQueueFavorite(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	}
 
 	// Update synced lyrics position if in that view
@@ -2180,7 +2440,9 @@ func (m *Model) updateBottomView() {
 
 	switch m.bottomViewMode {
 	case ViewLyrics:
-		if m.lyrics == "" {
+		if m.offlineMode {
+			content = "  Lyrics not available in offline mode"
+		} else if m.lyrics == "" {
 			content = "  Loading lyrics..."
 		} else {
 			content = indentLines(m.lyrics, "  ") + strings.Repeat("\n", 10)
@@ -2190,7 +2452,9 @@ func (m *Model) updateBottomView() {
 		}
 
 	case ViewSyncedLyrics:
-		if len(m.syncedLyrics) == 0 {
+		if m.offlineMode {
+			content = "  Synced lyrics not available in offline mode"
+		} else if len(m.syncedLyrics) == 0 {
 			content = "  No synced lyrics available\n  Synced lyrics require duration matching ±2s. Radio edits reduce match chances."
 		} else {
 			// Use cached playback position (updated every tick)
@@ -2226,70 +2490,74 @@ func (m *Model) updateBottomView() {
 		}
 
 	case ViewArtist:
-		// Narrow viewport width when artist image is displayed beside it
-		if m.artistArtLoaded && m.artistArtStr != "" {
-			imgGap := m.artistArtWidth + 5 // image width + margin
-			newWidth := m.width - imgGap
-			if newWidth < 30 {
-				newWidth = 30
-			}
-			m.viewport.SetWidth(newWidth)
+		if m.offlineMode {
+			content = "  Artist info not available in offline mode"
 		} else {
-			m.viewport.SetWidth(m.width)
-		}
+			// Narrow viewport width when artist image is displayed beside it
+			if m.artistArtLoaded && m.artistArtStr != "" {
+				imgGap := m.artistArtWidth + 5
+				newWidth := m.width - imgGap
+				if newWidth < 30 {
+					newWidth = 30
+				}
+				m.viewport.SetWidth(newWidth)
+			} else {
+				m.viewport.SetWidth(m.width)
+			}
 
-		if m.artistInfo == nil {
-			// Indent when no artist image (viewport not right-shifted)
-			indent := ""
-			if !(m.artistArtLoaded && m.artistArtStr != "") {
-				indent = "  "
-			}
-			if m.artistStatus != "" {
-				content = indent + m.spinner.View() + " " + m.artistStatus
-			} else {
-				content = indent + "Loading artist info..."
-			}
-		} else {
-			// Indent when no artist image (viewport not right-shifted)
-			indent := ""
-			if !(m.artistArtLoaded && m.artistArtStr != "") {
-				indent = "  "
-			}
-			var lines []string
-			if m.artistInfo.Bio != "" {
-				lines = append(lines, indent+m.artistInfo.Bio)
-				if m.artistInfo.BioSource != "" {
-					lines = append(lines, indent+"Source: "+m.artistInfo.BioSource)
+			if m.artistInfo == nil {
+				// Indent when no artist image (viewport not right-shifted)
+				indent := ""
+				if !(m.artistArtLoaded && m.artistArtStr != "") {
+					indent = "  "
+				}
+				if m.artistStatus != "" {
+					content = indent + m.spinner.View() + " " + m.artistStatus
+				} else {
+					content = indent + "Loading artist info..."
 				}
 			} else {
-				lines = append(lines, indent+"No biography available.")
-			}
-			if m.artistInfo.Discography != "" {
-				lines = append(lines, "")
-				lines = append(lines, indent+"Studio Albums:")
-				discoLines := strings.Split(m.artistInfo.Discography, "\n")
-				for _, line := range discoLines {
-					lines = append(lines, indent+"  "+line)
+				// Indent when no artist image (viewport not right-shifted)
+				indent := ""
+				if !(m.artistArtLoaded && m.artistArtStr != "") {
+					indent = "  "
 				}
-				if m.artistInfo.DiscoSource != "" {
-					lines = append(lines, indent+"Source: "+m.artistInfo.DiscoSource)
+				var lines []string
+				if m.artistInfo.Bio != "" {
+					lines = append(lines, indent+m.artistInfo.Bio)
+					if m.artistInfo.BioSource != "" {
+						lines = append(lines, indent+"Source: "+m.artistInfo.BioSource)
+					}
+				} else {
+					lines = append(lines, indent+"No biography available.")
 				}
+				if m.artistInfo.Discography != "" {
+					lines = append(lines, "")
+					lines = append(lines, indent+"Studio Albums:")
+					discoLines := strings.Split(m.artistInfo.Discography, "\n")
+					for _, line := range discoLines {
+						lines = append(lines, indent+"  "+line)
+					}
+					if m.artistInfo.DiscoSource != "" {
+						lines = append(lines, indent+"Source: "+m.artistInfo.DiscoSource)
+					}
+				}
+				if m.artistInfo.ThumbSource != "" {
+					lines = append(lines, "")
+					lines = append(lines, indent+"thumb: "+m.artistInfo.ThumbSource)
+				}
+				if len(m.artistInfo.GalleryURLs) > 0 {
+					lines = append(lines, "")
+					count := len(m.artistInfo.GalleryURLs)
+					lines = append(lines, indent+fmt.Sprintf("(press 'i' for %d additional artist images)", count))
+				}
+				if m.hasPendingUpdate() {
+					lines = append(lines, "")
+					lines = append(lines, "(press 'u' to update)")
+				}
+				// Pad with many newlines so viewport scrolls to blank space at bottom
+				content = strings.Join(lines, "\n") + strings.Repeat("\n", 10)
 			}
-			if m.artistInfo.ThumbSource != "" {
-				lines = append(lines, "")
-				lines = append(lines, indent+"thumb: "+m.artistInfo.ThumbSource)
-			}
-			if len(m.artistInfo.GalleryURLs) > 0 {
-				lines = append(lines, "")
-				count := len(m.artistInfo.GalleryURLs)
-				lines = append(lines, indent+fmt.Sprintf("(press 'i' for %d additional artist images)", count))
-			}
-			if m.hasPendingUpdate() {
-				lines = append(lines, "")
-				lines = append(lines, "(press 'u' to update)")
-			}
-			// Pad with many newlines so viewport scrolls to blank space at bottom
-			content = strings.Join(lines, "\n") + strings.Repeat("\n", 10)
 		}
 
 	case ViewPlaylist:
@@ -2434,9 +2702,11 @@ func (m *Model) songChangedCmds() tea.Cmd {
 		}
 	}
 
-	// Always fetch lyrics and artist info (not gated on album art)
-	cmds = append(cmds, m.fetchLyricsCmd())
-	cmds = append(cmds, m.fetchArtistCmd())
+	// Fetch lyrics and artist info (skip in offline mode - no API lookups)
+	if !m.offlineMode {
+		cmds = append(cmds, m.fetchLyricsCmd())
+		cmds = append(cmds, m.fetchArtistCmd())
+	}
 
 	return tea.Batch(cmds...)
 }
@@ -2724,30 +2994,39 @@ func (m Model) fetchArtistCmd() tea.Cmd {
 	}
 }
 
-// loadImageCmd loads an image from URL
-func (m Model) loadImageCmd(url string) tea.Cmd {
+// loadImageCmd loads an image from URL or local file path
+func (m Model) loadImageCmd(path string) tea.Cmd {
 	if m.currentSong == nil {
 		return nil
 	}
 
-	eventID := m.currentSong.EventID // capture for closure
-	songTitle := m.currentSong.Title // capture for logging
+	eventID := m.currentSong.EventID
+	songTitle := m.currentSong.Title
 	return func() tea.Msg {
-		logger.Printf("Fetching album art: %s for %s", url, songTitle)
-		resp, err := http.Get(url)
-		if err != nil {
-			logger.Printf("Album art fetch error: %v", err)
-			return imageLoadedMsg{eventID: eventID, err: err}
-		}
-		defer resp.Body.Close()
+		var data []byte
+		var err error
 
-		data, err := io.ReadAll(resp.Body)
+		// Check if it's a local file path
+		if _, fileErr := os.Stat(path); fileErr == nil {
+			logger.Printf("Loading album art from file: %s for %s", path, songTitle)
+			data, err = os.ReadFile(path)
+		} else {
+			logger.Printf("Fetching album art: %s for %s", path, songTitle)
+			resp, httpErr := http.Get(path)
+			if httpErr != nil {
+				logger.Printf("Album art fetch error: %v", httpErr)
+				return imageLoadedMsg{eventID: eventID, err: httpErr}
+			}
+			defer resp.Body.Close()
+			data, err = io.ReadAll(resp.Body)
+		}
+
 		if err != nil {
 			logger.Printf("Album art read error: %v", err)
 			return imageLoadedMsg{eventID: eventID, err: err}
 		}
 
-		logger.Printf("Album art fetched: %s, %d bytes", songTitle, len(data))
+		logger.Printf("Album art loaded: %s, %d bytes", songTitle, len(data))
 		return imageLoadedMsg{
 			eventID:   eventID,
 			imageData: data,
@@ -2962,6 +3241,20 @@ func (m Model) View() tea.View {
 	// 2. Main Content (Now Playing + Album Art)
 	// Use cached playback position (updated every tick, no IPC here)
 
+	// Determine display info based on mode
+	offlineCacheInfo := ""
+	if m.offlineMode {
+		stationName := config.StationNames[m.offlineStation]
+		if stationName == "" {
+			stationName = fmt.Sprintf("Station %d", m.offlineStation)
+		}
+		bitrateName := config.BitrateNames[m.offlineBitrate]
+		if bitrateName == "" {
+			bitrateName = fmt.Sprintf("Bitrate %d", m.offlineBitrate)
+		}
+		offlineCacheInfo = fmt.Sprintf("%s • %s", stationName, bitrateName)
+	}
+
 	// Now-playing always gets full width
 	m.nowPlayingWidget.SetWidth(m.width - 4)
 
@@ -2972,7 +3265,7 @@ func (m Model) View() tea.View {
 		m.connectedAt,
 		m.config.GetDisplayInfo(),
 		m.getFavoriteCount(),
-		m.cacheManager.IsFavorite(m.currentSong),
+		m.currentSong != nil && m.cacheManager.IsFavorite(m.currentSong),
 		m.getSkipsAvailable(),
 		m.getPrevAvailable(),
 		m.statusMsg,
@@ -2983,6 +3276,8 @@ func (m Model) View() tea.View {
 		m.jukeboxMode,
 		m.jukeboxPlayed,
 		m.jukeboxTotal,
+		m.offlineMode,
+		offlineCacheInfo,
 	)
 
 	var b strings.Builder
@@ -2991,9 +3286,9 @@ func (m Model) View() tea.View {
 	// Now-playing info
 	b.WriteString(nowPlayingView + "\n\n")
 
-	// Show spinner animation when waiting for new songs AND MPV has stopped (Python line 3242-3244)
+	// Show spinner animation when waiting for new songs AND MPV has stopped
 	// Only show when truly at end of content, not while still playing and polling for next block
-	if m.pollingNextBlock && !m.mpvBackend.IsRunning() {
+	if m.pollingNextBlock && !m.mpvBackend.IsRunning() && !m.jukeboxMode && !m.offlineMode {
 		b.WriteString(m.styles.MutedStyle.Render("Ahead of livestream. Awaiting new songs"+m.spinner.View()+" ") + "\n")
 	}
 
@@ -3062,6 +3357,7 @@ func (m Model) View() tea.View {
 	}
 	m.footerWidget.SetFlashState(m.scrobbleFlashState)
 	m.footerWidget.SetJukeboxMode(m.jukeboxMode)
+	m.footerWidget.SetOfflineMode(m.offlineMode, m.offlineCache)
 	footer := m.footerWidget.View()
 
 	b.WriteString(footer)

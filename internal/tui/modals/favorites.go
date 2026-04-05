@@ -25,6 +25,7 @@ type FavoritesMsg struct {
 const (
 	TabFavorites = iota
 	TabBlocklist
+	TabOffline
 )
 
 // Favorites modal for managing favorites and blocklist
@@ -36,6 +37,8 @@ type Favorites struct {
 	scrollOffset int
 	favorites    []cache.CachedSong
 	blocklist    []cache.CachedSong
+	offlineDir   string
+	offlineList  []cache.CacheEntry
 	termWidth    int
 	termHeight   int
 	searchInput  textinput.Model
@@ -51,6 +54,7 @@ func NewFavorites(styles *config.ThemeStyles, cacheManager *cache.CacheManager, 
 		termWidth:    termWidth,
 		termHeight:   termHeight,
 		searchInput:  textinput.New(),
+		offlineDir:   cacheManager.GetOfflineDir(),
 	}
 	f.searchInput.Placeholder = "Search favorites..."
 	f.searchInput.CharLimit = 64
@@ -73,6 +77,9 @@ func (f *Favorites) loadData() {
 			return strings.Compare(strings.ToLower(a.Title), strings.ToLower(b.Title))
 		})
 	}
+	if f.offlineDir != "" {
+		f.offlineList, _ = cache.ListCaches(f.offlineDir)
+	}
 }
 
 func (f *Favorites) activeItems() []cache.CachedSong {
@@ -80,6 +87,13 @@ func (f *Favorites) activeItems() []cache.CachedSong {
 		return f.favorites
 	}
 	return f.blocklist
+}
+
+func (f *Favorites) activeOfflineItems() []cache.CacheEntry {
+	if f.activeTab == TabOffline {
+		return f.offlineList
+	}
+	return nil
 }
 
 func (f *Favorites) filteredItems() []cache.CachedSong {
@@ -152,8 +166,11 @@ func (f *Favorites) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		f.toastMessage = ""
-		items := f.filteredItems()
 		visible := f.visibleRows()
+
+		// Use offline list or regular items depending on tab
+		offlineItems := f.activeOfflineItems()
+		items := f.filteredItems()
 
 		switch msg.String() {
 		case "esc", "q":
@@ -166,7 +183,7 @@ func (f *Favorites) Update(msg tea.Msg) tea.Cmd {
 			return func() tea.Msg { return FavoritesMsg{Closed: true} }
 
 		case "tab":
-			f.activeTab = (f.activeTab + 1) % 2
+			f.activeTab = (f.activeTab + 1) % 3
 			f.cursor = 0
 			f.scrollOffset = 0
 			return nil
@@ -183,7 +200,14 @@ func (f *Favorites) Update(msg tea.Msg) tea.Cmd {
 			return nil
 
 		case "up", "k":
-			if f.cursor > 0 {
+			if f.activeTab == TabOffline {
+				if f.cursor > 0 {
+					f.cursor--
+					if f.cursor < f.scrollOffset {
+						f.scrollOffset = f.cursor
+					}
+				}
+			} else if f.cursor > 0 {
 				f.cursor--
 				if f.cursor < f.scrollOffset {
 					f.scrollOffset = f.cursor
@@ -191,7 +215,14 @@ func (f *Favorites) Update(msg tea.Msg) tea.Cmd {
 			}
 
 		case "down", "j":
-			if f.cursor < len(items)-1 {
+			if f.activeTab == TabOffline {
+				if f.cursor < len(offlineItems)-1 {
+					f.cursor++
+					if f.cursor >= f.scrollOffset+visible {
+						f.scrollOffset = f.cursor - visible + 1
+					}
+				}
+			} else if f.cursor < len(items)-1 {
 				f.cursor++
 				if f.cursor >= f.scrollOffset+visible {
 					f.scrollOffset = f.cursor - visible + 1
@@ -199,7 +230,17 @@ func (f *Favorites) Update(msg tea.Msg) tea.Cmd {
 			}
 
 		case "d", "delete", "x":
-			if len(items) > 0 && f.cursor < len(items) {
+			if f.activeTab == TabOffline {
+				// Delete offline cache
+				if len(f.offlineList) > 0 && f.cursor < len(f.offlineList) {
+					entry := f.offlineList[f.cursor]
+					cache.DeleteCache(f.offlineDir, entry.Name)
+					f.loadData()
+					if f.cursor >= len(f.offlineList) && f.cursor > 0 {
+						f.cursor--
+					}
+				}
+			} else if len(items) > 0 && f.cursor < len(items) {
 				item := items[f.cursor]
 				if f.activeTab == TabFavorites {
 					f.cacheManager.RemoveFavorite(item.EventID)
@@ -282,12 +323,15 @@ func (f Favorites) View() string {
 	// Tabs
 	favLabel := mutedStyle.Render("Favorites")
 	blockLabel := mutedStyle.Render("Blocklist")
+	offlineLabel := mutedStyle.Render("Offline")
 	if f.activeTab == TabFavorites {
 		favLabel = cursorStyle.Render("▸ Favorites")
-	} else {
+	} else if f.activeTab == TabBlocklist {
 		blockLabel = cursorStyle.Render("▸ Blocklist")
+	} else {
+		offlineLabel = cursorStyle.Render("▸ Offline")
 	}
-	tabs := favLabel + mutedStyle.Render("  │  ") + blockLabel
+	tabs := favLabel + mutedStyle.Render("  │  ") + blockLabel + mutedStyle.Render("  │  ") + offlineLabel
 	b.WriteString(centerStyled(tabs, contentWidth))
 	b.WriteString("\n")
 
@@ -296,6 +340,13 @@ func (f Favorites) View() string {
 	if isFiltered {
 		filtered := f.filteredItems()
 		stats := mutedStyle.Render(fmt.Sprintf("%d of %d favorites", len(filtered), len(f.favorites)))
+		b.WriteString(centerStyled(stats, contentWidth))
+	} else if f.activeTab == TabOffline {
+		var totalSize int64
+		for _, entry := range f.offlineList {
+			totalSize += entry.SizeBytes
+		}
+		stats := mutedStyle.Render(fmt.Sprintf("%d offline caches  %s total", len(f.offlineList), formatBytes(totalSize)))
 		b.WriteString(centerStyled(stats, contentWidth))
 	} else {
 		diskSpace := f.cacheManager.GetFavoritesDiskSpace()
@@ -320,15 +371,86 @@ func (f Favorites) View() string {
 	headerStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(f.styles.Muted)).
 		Bold(true)
-	header := headerStyle.Render(fmt.Sprintf("  %-*s %-*s %-*s", songCol, "Song", artistCol, "Artist", albumCol, "Album"))
-	b.WriteString(header)
+
+	if f.activeTab == TabOffline {
+		offlineCol1 := contentWidth * 25 / 100
+		offlineCol2 := contentWidth * 15 / 100
+		offlineCol3 := contentWidth * 15 / 100
+		offlineCol4 := contentWidth * 15 / 100
+		offlineCol5 := contentWidth * 15 / 100
+		header := headerStyle.Render(fmt.Sprintf("  %-*s %-*s %-*s %-*s %-*s", offlineCol1, "Cache", offlineCol2, "Station", offlineCol3, "Bitrate", offlineCol4, "Duration", offlineCol5, "Size"))
+		b.WriteString(header)
+	} else {
+		header := headerStyle.Render(fmt.Sprintf("  %-*s %-*s %-*s", songCol, "Song", artistCol, "Artist", albumCol, "Album"))
+		b.WriteString(header)
+	}
 	b.WriteString("\n")
 	b.WriteString(mutedStyle.Render(strings.Repeat("─", contentWidth)))
 	b.WriteString("\n")
 
 	// List items
 	items := f.filteredItems()
-	if len(items) == 0 {
+	if f.activeTab == TabOffline {
+		// Render offline cache list
+		if len(f.offlineList) == 0 {
+			b.WriteString("\n")
+			b.WriteString(centerStyled(mutedStyle.Render("No offline caches. Use --cache to record."), contentWidth))
+			b.WriteString("\n")
+			for i := 0; i < visibleRows-2; i++ {
+				b.WriteString("\n")
+			}
+		} else {
+			offlineCol1 := contentWidth * 25 / 100
+			offlineCol2 := contentWidth * 15 / 100
+			offlineCol3 := contentWidth * 15 / 100
+			offlineCol4 := contentWidth * 15 / 100
+			offlineCol5 := contentWidth * 15 / 100
+
+			end := f.scrollOffset + visibleRows
+			if end > len(f.offlineList) {
+				end = len(f.offlineList)
+			}
+			for i := f.scrollOffset; i < end; i++ {
+				entry := f.offlineList[i]
+				stationName := config.StationNames[entry.Station]
+				if stationName == "" {
+					stationName = fmt.Sprintf("Station %d", entry.Station)
+				}
+				bitrateName := config.BitrateNames[entry.Bitrate]
+				if bitrateName == "" {
+					bitrateName = fmt.Sprintf("%d", entry.Bitrate)
+				}
+				dateStr := entry.CreatedAt.Format("2006-01-02")
+				row := fmt.Sprintf("%-*s %-*s %-*s %-*s %-*s",
+					offlineCol1, dateStr,
+					offlineCol2, stationName,
+					offlineCol3, bitrateName,
+					offlineCol4, cache.FormatDuration(int64(entry.ActualSeconds)),
+					offlineCol5, formatBytes(entry.SizeBytes),
+				)
+
+				if i == f.cursor {
+					prefix := cursorStyle.Render("▸ ")
+					line := lipgloss.NewStyle().
+						Foreground(lipgloss.Color(f.styles.Foreground)).
+						Render(row)
+					b.WriteString(prefix + line)
+				} else {
+					b.WriteString("  " + mutedStyle.Render(row))
+				}
+				b.WriteString("\n")
+			}
+			for i := end - f.scrollOffset; i < visibleRows; i++ {
+				b.WriteString("\n")
+			}
+
+			// Scroll indicator
+			if len(f.offlineList) > visibleRows {
+				scrollInfo := mutedStyle.Render(fmt.Sprintf("  %d-%d of %d", f.scrollOffset+1, min(f.scrollOffset+visibleRows, len(f.offlineList)), len(f.offlineList)))
+				b.WriteString(scrollInfo)
+			}
+		}
+	} else if len(items) == 0 {
 		emptyMsg := "No favorites yet. Press f to add favorites."
 		if f.activeTab == TabBlocklist {
 			emptyMsg = "No blocklisted songs. Press b to blocklist."
@@ -370,8 +492,8 @@ func (f Favorites) View() string {
 		}
 	}
 
-	// Scroll indicator
-	if len(items) > visibleRows {
+	// Scroll indicator (skip for offline - already handled above)
+	if f.activeTab != TabOffline && len(items) > visibleRows {
 		scrollInfo := mutedStyle.Render(fmt.Sprintf("  %d-%d of %d", f.scrollOffset+1, min(f.scrollOffset+visibleRows, len(items)), len(items)))
 		b.WriteString(scrollInfo)
 	}
@@ -429,4 +551,16 @@ func truncate(s string, maxLen int) string {
 		return "…"
 	}
 	return s[:maxLen-1] + "…"
+}
+
+// formatBytes formats bytes into human-readable string
+func formatBytes(b int64) string {
+	if b < 1024 {
+		return fmt.Sprintf("%d B", b)
+	} else if b < 1024*1024 {
+		return fmt.Sprintf("%.1f KB", float64(b)/1024)
+	} else if b < 1024*1024*1024 {
+		return fmt.Sprintf("%.1f MB", float64(b)/(1024*1024))
+	}
+	return fmt.Sprintf("%.2f GB", float64(b)/(1024*1024*1024))
 }

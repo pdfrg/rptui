@@ -105,6 +105,9 @@ type favoriteDownloadMsg struct {
 // jukeboxStartMsg is sent to trigger jukebox playback initialization
 type jukeboxStartMsg struct{}
 
+// offlineStartMsg is sent to trigger offline playback initialization
+type offlineStartMsg struct{}
+
 // Command functions
 
 // renderAlbumArtAfterDelay returns a command that triggers album art re-render
@@ -233,5 +236,12 @@ func favoriteDownloadCmd(cmgr *cache.CacheManager, song *models.Song, fileExt st
 func startJukeboxCmd() tea.Cmd {
 	return func() tea.Msg {
 		return jukeboxStartMsg{}
+	}
+}
+
+// startOfflineCmd returns a command that triggers offline initialization
+func startOfflineCmd() tea.Cmd {
+	return func() tea.Msg {
+		return offlineStartMsg{}
 	}
 }

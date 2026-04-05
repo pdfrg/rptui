@@ -1,4 +1,4 @@
-// Package cache manages favorites and blocklist storage
+// Package cache manages favorites, blocklist, and offline cache storage
 package cache
 
 import (
@@ -26,18 +26,19 @@ func init() {
 
 // CachedSong represents a song stored in cache
 type CachedSong struct {
-	EventID        int64  `json:"event_id"`
-	Title          string `json:"title"`
-	Artist         string `json:"artist"`
-	Album          string `json:"album"`
-	Year           string `json:"year"`
-	Duration       int64  `json:"duration"`
-	GaplessURL     string `json:"gapless_url"`
-	CoverLarge     string `json:"cover_large"`
-	Rating         string `json:"rating"`
-	ListenerRating string `json:"listener_rating"`
-	AudioPath      string `json:"audio_path,omitempty"` // Local file path for downloaded audio
-	AddedAt        int64  `json:"added_at"`             // Unix timestamp
+	EventID         int64  `json:"event_id"`
+	Title           string `json:"title"`
+	Artist          string `json:"artist"`
+	Album           string `json:"album"`
+	Year            string `json:"year"`
+	Duration        int64  `json:"duration"`
+	GaplessURL      string `json:"gapless_url"`
+	CoverLarge      string `json:"cover_large"`
+	Rating          string `json:"rating"`
+	ListenerRating  string `json:"listener_rating"`
+	AudioPath       string `json:"audio_path,omitempty"`
+	SchedTimeMillis int64  `json:"sched_time_millis,omitempty"`
+	AddedAt         int64  `json:"added_at"`
 }
 
 // UnmarshalJSON implements custom JSON unmarshaling to handle string event_id
@@ -66,11 +67,12 @@ func (cs *CachedSong) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// CacheManager manages both favorites and blocklist
+// CacheManager manages favorites, blocklist, and offline caches
 type CacheManager struct {
 	mu           sync.RWMutex
 	favoritesDir string
 	blocklistDir string
+	offlineDir   string
 	maxFavorites int
 	favorites    []CachedSong
 	blocklist    []CachedSong
@@ -87,6 +89,16 @@ func NewCacheManager(favoritesDir, blocklistDir string, maxFavorites int) *Cache
 	}
 }
 
+// SetOfflineDir sets the offline cache directory
+func (c *CacheManager) SetOfflineDir(dir string) {
+	c.offlineDir = dir
+}
+
+// GetOfflineDir returns the offline cache directory
+func (c *CacheManager) GetOfflineDir() string {
+	return c.offlineDir
+}
+
 // EnsureDirectories creates the cache directories and loads metadata
 func (c *CacheManager) EnsureDirectories() error {
 	if err := os.MkdirAll(c.favoritesDir, 0755); err != nil {
@@ -94,6 +106,11 @@ func (c *CacheManager) EnsureDirectories() error {
 	}
 	if err := os.MkdirAll(c.blocklistDir, 0755); err != nil {
 		return fmt.Errorf("failed to create blocklist directory: %w", err)
+	}
+	if c.offlineDir != "" {
+		if err := os.MkdirAll(c.offlineDir, 0755); err != nil {
+			return fmt.Errorf("failed to create offline directory: %w", err)
+		}
 	}
 
 	// Clean up orphaned .tmp files from crashed/interrupted downloads
@@ -178,7 +195,6 @@ func (c *CacheManager) AddFavorite(song *models.Song, fileExt string) (string, e
 
 	// Enforce max limit
 	if len(c.favorites) >= c.maxFavorites {
-		// Remove oldest (last = oldest, since newest is prepended)
 		oldest := c.favorites[len(c.favorites)-1]
 		c.removeAudioFile(oldest.AudioPath)
 		c.favorites = c.favorites[:len(c.favorites)-1]
@@ -205,7 +221,6 @@ func (c *CacheManager) AddFavorite(song *models.Song, fileExt string) (string, e
 	c.favorites = append([]CachedSong{cached}, c.favorites...)
 
 	if err := c.saveMetadata(c.favoritesDir, c.favorites); err != nil {
-		// Rollback
 		c.favorites = c.favorites[1:]
 		return "", err
 	}
@@ -229,8 +244,6 @@ func (c *CacheManager) RemoveFavorite(eventID int64) error {
 }
 
 // ToggleFavorite checks if a song is already a favorite.
-// Returns (added bool, audioPath, error) — audioPath is empty here
-// because the download happens asynchronously via StartFavoriteDownload.
 func (c *CacheManager) ToggleFavorite(song *models.Song, fileExt string) (bool, string, error) {
 	if c.IsFavorite(song) {
 		if err := c.RemoveFavorite(song.EventID); err != nil {
@@ -238,7 +251,6 @@ func (c *CacheManager) ToggleFavorite(song *models.Song, fileExt string) (bool, 
 		}
 		return false, "", nil
 	}
-	// Download will be started via StartFavoriteDownload
 	return true, "", nil
 }
 
@@ -348,14 +360,7 @@ func (c *CacheManager) GetFavoritesDiskSpace() string {
 			total += info.Size()
 		}
 	}
-	if total < 1024 {
-		return fmt.Sprintf("%d B", total)
-	} else if total < 1024*1024 {
-		return fmt.Sprintf("%.1f KB", float64(total)/1024)
-	} else if total < 1024*1024*1024 {
-		return fmt.Sprintf("%.1f MB", float64(total)/(1024*1024))
-	}
-	return fmt.Sprintf("%.2f GB", float64(total)/(1024*1024*1024))
+	return formatBytes(total)
 }
 
 // GetFavoriteByEventID returns a favorite song by event ID
@@ -391,12 +396,10 @@ func (cs *CachedSong) ToSong() *models.Song {
 }
 
 // StartFavoriteDownload downloads the audio for a favorite and adds it to metadata.
-// The onDone callback is called with true on success, false on failure.
 func (c *CacheManager) StartFavoriteDownload(song *models.Song, fileExt string, onDone func(success bool)) {
 	if song == nil {
 		return
 	}
-	// Prevent duplicate downloads of same song
 	if _, loaded := c.downloading.LoadOrStore(song.EventID, true); loaded {
 		return
 	}
@@ -410,12 +413,10 @@ func (c *CacheManager) StartFavoriteDownload(song *models.Song, fileExt string, 
 }
 
 // downloadAndAdd downloads audio to a .tmp file, renames on success, then adds to favorites.
-// Returns true on success.
 func (c *CacheManager) downloadAndAdd(song *models.Song, fileExt string) bool {
 	audioPath := c.buildAudioPath(song, fileExt)
 	tmpPath := audioPath + ".tmp"
 
-	// Skip if already downloaded
 	if _, err := os.Stat(audioPath); err == nil {
 		return false
 	}
@@ -459,14 +460,12 @@ func (c *CacheManager) downloadAndAdd(song *models.Song, fileExt string) bool {
 		return false
 	}
 
-	// Atomic rename
 	if err := os.Rename(tmpPath, audioPath); err != nil {
 		os.Remove(tmpPath)
 		logger.Printf("Failed to rename temp audio file: %v", err)
 		return false
 	}
 
-	// Now add to favorites (metadata only after file is complete)
 	_, err = c.AddFavorite(song, fileExt)
 	if err != nil {
 		logger.Printf("Failed to add favorite after download: %v", err)
@@ -526,4 +525,16 @@ func sanitizeFilename(s string, maxLen int) string {
 		result = result[:maxLen]
 	}
 	return result
+}
+
+// formatBytes formats bytes into human-readable string
+func formatBytes(b int64) string {
+	if b < 1024 {
+		return fmt.Sprintf("%d B", b)
+	} else if b < 1024*1024 {
+		return fmt.Sprintf("%.1f KB", float64(b)/1024)
+	} else if b < 1024*1024*1024 {
+		return fmt.Sprintf("%.1f MB", float64(b)/(1024*1024))
+	}
+	return fmt.Sprintf("%.2f GB", float64(b)/(1024*1024*1024))
 }

@@ -16,13 +16,16 @@ type KeyBinding struct {
 
 // Footer represents the bottom status/shortcuts bar
 type Footer struct {
-	accentStyle lipgloss.Style
-	mutedStyle  lipgloss.Style
-	width       int
-	keys        []KeyBinding
-	jukeKeys    []KeyBinding
-	stationKeys []KeyBinding
-	jukeboxMode bool
+	accentStyle  lipgloss.Style
+	mutedStyle   lipgloss.Style
+	width        int
+	keys         []KeyBinding
+	jukeKeys     []KeyBinding
+	offlineKeys  []KeyBinding
+	stationKeys  []KeyBinding
+	jukeboxMode  bool
+	offlineMode  bool
+	offlineCache string
 
 	// Scrobble indicator
 	scrobbleServices []string // e.g. ["fm", "lb"]
@@ -62,6 +65,20 @@ func NewFooter(accentStyle, mutedStyle lipgloss.Style) *Footer {
 			{Key: "J", Icon: "", Label: "Normal"},
 			{Key: "q", Icon: "", Label: "Quit"},
 		},
+		offlineKeys: []KeyBinding{
+			{Key: "p", Icon: "󰒮", Label: ""},
+			{Key: "r", Icon: "󰜉", Label: ""},
+			{Key: "Space", Icon: "󰐎", Label: ""},
+			{Key: "\u25c0 \u25b6", Icon: "", Label: "Seek"},
+			{Key: "n", Icon: "󰒭", Label: ""},
+			{Key: "v", Icon: "", Label: "View"},
+			{Key: "f", Icon: "⭐", Label: ""},
+			{Key: "b", Icon: "🚫", Label: ""},
+			{Key: "c", Icon: "", Label: "Copy"},
+			{Key: "o", Icon: "", Label: "Opt"},
+			{Key: "m", Icon: "", Label: "Manage"},
+			{Key: "q", Icon: "", Label: "Quit"},
+		},
 		stationKeys: []KeyBinding{
 			{Key: "0", Icon: "", Label: "Main"},
 			{Key: "1", Icon: "", Label: "Mellow"},
@@ -97,6 +114,12 @@ func (h *Footer) SetFlashState(state int) {
 // SetJukeboxMode toggles between normal and jukebox key bindings
 func (h *Footer) SetJukeboxMode(jukebox bool) {
 	h.jukeboxMode = jukebox
+}
+
+// SetOfflineMode toggles between normal and offline key bindings
+func (h *Footer) SetOfflineMode(offline bool, cacheName string) {
+	h.offlineMode = offline
+	h.offlineCache = cacheName
 }
 
 // scrobbleIndicator returns the rendered scrobble indicator string, or empty if none.
@@ -162,6 +185,11 @@ func (h Footer) View() string {
 			jukeLine += "  " + ind
 		}
 		return "\n" + jukeLine
+	}
+
+	if h.offlineMode {
+		offlineLine := renderLine(h.offlineKeys)
+		return "\n" + offlineLine
 	}
 
 	// Append scrobble indicator right after station line in normal mode
