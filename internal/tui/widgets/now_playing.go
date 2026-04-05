@@ -124,6 +124,8 @@ func (n NowPlaying) View(
 	jukeboxMode bool,
 	jukeboxPlayed int,
 	jukeboxTotal int,
+	offlineMode bool,
+	offlineCacheInfo string,
 ) string {
 	if song == nil {
 		return " No song playing"
@@ -171,6 +173,26 @@ func (n NowPlaying) View(
 			n.mutedStyle.Render("󰒮"), n.foregroundStyle.Render(prevStr),
 			n.mutedStyle.Render("󰒭"), n.foregroundStyle.Render(nextStr),
 			jukeStr)
+	} else if offlineMode {
+		favStr := fmt.Sprintf("%s%s%s",
+			n.foregroundStyle.Render(fmt.Sprintf("%d", favoriteCount)),
+			n.mutedStyle.Render("/"),
+			n.mutedStyle.Render(fmt.Sprintf("%d", minFavorites)))
+		if favoriteCount >= minFavorites {
+			remaining := favoritesRemaining
+			if remaining == 0 {
+				remaining = favoriteCount
+			}
+			remainingStr := fmt.Sprintf("%s%s%s",
+				n.mutedStyle.Render("<"),
+				n.foregroundStyle.Render(fmt.Sprintf("%d", remaining)),
+				n.mutedStyle.Render(">"))
+			favStr += " ✅ " + remainingStr
+		}
+		navLine = fmt.Sprintf("%s %s  %s %s  ⭐ %s",
+			n.mutedStyle.Render("󰒮"), n.foregroundStyle.Render(prevStr),
+			n.mutedStyle.Render("󰒭"), n.foregroundStyle.Render(nextStr),
+			favStr)
 	} else {
 		favStr := fmt.Sprintf("%s%s%s",
 			n.foregroundStyle.Render(fmt.Sprintf("%d", favoriteCount)),
@@ -194,7 +216,15 @@ func (n NowPlaying) View(
 	}
 
 	var statusLine string
-	if jukeboxMode {
+	if offlineMode {
+		status := "Playing"
+		if isPaused {
+			status = n.mutedStyle.Render("Paused")
+		} else {
+			status = n.mutedStyle.Render("Playing")
+		}
+		statusLine = fmt.Sprintf("%s %s %s", status, n.mutedStyle.Render("•"), n.mutedStyle.Render(offlineCacheInfo))
+	} else if jukeboxMode {
 		status := "Playing"
 		if isPaused {
 			status = n.mutedStyle.Render("Paused")
@@ -213,7 +243,19 @@ func (n NowPlaying) View(
 	}
 
 	var connectedLine string
-	if jukeboxMode {
+	if offlineMode {
+		if connErrorMsg != "" {
+			connectedLine = n.accentStyle.Render(connErrorMsg)
+		} else if statusMsg != "" {
+			if statusIsError {
+				connectedLine = n.accentStyle.Render(statusMsg)
+			} else {
+				connectedLine = n.foregroundStyle.Render(statusMsg)
+			}
+		} else {
+			connectedLine = n.mutedStyle.Render(fmt.Sprintf("Offline Mode • %s", connectedTime.Format("15:04:05")))
+		}
+	} else if jukeboxMode {
 		if connErrorMsg != "" {
 			connectedLine = n.accentStyle.Render(connErrorMsg)
 		} else if statusMsg != "" {

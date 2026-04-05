@@ -13,27 +13,58 @@ crossfade on station changes, jukebox mode
 		since audio files are from a radio mix, they may already be "pre-crossfaded"
 			however, since we aren't playing back in the same order, they won't match
 			some type of crossfade should make this less apparent
+		configurable pseudo-crossfade already implemented
 
-cache for offline listening (good for flights, etc)
-	different than favorites, though jukebox mode can run offline (I think)
-	possibly just launch from cli without running full tui
+cache for offline listening (good for flights, etc) -- DONE
+	different than favorites, though jukebox mode can run offline
+	another option for offline listening -- normal radio content downloaded in advance
+	launch from cli -- DONE
 		e.g. rptui --cache 2h
 		saves to ~/.cache/rptui/offline
 		would have to run for 2h then close
-		maybe print time remaining to the terminal
+		maybe print time remaining to the terminal (show progress/time remaining) -- DONE (text progress)
 		when you run rptui without connection, detect lack of internet, presence of offline cache
 			ask user if they want to run in offline mode
-		would need a cache manager
-			could just add to manage modal with faves and blocklist items
-		give hint as to how much disk space used per hour for each quality
-			AAC 64k 128k 320k should be able to calculate easily
-			do FLAC bitrates vary?  can use examples in ~/.cache/rptui/favorites
+		would need a cache manager -- DONE
+			could just add to manage modal with faves and blocklist items -- DONE (third "Offline" tab)
+		give hint as to how much disk space used per hour for each quality -- DONE
+			AAC 64k 128k 320k should be able to calculate easily -- DONE
+			do FLAC bitrates vary?  can use examples in ~/.cache/rptui/favorites -- DONE (calculated from actual .flac files)
 				ZZ Top song is 4:37, Pearl Jam 4:15
-		should be able to save and play multiple saves
+		should be able to save and play multiple saves -- DONE
 			grab a 2h block of main mix, and a 2h block of rock mix
+		if no options, default to config file settings for station and bitrate -- DONE
+			but show and ask for confirmation -- DONE
+			can give options for station and bitrate -- DONE
+				--cache 2h main 320
+				--cache 3.5h rock flac
+				--cache 1h mellow 128
+	playback -- DONE
+		sequential playback (RP broadcast order, no shuffle)
+		no crossfade (natural RP transitions preserved)
+		blocklist: shared with normal mode, blocked songs skipped during playback
+		favoriting: works normally, copies from cache to favorites
+		album art: displayed from cached URLs
+		lyrics/artist views: show "not available in offline mode"
+		UI indicator: [OFFLINE: cache_name] in footer
+		always starts from beginning (no resume position)
+		--offline flag: trusted regardless of internet connectivity
+	cache recording behavior -- DONE
+		headless mode with text progress
+		queuing: multiple --cache flags run sequentially
+		Ctrl+C: prompts confirmation, deletes partial cache if confirmed
+		not a hard limit: completes the song that crosses the time boundary
+		direct download: saves gapless_url files as-is (AAC/FLAC)
+		disk space check: warns if <1GB remaining, refuses if would fill disk
+	cache management -- DONE
+		--list-caches: shows all caches with details
+		--delete-cache: deletes specific cache with confirmation
+		third "Offline" tab in manage modal
+		auto-generated cache names: {station}_{bitrate}_{YYYYMMDD}_{HHMM}
+		manual removal only (no auto-expire)
 
 implement command line switches (override config file)
-	already  have --lastfm-auth
+	already  have --lastfm-auth and -j --jukebox
 	size small (no album art, no playlist -- like toggle "v" to off) -s small or --size small
 	size medium (no playlist)
 	size large (default, show all)
@@ -42,17 +73,27 @@ implement command line switches (override config file)
 	if run from within terminal, no resize
 	I can do manual tests, changing display and manually resizing terminal, then check terminal size
 
-favorites "jukebox" mode -- queue all faves random and play, at end optionally shuffle all and repeat
-	--jukebox or -j
-	no API queries
-	[jukebox]
-	min_faves = 20 (setting in config file, not editable from app)
-	repeat = false (whether to reshuffle and repeat)
-	also add "j" hotkey for "Juke"
-		clears playlist, enters jukebox mode just like from command line
-		press "j" again to exit jukebox mode, clear playlist, start in normal mode
-	need to decide how to handle playlist
-		add all to playlist, but would then have to scroll the playlist view?
-		add a given number of songs, then when near end, add more, prune as needed, similar to normal mode?
-	would need to show status jukebox mode or similar. is there a jukebox emoji?
-	if total favorites > jukebox.min_faves then print status "Save <min_faves> to enable jukebox mode"
+rptui --help
+	show all options with explanations
+
+RP has different API endpoint to get all stations
+	see rp_notes.txt
+	have 2 stations we don't have
+	have rptui check and report new, missing, misconfigured
+
+-------features below require RP login---------
+not to implement (if ever) until later, all roadmap items above complete
+refer to rp_notes.txt
+
+RP login with /auth
+
+RP comments support (show, not create)
+
+RP song ratings
+	show user rating
+	submit user rating
+
+RP favorites
+	user configurable 7-10 on RP website
+	channel 99 = My Paradise (favorites station)
+	
