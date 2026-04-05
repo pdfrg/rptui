@@ -600,8 +600,9 @@ EXAMPLES:
     rptui --list-caches     See what caches are available
 
 STATIONS:
-    0 - Main Mix     1 - Mellow Mix    2 - Rock Mix
-    3 - Global Mix   5 - Beyond...
+    0 - The Main Mix  1 - Mellow Mix    2 - RockIt!
+    3 - The Globe     42 - Serenity     5 - Beyond...
+    945 - KFAT
 
 BITRATES:
     1 - 64k AAC   2 - 128k AAC   3 - 320k AAC   4 - FLAC

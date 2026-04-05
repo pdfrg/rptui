@@ -12,11 +12,13 @@ import (
 
 // Station names mapping
 var StationNames = map[int]string{
-	0: "Main Mix",
-	1: "Mellow Mix",
-	2: "Rock Mix",
-	3: "Global Mix",
-	5: "Beyond...",
+	0:   "The Main Mix",
+	1:   "Mellow Mix",
+	2:   "RockIt!",
+	3:   "The Globe",
+	5:   "Beyond...",
+	42:  "Serenity",
+	945: "KFAT",
 }
 
 // Bitrate names mapping
@@ -30,7 +32,7 @@ var BitrateNames = map[int]string{
 // Config manages user configuration persistence
 type Config struct {
 	path            string
-	Channel         int    `toml:"channel" comment:"default station for new sessions\nchanges made in app are saved to file and retained on restart\n0=Main, 1=Mellow, 2=Rock, 3=Global, 5=Beyond (default: 0)"`
+	Channel         int    `toml:"channel" comment:"default station for new sessions\nchanges made in app are saved to file and retained on restart\n0=Main, 1=Mellow, 2=Rock, 3=Globe, 42=Serenity, 5=Beyond, 945=KFAT (default: 0)"`
 	Bitrate         int    `toml:"bitrate" comment:"1=64k AAC, 2=128k AAC, 3=320k AAC, 4=FLAC (default: 3)"`
 	ShowAlbumArt    bool   `toml:"show_album_art" comment:"display album art for each song\nuses the best supported image protocol with auto fallback\nkitty > iterm2 > sixel > unicode (default: true)"`
 	CopyAlbumArt    bool   `toml:"copy_album_art" comment:"save album art to file, useful for desktop/statusbar widgets (default: false)"`
@@ -195,8 +197,8 @@ func (c *Config) Save() error {
 func (c *Config) applyDefaults() {
 	defaults := DefaultConfig()
 
-	// Validate channel (0-5 are valid stations)
-	if c.Channel < 0 || c.Channel > 5 {
+	// Validate channel (must be a known station)
+	if _, ok := StationNames[c.Channel]; !ok {
 		c.Channel = defaults.Channel
 	}
 
@@ -276,4 +278,45 @@ func (c *Config) GetBlocklistDir() string {
 // GetScrobbleCacheDir returns the scrobble cache directory path.
 func GetScrobbleCacheDir() string {
 	return filepath.Join(xdg.CacheHome, "rptui", "scrobbles")
+}
+
+// StationIssue represents a discrepancy between local config and RP API
+type StationIssue struct {
+	Kind    string // "new", "missing", "renamed"
+	Message string
+}
+
+// CheckStationIssues compares local StationNames against RP channel list.
+// It returns issues for new, missing, or renamed stations.
+func CheckStationIssues(rpChannels map[int]string) []StationIssue {
+	var issues []StationIssue
+
+	// Check for missing or renamed stations
+	for localID, localName := range StationNames {
+		if rpName, ok := rpChannels[localID]; !ok {
+			// Station ID no longer exists on RP — could be missing or renamed
+			issues = append(issues, StationIssue{
+				Kind:    "missing",
+				Message: fmt.Sprintf("Station %d (%s) is no longer available on RP", localID, localName),
+			})
+		} else if rpName != localName {
+			// Same ID but different name
+			issues = append(issues, StationIssue{
+				Kind:    "renamed",
+				Message: fmt.Sprintf("Station %d renamed from \"%s\" to \"%s\"", localID, localName, rpName),
+			})
+		}
+	}
+
+	// Check for new stations not in our list
+	for rpID, rpName := range rpChannels {
+		if _, ok := StationNames[rpID]; !ok {
+			issues = append(issues, StationIssue{
+				Kind:    "new",
+				Message: fmt.Sprintf("New station available: %s (%d)", rpName, rpID),
+			})
+		}
+	}
+
+	return issues
 }

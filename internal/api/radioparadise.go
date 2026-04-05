@@ -254,6 +254,36 @@ func (r *RadioParadiseAPI) GetChannel() int {
 	return r.channel
 }
 
+// ListChannelsResponse represents the /list_chan API response
+type ListChannelsResponse []struct {
+	Chan         string `json:"chan"`
+	Title        string `json:"title"`
+	StreamName   string `json:"stream_name"`
+	Downloadable bool   `json:"downloadable"`
+}
+
+// ListChannels fetches all available channels from RP
+func (r *RadioParadiseAPI) ListChannels(ctx context.Context) (ListChannelsResponse, error) {
+	url := fmt.Sprintf("%s/list_chan", r.baseURL)
+
+	resp, err := r.httpClient.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch channels: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
+	var result ListChannelsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return result, nil
+}
+
 // GetBitrate returns the current bitrate
 func (r *RadioParadiseAPI) GetBitrate() int {
 	return r.bitrate

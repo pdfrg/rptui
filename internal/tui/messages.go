@@ -3,6 +3,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"os/exec"
 	"strings"
 	"time"
@@ -108,7 +109,37 @@ type jukeboxStartMsg struct{}
 // offlineStartMsg is sent to trigger offline playback initialization
 type offlineStartMsg struct{}
 
+// stationCheckResultMsg is sent when station validation completes
+type stationCheckResultMsg struct {
+	issues []config.StationIssue
+}
+
 // Command functions
+
+// checkStationsCmd runs station validation in the background
+func (m Model) checkStationsCmd() tea.Msg {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	rpChannels, err := m.rpAPI.ListChannels(ctx)
+	if err != nil {
+		logger.Printf("Station validation failed: %v", err)
+		return stationCheckResultMsg{}
+	}
+
+	// Build map of downloadable channels
+	chMap := make(map[int]string)
+	for _, ch := range rpChannels {
+		if ch.Downloadable {
+			var id int
+			fmt.Sscanf(ch.Chan, "%d", &id)
+			chMap[id] = ch.Title
+		}
+	}
+
+	issues := config.CheckStationIssues(chMap)
+	return stationCheckResultMsg{issues: issues}
+}
 
 // renderAlbumArtAfterDelay returns a command that triggers album art re-render
 // after a short delay, allowing the cell renderer to finish its redraw first.

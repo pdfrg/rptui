@@ -82,9 +82,11 @@ func NewFooter(accentStyle, mutedStyle lipgloss.Style) *Footer {
 		stationKeys: []KeyBinding{
 			{Key: "0", Icon: "", Label: "Main"},
 			{Key: "1", Icon: "", Label: "Mellow"},
-			{Key: "2", Icon: "", Label: "Rock"},
-			{Key: "3", Icon: "", Label: "Global"},
+			{Key: "2", Icon: "", Label: "RockIt"},
+			{Key: "3", Icon: "", Label: "Globe"},
+			{Key: "4", Icon: "", Label: "Serenity"},
 			{Key: "5", Icon: "", Label: "Beyond"},
+			{Key: "6", Icon: "", Label: "KFAT"},
 		},
 	}
 }

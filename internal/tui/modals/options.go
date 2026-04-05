@@ -36,8 +36,8 @@ const (
 	optCount // number of items
 )
 
-// Valid station IDs in order (skipping 4)
-var stationIDs = []int{0, 1, 2, 3, 5}
+// Valid station IDs in order
+var stationIDs = []int{0, 1, 2, 3, 42, 5, 945}
 
 // Valid bitrate IDs in order
 var bitrateIDs = []int{1, 2, 3, 4}
