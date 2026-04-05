@@ -87,6 +87,7 @@ const (
 	ModalSkipWarning
 	ModalFavorites
 	ModalGallery
+	ModalStationWarning
 )
 
 // Connection retry constants
@@ -186,10 +187,11 @@ type Model struct {
 	playlistWidget   *widgets.Playlist
 
 	// Modal Widgets
-	optionsModal     *modals.Options
-	skipWarningModal *modals.SkipWarning
-	favoritesModal   *modals.Favorites
-	galleryModal     *modals.Gallery
+	optionsModal        *modals.Options
+	skipWarningModal    *modals.SkipWarning
+	favoritesModal      *modals.Favorites
+	galleryModal        *modals.Gallery
+	stationWarningModal *modals.StationWarning
 
 	// UI dimensions
 	width  int
@@ -516,6 +518,10 @@ func (m Model) Init() tea.Cmd {
 	} else {
 		cmds = append(cmds, m.fetchBlockCmd)
 	}
+
+	// Station validation runs in background (non-blocking, 3s timeout)
+	cmds = append(cmds, m.checkStationsCmd)
+
 	return tea.Batch(cmds...)
 }
 
@@ -614,6 +620,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.galleryModal != nil {
 					cmd = m.galleryModal.Update(msg)
 				}
+			case ModalStationWarning:
+				cmd = m.stationWarningModal.Update(msg)
 			}
 			return handle(m, cmd)
 		}
@@ -709,6 +717,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
+		return handle(m, renderAlbumArtAfterDelay())
+
+	case modals.StationWarningMsg:
+		m.activeModal = ModalNone
 		return handle(m, renderAlbumArtAfterDelay())
 
 	case modals.FavoritesMsg:
@@ -816,6 +828,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.seq == m.statusSeq {
 			m.statusMsg = ""
 			m.statusIsError = false
+		}
+		return handle(m, nil)
+
+	case stationCheckResultMsg:
+		if len(msg.issues) > 0 {
+			m.stationWarningModal = modals.NewStationWarning(m.styles, msg.issues)
+			m.activeModal = ModalStationWarning
+			for _, issue := range msg.issues {
+				logger.Printf("Station issue [%s]: %s", issue.Kind, issue.Message)
+			}
 		}
 		return handle(m, nil)
 
@@ -1145,12 +1167,21 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, statusCmd
 
-	case "0", "1", "2", "3", "5":
+	case "0", "1", "2", "3", "4", "5", "6":
 		// Station hotkeys — disabled in offline and jukebox mode
 		if m.offlineMode || m.jukeboxMode {
 			return m, nil
 		}
-		station := int(msg.String()[0] - '0')
+		stationMap := map[string]int{
+			"0": 0,
+			"1": 1,
+			"2": 2,
+			"3": 3,
+			"4": 42,
+			"5": 5,
+			"6": 945,
+		}
+		station := stationMap[msg.String()]
 		return m.switchStation(station)
 
 	case "o":
@@ -3196,6 +3227,10 @@ func (m Model) View() tea.View {
 		case ModalGallery:
 			if m.galleryModal != nil {
 				modalView = m.galleryModal.View()
+			}
+		case ModalStationWarning:
+			if m.stationWarningModal != nil {
+				modalView = m.stationWarningModal.View()
 			}
 		}
 
