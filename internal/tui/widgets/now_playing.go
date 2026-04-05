@@ -8,6 +8,7 @@ import (
 	"charm.land/bubbles/v2/progress"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"rptui-bubbletea/internal/models"
 )
 
@@ -47,6 +48,7 @@ type NowPlaying struct {
 	accentStyle     lipgloss.Style
 	mutedStyle      lipgloss.Style
 	width           int
+	maxWidth        int // when > 0, truncate title/artist/album with ellipsis
 
 	// Bubbles progress bar
 	progress progress.Model
@@ -77,6 +79,12 @@ func (n *NowPlaying) SetWidth(width int) {
 	progWidth := min(40, width-2)
 	progWidth = max(20, progWidth)
 	n.progress.SetWidth(progWidth)
+}
+
+// SetMaxWidth sets the maximum width for text fields (title/artist/album).
+// When > 0, text is truncated with ellipsis to prevent wrapping.
+func (n *NowPlaying) SetMaxWidth(maxWidth int) {
+	n.maxWidth = maxWidth
 }
 
 // UpdateStyles updates the widget styles with new theme colors
@@ -131,9 +139,18 @@ func (n NowPlaying) View(
 		return " No song playing"
 	}
 
-	title := n.accentStyle.Bold(true).Render(song.Title)
-	artist := n.foregroundStyle.Render(song.Artist)
-	album := n.mutedStyle.Render(fmt.Sprintf("%s (%s)", song.Album, song.Year))
+	titleText := song.Title
+	artistText := song.Artist
+	albumText := fmt.Sprintf("%s (%s)", song.Album, song.Year)
+	if n.maxWidth > 0 {
+		titleText = ansi.Truncate(titleText, n.maxWidth, "...")
+		artistText = ansi.Truncate(artistText, n.maxWidth, "...")
+		albumText = ansi.Truncate(albumText, n.maxWidth, "...")
+	}
+
+	title := n.accentStyle.Bold(true).Render(titleText)
+	artist := n.foregroundStyle.Render(artistText)
+	album := n.mutedStyle.Render(albumText)
 
 	progView := n.progress.View()
 

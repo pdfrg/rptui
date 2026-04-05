@@ -90,6 +90,21 @@ const (
 	ModalStationWarning
 )
 
+// Layout mode constants
+const (
+	LayoutLarge = iota
+	LayoutMedium
+	LayoutCompact
+	LayoutNarrow
+)
+
+var layoutNames = map[int]string{
+	LayoutLarge:   "large",
+	LayoutMedium:  "medium",
+	LayoutCompact: "compact",
+	LayoutNarrow:  "narrow",
+}
+
 // Connection retry constants
 const (
 	connStateConnected    = "connected"
@@ -264,10 +279,13 @@ type Model struct {
 	offlineIndex   int                // current position in offlineSongs
 	offlineStation int                // station from cache config
 	offlineBitrate int                // bitrate from cache config
+
+	// Layout mode
+	layoutMode int // LayoutLarge, LayoutMedium, LayoutCompact, LayoutNarrow
 }
 
 // NewModel creates a new TUI model
-func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool) *Model {
+func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, layoutOverride string) *Model {
 	styles := config.NewThemeStyles(theme)
 
 	themeWatcher := config.NewThemeWatcher(cfg.ColorsFile)
@@ -340,7 +358,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool) *
 	sp.Spinner = spinner.Points
 	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Accent))
 
-	return &Model{
+	m := &Model{
 		config:            cfg,
 		theme:             theme,
 		styles:            styles,
@@ -369,10 +387,43 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool) *
 		jukeboxMode:       startJukebox,
 		jukeboxBatchSize:  10,
 	}
+
+	// Determine layout mode
+	layoutMode := LayoutLarge
+	switch cfg.Layout {
+	case "medium":
+		layoutMode = LayoutMedium
+	case "compact":
+		layoutMode = LayoutCompact
+	case "narrow":
+		layoutMode = LayoutNarrow
+	}
+	if layoutOverride != "" {
+		switch layoutOverride {
+		case "large":
+			layoutMode = LayoutLarge
+		case "medium":
+			layoutMode = LayoutMedium
+		case "compact":
+			layoutMode = LayoutCompact
+		case "narrow":
+			layoutMode = LayoutNarrow
+		default:
+			logger.Printf("Warning: invalid layout %q, using %q", layoutOverride, layoutNames[layoutMode])
+		}
+	}
+	m.layoutMode = layoutMode
+
+	// Narrow mode forces album art on internally (without it, there'd just be empty space at the top)
+	if layoutMode == LayoutNarrow {
+		m.config.ShowAlbumArt = true
+	}
+
+	return m
 }
 
 // NewOfflineModel creates a new TUI model for offline playback
-func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache.CachedSong, cacheName string) *Model {
+func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache.CachedSong, cacheName string, layoutOverride string) *Model {
 	styles := config.NewThemeStyles(theme)
 
 	themeWatcher := config.NewThemeWatcher(cfg.ColorsFile)
@@ -461,7 +512,7 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 		}
 	}
 
-	return &Model{
+	m := &Model{
 		config:            cfg,
 		theme:             theme,
 		styles:            styles,
@@ -496,6 +547,39 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 		songs:             modelSongs,
 		currentSongIndex:  0,
 	}
+
+	// Determine layout mode
+	layoutMode := LayoutLarge
+	switch cfg.Layout {
+	case "medium":
+		layoutMode = LayoutMedium
+	case "compact":
+		layoutMode = LayoutCompact
+	case "narrow":
+		layoutMode = LayoutNarrow
+	}
+	if layoutOverride != "" {
+		switch layoutOverride {
+		case "large":
+			layoutMode = LayoutLarge
+		case "medium":
+			layoutMode = LayoutMedium
+		case "compact":
+			layoutMode = LayoutCompact
+		case "narrow":
+			layoutMode = LayoutNarrow
+		default:
+			logger.Printf("Warning: invalid layout %q, using %q", layoutOverride, layoutNames[layoutMode])
+		}
+	}
+	m.layoutMode = layoutMode
+
+	// Narrow mode forces album art on internally
+	if layoutMode == LayoutNarrow {
+		m.config.ShowAlbumArt = true
+	}
+
+	return m
 }
 
 // Init initializes the TUI model
@@ -590,9 +674,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
-		// Update component sizes
-		m.headerWidget.SetWidth(msg.Width)
-		m.footerWidget.SetWidth(msg.Width)
+		// For compact/narrow layouts, constrain header/footer to now-playing width
+		// so they align left instead of centering across the full terminal
+		widgetWidth := msg.Width
+		if m.layoutMode == LayoutCompact || m.layoutMode == LayoutNarrow {
+			artHeight := 16
+			artWidth := int(float64(artHeight) * m.cellRatio)
+			if artWidth < 10 {
+				artWidth = 10
+			}
+			if m.layoutMode == LayoutNarrow {
+				widgetWidth = artWidth
+			} else {
+				// Compact: use a reasonable width (half terminal or 60, whichever is smaller)
+				widgetWidth = min(msg.Width/2, 60)
+				if widgetWidth < 40 {
+					widgetWidth = 40
+				}
+			}
+		}
+		m.headerWidget.SetWidth(widgetWidth)
+		m.footerWidget.SetWidth(widgetWidth)
 		m.nowPlayingWidget.SetWidth(40)
 
 		contentWidth := msg.Width
@@ -1039,7 +1141,11 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "v":
-		// Toggle bottom view — suppressed in fullscreen visualizer
+		// Toggle bottom view — only in large layout
+		if m.layoutMode != LayoutLarge {
+			return m, setStatus(&m, "View cycling unavailable in this layout", false)
+		}
+		// Suppressed in fullscreen visualizer
 		if m.visFullscreen {
 			return m, nil
 		}
@@ -1185,7 +1291,10 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.switchStation(station)
 
 	case "o":
-		// Options modal — suppressed in fullscreen visualizer
+		// Options modal — only in large and medium layouts
+		if m.layoutMode == LayoutCompact || m.layoutMode == LayoutNarrow {
+			return m, setStatus(&m, "Options unavailable in this layout", false)
+		}
 		if m.visFullscreen {
 			return m, nil
 		}
@@ -1194,7 +1303,10 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, clearKittyImagesCmd()
 
 	case "m":
-		// Manage favorites modal — suppressed in fullscreen visualizer and jukebox mode
+		// Manage favorites modal — only in large and medium layouts
+		if m.layoutMode == LayoutCompact || m.layoutMode == LayoutNarrow {
+			return m, setStatus(&m, "Favorites management unavailable in this layout", false)
+		}
 		if m.visFullscreen || m.jukeboxMode {
 			return m, nil
 		}
@@ -1203,7 +1315,10 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, clearKittyImagesCmd()
 
 	case "i":
-		// Gallery modal (only in artist view with images)
+		// Gallery modal — only in large layout
+		if m.layoutMode != LayoutLarge {
+			return m, nil
+		}
 		if m.bottomViewMode == ViewArtist && m.artistInfo != nil && len(m.artistInfo.GalleryURLs) > 0 {
 			m.galleryModal = modals.NewGallery(
 				m.styles,
@@ -3273,9 +3388,6 @@ func (m Model) View() tea.View {
 	// 1. Header
 	header := m.headerWidget.View()
 
-	// 2. Main Content (Now Playing + Album Art)
-	// Use cached playback position (updated every tick, no IPC here)
-
 	// Determine display info based on mode
 	offlineCacheInfo := ""
 	if m.offlineMode {
@@ -3290,8 +3402,29 @@ func (m Model) View() tea.View {
 		offlineCacheInfo = fmt.Sprintf("%s • %s", stationName, bitrateName)
 	}
 
-	// Now-playing always gets full width
-	m.nowPlayingWidget.SetWidth(m.width - 4)
+	// Configure NowPlaying width and truncation based on layout
+	showBottomSection := m.layoutMode == LayoutLarge
+	isNarrow := m.layoutMode == LayoutNarrow
+	isCompact := m.layoutMode == LayoutCompact
+
+	if isNarrow {
+		// Narrow: limit to album art width so text doesn't wrap
+		artHeight := 16
+		artWidth := int(float64(artHeight) * m.cellRatio)
+		if artWidth < 10 {
+			artWidth = 10
+		}
+		m.nowPlayingWidget.SetWidth(min(m.width-4, artWidth))
+		m.nowPlayingWidget.SetMaxWidth(artWidth)
+	} else if isCompact {
+		// Compact: no album art, full width but truncate long text
+		m.nowPlayingWidget.SetWidth(m.width - 4)
+		m.nowPlayingWidget.SetMaxWidth(m.width - 6)
+	} else {
+		// Large and medium: full width, no truncation
+		m.nowPlayingWidget.SetWidth(m.width - 4)
+		m.nowPlayingWidget.SetMaxWidth(0)
+	}
 
 	nowPlayingView := m.nowPlayingWidget.View(
 		m.currentSong,
@@ -3318,8 +3451,22 @@ func (m Model) View() tea.View {
 	var b strings.Builder
 	b.WriteString(header + "\n\n")
 
+	// For narrow layout: reserve space for album art at top-left
+	// by prepending blank lines before NowPlaying
+	if isNarrow {
+		artHeight := 16
+		for i := 0; i < artHeight+1; i++ {
+			b.WriteString("\n")
+		}
+	}
+
 	// Now-playing info
-	b.WriteString(nowPlayingView + "\n\n")
+	// NowPlaying widget already ends with trailing newlines; add less padding for compact layouts
+	if isCompact || isNarrow {
+		b.WriteString(nowPlayingView)
+	} else {
+		b.WriteString(nowPlayingView + "\n\n")
+	}
 
 	// Show spinner animation when waiting for new songs AND MPV has stopped
 	// Only show when truly at end of content, not while still playing and polling for next block
@@ -3327,61 +3474,68 @@ func (m Model) View() tea.View {
 		b.WriteString(m.styles.MutedStyle.Render("Ahead of livestream. Awaiting new songs"+m.spinner.View()+" ") + "\n")
 	}
 
+	// Determine footer height based on layout
+	footerLines := 1
+	if !isCompact && !isNarrow {
+		footerLines = 2
+	}
+
 	// The bottom section should fill the remaining space except for the footer
 	currentHeight := lipgloss.Height(b.String())
-	remainingHeight := m.height - currentHeight - 1 // 2 footer lines
+	remainingHeight := m.height - currentHeight - footerLines
 
 	// Sync viewport height to actual available space so scroll math is correct
-	if m.bottomViewMode != ViewPlaylist && m.bottomViewMode != ViewOff && remainingHeight > 0 {
+	if showBottomSection && m.bottomViewMode != ViewPlaylist && m.bottomViewMode != ViewOff && remainingHeight > 0 {
 		m.viewport.SetHeight(remainingHeight)
 	}
 
-	// 3. Bottom Section (Playlist, Visualizer, or other)
-	// Visualizer renders now that we know the available height
-	var bottomSection string
-	if m.bottomViewMode == ViewPlaylist {
-		if remainingHeight > 0 {
-			m.playlistWidget.SetSize(m.width, remainingHeight)
-		}
-		bottomSection = m.playlistWidget.View()
-	} else if m.bottomViewMode == ViewVisualizer && m.vis != nil {
-		m.vis.SetRows(max(3, remainingHeight))
-		if m.vis.AudioReady() {
-			bottomSection = m.vis.Render(m.width)
-		} else {
-			// Show loading message while audio tap connects
-			modeName := m.vis.ModeName()
-			source := m.vis.AudioSource()
-			lines := []string{
-				"",
-				fmt.Sprintf("Loading %s visualization...", modeName),
-				fmt.Sprintf("Connecting to %s audio...", source),
-				"",
+	// 3. Bottom Section (Playlist, Visualizer, or other) — only in large layout
+	if showBottomSection {
+		var bottomSection string
+		if m.bottomViewMode == ViewPlaylist {
+			if remainingHeight > 0 {
+				m.playlistWidget.SetSize(m.width, remainingHeight)
 			}
-			bottomSection = strings.Join(lines, "\n")
-		}
-	} else if m.bottomViewMode != ViewOff {
-		viewportContent := m.viewport.View()
-		// Offset viewport to the right when artist image is beside it
-		if m.bottomViewMode == ViewArtist && m.artistArtLoaded && m.artistArtStr != "" {
-			leftPad := strings.Repeat(" ", m.artistArtWidth+5)
-			vpLines := strings.Split(viewportContent, "\n")
-			for i, line := range vpLines {
-				vpLines[i] = leftPad + line
-			}
-			viewportContent = strings.Join(vpLines, "\n")
-		}
-		bottomSection = viewportContent
-	}
-
-	if remainingHeight > 0 {
-		// Crop or pad bottom section
-		bottomLines := strings.Split(bottomSection, "\n")
-		for i := 0; i < remainingHeight; i++ {
-			if i < len(bottomLines) {
-				b.WriteString(bottomLines[i] + "\n")
+			bottomSection = m.playlistWidget.View()
+		} else if m.bottomViewMode == ViewVisualizer && m.vis != nil {
+			m.vis.SetRows(max(3, remainingHeight))
+			if m.vis.AudioReady() {
+				bottomSection = m.vis.Render(m.width)
 			} else {
-				b.WriteString("\n")
+				// Show loading message while audio tap connects
+				modeName := m.vis.ModeName()
+				source := m.vis.AudioSource()
+				lines := []string{
+					"",
+					fmt.Sprintf("Loading %s visualization...", modeName),
+					fmt.Sprintf("Connecting to %s audio...", source),
+					"",
+				}
+				bottomSection = strings.Join(lines, "\n")
+			}
+		} else if m.bottomViewMode != ViewOff {
+			viewportContent := m.viewport.View()
+			// Offset viewport to the right when artist image is beside it
+			if m.bottomViewMode == ViewArtist && m.artistArtLoaded && m.artistArtStr != "" {
+				leftPad := strings.Repeat(" ", m.artistArtWidth+5)
+				vpLines := strings.Split(viewportContent, "\n")
+				for i, line := range vpLines {
+					vpLines[i] = leftPad + line
+				}
+				viewportContent = strings.Join(vpLines, "\n")
+			}
+			bottomSection = viewportContent
+		}
+
+		if remainingHeight > 0 {
+			// Crop or pad bottom section
+			bottomLines := strings.Split(bottomSection, "\n")
+			for i := 0; i < remainingHeight; i++ {
+				if i < len(bottomLines) {
+					b.WriteString(bottomLines[i] + "\n")
+				} else {
+					b.WriteString("\n")
+				}
 			}
 		}
 	}
@@ -3393,6 +3547,7 @@ func (m Model) View() tea.View {
 	m.footerWidget.SetFlashState(m.scrobbleFlashState)
 	m.footerWidget.SetJukeboxMode(m.jukeboxMode)
 	m.footerWidget.SetOfflineMode(m.offlineMode, m.offlineCache)
+	m.footerWidget.SetMiniMode(isCompact || isNarrow)
 	footer := m.footerWidget.View()
 
 	b.WriteString(footer)
@@ -3413,7 +3568,7 @@ func (m Model) renderImagesCmd() tea.Cmd {
 		return nil
 	}
 
-	hasAlbumArt := m.config.ShowAlbumArt && m.albumArtLoaded && m.albumArtStr != ""
+	hasAlbumArt := m.config.ShowAlbumArt && m.albumArtLoaded && m.albumArtStr != "" && m.layoutMode != LayoutCompact
 	hasArtistArt := m.artistArtLoaded && m.artistArtStr != "" && m.bottomViewMode == ViewArtist
 
 	if !hasAlbumArt && !hasArtistArt {
@@ -3429,9 +3584,14 @@ func (m Model) renderImagesCmd() tea.Cmd {
 		if artWidth < 10 {
 			artWidth = 10
 		}
-		artCol := m.width - artWidth - 2
-		if artCol < 1 {
-			artCol = 1
+		var artCol int
+		if m.layoutMode == LayoutNarrow {
+			artCol = 2 // left-aligned for narrow layout
+		} else {
+			artCol = m.width - artWidth - 2
+			if artCol < 1 {
+				artCol = 1
+			}
 		}
 		raw += fmt.Sprintf("\x1b[s\x1b[3;%dH%s\x1b[u", artCol, m.albumArtStr)
 	}

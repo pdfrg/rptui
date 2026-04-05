@@ -32,6 +32,7 @@ func main() {
 	offlineCacheName := ""
 	listCaches := false
 	deleteCacheName := ""
+	layoutOverride := ""
 
 	args := os.Args[1:]
 
@@ -49,6 +50,14 @@ func main() {
 			return
 		case "--jukebox", "-j":
 			jukeboxMode = true
+		case "--layout":
+			if i+1 < len(args) {
+				layoutOverride = args[i+1]
+				i++
+			} else {
+				fmt.Fprintf(os.Stderr, "Error: --layout requires an argument (large, medium, compact, narrow)\n")
+				os.Exit(1)
+			}
 		case "--cache":
 			req, skip := parseCacheRequest(args[i+1:])
 			if req.Duration == "" {
@@ -95,7 +104,7 @@ func main() {
 
 	// Handle offline playback mode
 	if offlineMode {
-		handleOfflineMode(offlineCacheName)
+		handleOfflineMode(offlineCacheName, layoutOverride)
 		return
 	}
 
@@ -112,7 +121,7 @@ func main() {
 		theme = config.DefaultTheme()
 	}
 
-	m := tui.NewModel(cfg, theme, jukeboxMode)
+	m := tui.NewModel(cfg, theme, jukeboxMode, layoutOverride)
 
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
@@ -419,7 +428,7 @@ func handleCacheRecording(requests []CacheRequest) {
 }
 
 // handleOfflineMode handles the --offline playback mode
-func handleOfflineMode(cacheName string) {
+func handleOfflineMode(cacheName string, layoutOverride string) {
 	cfg, err := config.NewConfig()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
@@ -500,7 +509,7 @@ func handleOfflineMode(cacheName string) {
 	}
 
 	// Launch TUI in offline mode
-	m := tui.NewOfflineModel(cfg, theme, songs, cacheName)
+	m := tui.NewOfflineModel(cfg, theme, songs, cacheName, layoutOverride)
 
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
@@ -572,6 +581,11 @@ FLAGS:
     -h, --help              Show this help message and exit
     -v, --version           Show version information and exit
     -j, --jukebox           Launch in jukebox mode (random favorites playback)
+        --layout LAYOUT     Set UI layout: large, medium, compact, narrow
+                            large: full layout with all elements (default)
+                            medium: no bottom view (no playlist/lyrics/visualizer)
+                            compact: no album art, no bottom view, mini footer
+                            narrow: album art top-left, now playing below, mini footer
 
 OFFLINE CACHE:
     --cache <DURATION> [STATION] [BITRATE]
