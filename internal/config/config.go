@@ -61,6 +61,9 @@ type Config struct {
 	NotificationsEnabled bool `toml:"notifications_enabled" comment:"show desktop notifications on song changes (default: false)"`
 	NotificationsShowArt bool `toml:"notifications_show_art" comment:"include album art thumbnail in notifications (default: true)"`
 
+	// Layout mode
+	Layout string `toml:"layout" comment:"UI layout mode\nlarge: full layout with all elements (default)\nmedium: no bottom view (no playlist/lyrics/visualizer)\ncompact: no album art, no bottom view, mini footer\nnarrow: album art top-left, now playing below, mini footer (default: large)"`
+
 	// Jukebox mode
 	Jukebox JukeboxConfig `toml:"jukebox" comment:"favorites jukebox mode\nplay your favorites in random order\nmin_faves: minimum favorites required (default: 20)\nrepeat: reshuffle and repeat after playing all (default: false)\ncrossfade_duration: seconds for volume crossfade between songs, 0=disabled (default: 3.0)"`
 }
@@ -119,6 +122,7 @@ func DefaultConfig() *Config {
 			Repeat:            false,
 			CrossfadeDuration: 3.0,
 		},
+		Layout: "large",
 	}
 }
 
@@ -247,6 +251,12 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Jukebox.CrossfadeDuration < 0 {
 		c.Jukebox.CrossfadeDuration = defaults.Jukebox.CrossfadeDuration
+	}
+
+	// Validate layout
+	validLayouts := map[string]bool{"large": true, "medium": true, "compact": true, "narrow": true}
+	if c.Layout == "" || !validLayouts[c.Layout] {
+		c.Layout = defaults.Layout
 	}
 }
 

@@ -1,37 +1,5 @@
 # fixes.txt is for bugs, minor refinements to existing features
 
-crossfade on station changes, jukebox mode
-	pseudo-crossfade (vol down, vol up)
-	apparently mpv doesn't support real crossfade?
-	others have used 2 mpv instances to create real crossfade effect
-	mpv --lavfi-complex='[aid1] [aid2] <filter> [ao]'
-	says to check ffmpeg libavfilter docs (see crossfade.txt for snippet)
-	not sure it is possible to crossfade on demand (likely from middle of file)
-		may need to just do pseudo
-	jukebox mode
-		transitions more predictable
-		since audio files are from a radio mix, they may already be "pre-crossfaded"
-			however, since we aren't playing back in the same order, they won't match
-			some type of crossfade should make this less apparent
-		configurable pseudo-crossfade already implemented
-
-implement command line switches (override config file)
-	size small (no album art, no playlist -- like toggle "v" to off) -s small or --size small
-	size medium (no playlist)
-	size large (default, show all)
-	size narrow (like medium, but albumart on top, like mobile apps)
-		this is really the only one we can't achieve with the current layout
-		small is just no album art, bottom view off
-		medium is just bottom view off
-	if run from launcher, can we open terminal of just that size?
-	if run from within terminal, no resize
-	I can do manual tests, changing display and manually resizing terminal, then check terminal size
-
-RP has different API endpoint to get all stations
-	see rp_notes.txt
-	have 2 stations we don't have
-	have rptui check and report new, missing, misconfigured
-
 -------features below require RP login---------
 not to implement (if ever) until later, all roadmap items above complete
 refer to rp_notes.txt
@@ -47,4 +15,3 @@ RP song ratings
 RP favorites
 	user configurable 7-10 on RP website
 	channel 99 = My Paradise (favorites station)
-	
