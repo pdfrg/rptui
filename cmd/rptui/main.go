@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"runtime/debug"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -36,6 +38,12 @@ func main() {
 	// Parse arguments
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
+		case "--help", "-h":
+			printHelp()
+			return
+		case "--version", "-v":
+			printVersion()
+			return
 		case "--lastfm-auth":
 			handleLastFMAuth()
 			return
@@ -551,4 +559,72 @@ func formatBytes(b int64) string {
 		return fmt.Sprintf("%.1f MB", float64(b)/(1024*1024))
 	}
 	return fmt.Sprintf("%.2f GB", float64(b)/(1024*1024*1024))
+}
+
+// printHelp displays usage information and exits
+func printHelp() {
+	help := `Radio Paradise TUI - A terminal UI for Radio Paradise
+
+USAGE:
+    rptui [FLAGS]
+
+FLAGS:
+    -h, --help              Show this help message and exit
+    -v, --version           Show version information and exit
+    -j, --jukebox           Launch in jukebox mode (random favorites playback)
+
+OFFLINE CACHE:
+    --cache <DURATION> [STATION] [BITRATE]
+                            Record audio cache for offline playback
+                            DURATION: recording length (e.g., 2h, 3.5h)
+                            STATION: station name or number (default: from config)
+                            BITRATE: bitrate name or number (default: from config)
+                            Example: rptui --cache 2h "Rock Mix" FLAC
+
+    --offline [CACHE_NAME]  Launch TUI in offline playback mode
+                            If CACHE_NAME omitted, prompts for selection
+                            Example: rptui --offline 2024-01-15_main_mix_320k
+
+    --list-caches           List all available offline caches and exit
+
+    --delete-cache <NAME>   Delete a named offline cache (prompts for confirmation)
+
+ACTIONS:
+    --lastfm-auth           Run Last.fm OAuth authentication flow and save session key
+
+EXAMPLES:
+    rptui                   Launch with default settings
+    rptui -j                Launch in jukebox mode
+    rptui --cache 4h        Record 4 hours of current station/bitrate
+    rptui --offline         Play back a previously recorded cache
+    rptui --list-caches     See what caches are available
+
+STATIONS:
+    0 - Main Mix     1 - Mellow Mix    2 - Rock Mix
+    3 - Global Mix   5 - Beyond...
+
+BITRATES:
+    1 - 64k AAC   2 - 128k AAC   3 - 320k AAC   4 - FLAC
+
+CONFIGURATION:
+    Config file: ~/.config/rptui/config.toml
+    Cache dir:   $XDG_CACHE_HOME/rptui/
+    Log file:    rptui.log (in project directory)
+`
+	fmt.Print(help)
+}
+
+// printVersion displays version information and exits
+func printVersion() {
+	version := "dev"
+	goVersion := runtime.Version()
+	osArch := fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)
+
+	if info, ok := debug.ReadBuildInfo(); ok {
+		if info.Main.Version != "" && info.Main.Version != "(devel)" {
+			version = info.Main.Version
+		}
+	}
+
+	fmt.Printf("rptui %s (%s, %s)\n", version, goVersion, osArch)
 }
