@@ -134,6 +134,8 @@ func (n NowPlaying) View(
 	jukeboxTotal int,
 	offlineMode bool,
 	offlineCacheInfo string,
+	userRating string,
+	cursorColor string,
 ) string {
 	if song == nil {
 		return " No song playing"
@@ -165,10 +167,31 @@ func (n NowPlaying) View(
 		percentPos))
 
 	rating := song.Rating
+	if rating != "" && rating != "—" {
+		var avg float64
+		fmt.Sscanf(rating, "%f", &avg)
+		if avg > 0 {
+			rating = fmt.Sprintf("%.1f", avg)
+		}
+	}
 	if isFavorite {
 		rating = "★ " + rating
 	}
-	ratingStr := n.accentStyle.Render(rating)
+
+	var ratingLine string
+	if userRating != "" {
+		keyStyle := n.mutedStyle.Render("│")
+		keyEmoji := lipgloss.NewStyle().Foreground(lipgloss.Color(cursorColor)).Render("🔑")
+		displayRating := userRating
+		if userRating == "0" {
+			displayRating = "--"
+		}
+		userRatingStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(cursorColor)).Render(displayRating)
+		ratingLine = fmt.Sprintf("%s  %s %s %s", n.accentStyle.Render(rating), keyStyle, keyEmoji, userRatingStyle)
+	} else {
+		ratingLine = n.accentStyle.Render(rating)
+	}
+	ratingStr := ratingLine
 
 	// Navigation line
 	nextStr := "--"

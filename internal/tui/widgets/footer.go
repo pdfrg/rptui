@@ -48,6 +48,7 @@ func NewFooter(accentStyle, mutedStyle lipgloss.Style) *Footer {
 			{Key: "v", Icon: "", Label: "View"},
 			{Key: "f", Icon: "⭐", Label: ""},
 			{Key: "b", Icon: "🚫", Label: ""},
+			{Key: "R", Icon: "", Label: "Rate"},
 			{Key: "c", Icon: "", Label: "Copy"},
 			{Key: "o", Icon: "", Label: "Opt"},
 			{Key: "m", Icon: "", Label: "Manage"},
@@ -135,6 +136,11 @@ func (h *Footer) SetOfflineMode(offline bool, cacheName string) {
 // SetMiniMode toggles compact single-line footer with essential keys only
 func (h *Footer) SetMiniMode(mini bool) {
 	h.miniMode = mini
+}
+
+// AddChannel99 adds "My Paradise" channel to station shortcuts (when RP auth is active)
+func (h *Footer) AddChannel99() {
+	h.stationKeys = append(h.stationKeys, KeyBinding{Key: "9", Icon: "", Label: "MyParadise"})
 }
 
 // scrobbleIndicator returns the rendered scrobble indicator string, or empty if none.

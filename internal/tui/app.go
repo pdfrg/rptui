@@ -24,6 +24,7 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/adrg/xdg"
 	"github.com/blacktop/go-termimg"
 	"github.com/charmbracelet/x/ansi"
 	"rptui-bubbletea/internal/api"
@@ -57,10 +58,21 @@ const (
 	ViewLyrics
 	ViewSyncedLyrics
 	ViewArtist
+	ViewComments
 	ViewVisualizer
 	ViewOff
 	ViewModeCount
 )
+
+var bottomViewNames = []string{
+	"Playlist",
+	"Lyrics",
+	"Synced Lyrics",
+	"Artist",
+	"Comments",
+	"Visualizer",
+	"Off",
+}
 
 // Scrobble flash states
 const (
@@ -71,15 +83,6 @@ const (
 	flashDuration = 5 * time.Second
 )
 
-var bottomViewNames = []string{
-	"Playlist",
-	"Lyrics",
-	"Synced Lyrics",
-	"Artist",
-	"Visualizer",
-	"Off",
-}
-
 // Modal types
 const (
 	ModalNone = iota
@@ -88,6 +91,7 @@ const (
 	ModalFavorites
 	ModalGallery
 	ModalStationWarning
+	ModalRating
 )
 
 // Layout mode constants
@@ -125,6 +129,8 @@ type Model struct {
 
 	// API Clients
 	rpAPI             *api.RadioParadiseAPI
+	commentsClient    *api.RPCommentsClient
+	ratingsClient     *api.RPRatingsClient
 	lyricsClient      *api.LRCLibClient
 	wikipediaClient   *api.WikipediaClient
 	discogsClient     *api.DiscogsClient
@@ -163,11 +169,16 @@ type Model struct {
 	lastFavoriteQueuedAt time.Time
 
 	// Bottom view content (displayed to user)
-	lyrics       string
-	syncedLyrics []api.SyncedLyric
-	artistInfo   *models.ArtistInfo
-	artistStatus string                        // current loading status for artist view
-	artistCache  map[string]*models.ArtistInfo // keyed by lowercase artist name
+	lyrics         string
+	syncedLyrics   []api.SyncedLyric
+	artistInfo     *models.ArtistInfo
+	artistStatus   string                        // current loading status for artist view
+	artistCache    map[string]*models.ArtistInfo // keyed by lowercase artist name
+	comments       []*api.Comment                // loaded comments for current song
+	commentsStatus string                        // loading status for comments view
+	commentsTotal  int                           // total number of comments available
+	commentsMore   bool                          // whether more comments can be loaded
+	commentsOffset int                           // offset for loading more comments
 
 	// Pending content (fetched for current song, not yet shown).
 	// User presses 'u' to update displayed content from pending.
@@ -207,6 +218,7 @@ type Model struct {
 	favoritesModal      *modals.Favorites
 	galleryModal        *modals.Gallery
 	stationWarningModal *modals.StationWarning
+	ratingModal         *modals.Rating
 
 	// UI dimensions
 	width  int
@@ -304,6 +316,51 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 
 	// Initialize API clients
 	rpAPI := api.NewRadioParadiseAPI(cfg.Channel, cfg.Bitrate)
+
+	// Set up RP authentication if configured
+	authClient := api.NewRPAuthClient()
+	authPath := filepath.Join(xdg.ConfigHome, "rptui", "auth.toml")
+	if err := authClient.LoadState(authPath); err != nil {
+		logger.Printf("Warning: failed to load RP auth state: %v", err)
+	}
+	if cfg.RPAuth.Username != "" && cfg.RPAuth.Password != "" {
+		authClient.SetCredentials(cfg.RPAuth.Username, cfg.RPAuth.Password)
+		if !authClient.HasAuth() {
+			// Have credentials but no valid tokens — attempt login
+			if err := authClient.Login(cfg.RPAuth.Username, cfg.RPAuth.Password); err != nil {
+				logger.Printf("RP API auth failed: %v", err)
+			} else {
+				// Save new tokens
+				if err := authClient.SaveState(authPath); err != nil {
+					logger.Printf("Warning: failed to save RP auth state: %v", err)
+				}
+			}
+		}
+	}
+	if authClient.HasAuth() {
+		rpAPI.WithAuth(authClient)
+		logger.Printf("RP API: authenticated as %s (user ID: %s)", authClient.Username(), authClient.UserID())
+	} else if cfg.RPAuth.Username != "" {
+		logger.Printf("RP API: authentication not available (login failed, no valid session)")
+		// If channel 99 is configured but auth failed, fall back to main mix
+		if cfg.Channel == 99 {
+			logger.Printf("Channel 99 requires authentication, falling back to Main Mix")
+			cfg.Channel = 0
+			rpAPI.SetChannel(0)
+		}
+	} else {
+		logger.Printf("RP API: unauthenticated (ratings, comments, favorites disabled)")
+		// If channel 99 is configured but no auth credentials, fall back to main mix
+		if cfg.Channel == 99 {
+			logger.Printf("Channel 99 requires authentication, falling back to Main Mix")
+			cfg.Channel = 0
+			rpAPI.SetChannel(0)
+		}
+	}
+
+	commentsClient := api.NewRPCommentsClient(authClient)
+	ratingsClient := api.NewRPRatingsClient(authClient)
+
 	lyricsClient := api.NewLRCLibClient()
 	wikipediaClient := api.NewWikipediaClient()
 	discogsClient := api.NewDiscogsClient(cfg.DiscogsToken, cfg.DiscogsKey, cfg.DiscogsSecret)
@@ -333,6 +390,9 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 	headerWidget := widgets.NewHeader(styles.Header, "rptui - Radio Paradise")
 	footerWidget := widgets.NewFooter(styles.AccentStyle, styles.MutedStyle)
 	footerWidget.SetScrobbleServices(scrobbler.ServiceNames())
+	if rpAPI.IsAuthenticated() {
+		footerWidget.AddChannel99()
+	}
 	nowPlayingWidget := widgets.NewNowPlaying(styles.ForegroundStyle, styles.AccentStyle, styles.MutedStyle, theme.Accent, theme.Cursor, theme.Background)
 	playlistWidget := widgets.NewPlaylist(styles)
 
@@ -364,6 +424,8 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 		styles:            styles,
 		themeWatcher:      themeWatcher,
 		rpAPI:             rpAPI,
+		commentsClient:    commentsClient,
+		ratingsClient:     ratingsClient,
 		lyricsClient:      lyricsClient,
 		wikipediaClient:   wikipediaClient,
 		discogsClient:     discogsClient,
@@ -724,6 +786,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			case ModalStationWarning:
 				cmd = m.stationWarningModal.Update(msg)
+			case ModalRating:
+				if m.ratingModal != nil {
+					cmd = m.ratingModal.Update(msg)
+				}
 			}
 			return handle(m, cmd)
 		}
@@ -884,6 +950,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case blockFetchedMsg:
 		return handle(m.handleBlockFetched(msg))
 
+	case chan99FetchedMsg:
+		return handle(m.handleChan99Fetched(msg))
+
 	case jukeboxStartMsg:
 		return handle(m.handleJukeboxStart())
 
@@ -926,6 +995,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return handle(m, nil)
 
+	case commentsFetchedMsg:
+		return handle(m.handleCommentsFetched(msg))
+
 	case statusClearMsg:
 		if msg.seq == m.statusSeq {
 			m.statusMsg = ""
@@ -964,6 +1036,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case notificationSentMsg:
 		m.notifSentForSong = true
 		return m, nil
+
+	case modals.RatingMsg:
+		m.activeModal = ModalNone
+		if msg.Submitted {
+			if m.currentSong != nil && m.ratingsClient != nil {
+				_, err := m.ratingsClient.SubmitRating(m.currentSong.SongID, msg.Rating)
+				if err != nil {
+					return m, setStatus(&m, fmt.Sprintf("Rating failed: %v", err), true)
+				}
+				// Update local user rating
+				m.currentSong.UserRating = fmt.Sprintf("%d", msg.Rating)
+				return m, setStatus(&m, fmt.Sprintf("Rated %d/10", msg.Rating), false)
+			}
+		}
+		return m, renderAlbumArtAfterDelay()
 
 	case visTickMsg:
 		if m.vis != nil && m.bottomViewMode == ViewVisualizer {
@@ -1107,6 +1194,25 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case "R":
+		// Rate song — only when authenticated
+		if !m.rpAPI.IsAuthenticated() {
+			return m, setStatus(&m, "Rating requires RP authentication", true)
+		}
+		if m.visFullscreen {
+			return m, nil
+		}
+		if m.currentSong == nil || m.currentSong.SongID == 0 {
+			return m, setStatus(&m, "No song to rate", true)
+		}
+		userRating := 5
+		if m.currentSong.UserRating != "" && m.currentSong.UserRating != "0" {
+			fmt.Sscanf(m.currentSong.UserRating, "%d", &userRating)
+		}
+		m.ratingModal = modals.NewRating(m.styles, m.currentSong.Title, m.currentSong.Artist, m.currentSong.Album, m.currentSong.Year, userRating)
+		m.activeModal = ModalRating
+		return m, clearKittyImagesCmd()
+
 	case "left", "right":
 		// Seek: left=-10s, right=+10s
 		if m.currentSong == nil || !m.isPlaying || m.isPaused {
@@ -1215,6 +1321,21 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.updateBottomView()
 		return m, tea.Batch(cmds...)
 
+	case "l":
+		// Load more comments when in comments view
+		if m.bottomViewMode != ViewComments {
+			return m, nil
+		}
+		if !m.rpAPI.IsAuthenticated() {
+			return m, setStatus(&m, "Comments require RP authentication", true)
+		}
+		if !m.commentsMore || m.currentSong == nil {
+			return m, setStatus(&m, "No more comments", false)
+		}
+		m.commentsStatus = "Loading more comments..."
+		m.updateBottomView()
+		return m, m.loadMoreCommentsCmd()
+
 	case "u":
 		// Update displayed lyrics/artist info from pending
 		if m.hasPendingUpdate() {
@@ -1289,6 +1410,16 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		station := stationMap[msg.String()]
 		return m.switchStation(station)
+
+	case "9":
+		// My Paradise channel — only when authenticated
+		if m.offlineMode || m.jukeboxMode {
+			return m, nil
+		}
+		if !m.rpAPI.IsAuthenticated() {
+			return m, setStatus(&m, "Channel 99 requires RP authentication", true)
+		}
+		return m.switchStation(99)
 
 	case "o":
 		// Options modal — only in large and medium layouts
@@ -1914,12 +2045,26 @@ func (m Model) handleBlockFetched(msg blockFetchedMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// Check for promo block (blockID == 0) — skip in all cases
-	if msg.blockID == 0 {
+	// Exception: channel 99 (My Paradise) always returns blockID=0 with 1 song
+	isChan99 := m.config.Channel == 99
+	if msg.blockID == 0 && !isChan99 {
 		logger.Printf("Skipping promo block (blockID=0)")
 		if !m.initialized {
 			return m, tea.Batch(setStatus(&m, "Waiting for stream...", false), m.fetchBlockCmd)
 		}
 		return m, m.fetchBlockCmd
+	}
+
+	// Channel 99 (My Paradise) returns a single-song "block" with no block ID.
+	// We buffer 4 songs initially, then refill with 2 when the last song starts.
+	if isChan99 {
+		// The actual fetching happens asynchronously via fetchChan99Cmd
+		// This path is only reached on the initial block fetch or poll tick
+		if !m.initialized {
+			return m, m.fetchChan99Cmd(4)
+		}
+		// Already initialized — this is a poll tick, trigger a refill
+		return m, m.fetchChan99Cmd(2)
 	}
 
 	// If already initialized, we're appending to existing playlist
@@ -2039,6 +2184,60 @@ func (m Model) handleBlockFetched(msg blockFetchedMsg) (tea.Model, tea.Cmd) {
 	m.initialized = true
 
 	return m, m.songChangedCmds()
+}
+
+// handleChan99Fetched processes channel 99 song fetch results
+func (m Model) handleChan99Fetched(msg chan99FetchedMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		if !m.initialized {
+			return m, setStatus(&m, fmt.Sprintf("Failed to load My Paradise: %v", msg.err), true)
+		}
+		logger.Printf("Channel 99 fetch error: %v", msg.err)
+		return m, nil
+	}
+
+	if !m.initialized {
+		// Initial load — start playback with buffered songs
+		urls := make([]string, len(msg.songs))
+		for i, s := range msg.songs {
+			urls[i] = s.GaplessURL
+		}
+
+		m.songs = msg.songs
+		m.currentSongIndex = 0
+		m.playlistStartIdx = 0
+		m.lastBlockID = 0
+
+		if err := m.mpvBackend.Start(urls); err != nil {
+			logger.Printf("Failed to start MPV for channel 99: %v", err)
+			return m, setStatus(&m, fmt.Sprintf("Failed to start playback: %v", err), true)
+		}
+		m.isPlaying = true
+		m.initialized = true
+		m.connectedAt = time.Now()
+
+		m.updatePlaylist()
+		return m, tea.Batch(
+			setStatus(&m, "My Paradise", false),
+			m.songChangedCmds(),
+		)
+	}
+
+	// Refill — append to existing playlist
+	urls := make([]string, len(msg.songs))
+	for i, s := range msg.songs {
+		urls[i] = s.GaplessURL
+	}
+
+	if err := m.mpvBackend.AppendToPlaylist(urls); err != nil {
+		logger.Printf("Failed to append to channel 99 playlist: %v", err)
+		return m, nil
+	}
+	m.songs = append(m.songs, msg.songs...)
+	m.pollingNextBlock = false
+	m.updatePlaylist()
+
+	return m, setStatus(&m, "My Paradise", false)
 }
 
 // handleProgressTick handles progress updates (every 1 second)
@@ -2460,11 +2659,69 @@ func (m Model) handleArtistFetched(msg artistFetchedMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// handleCommentsFetched processes the comments fetch result
+// When in comments view, goes to pending (like lyrics/artist).
+// When NOT in comments view, auto-populates for next time user enters.
+func (m Model) handleCommentsFetched(msg commentsFetchedMsg) (tea.Model, tea.Cmd) {
+	if m.currentSong == nil || msg.songID != m.currentSong.SongID {
+		return m, nil
+	}
+
+	if msg.err != nil {
+		m.commentsStatus = "Failed to load comments. Check log."
+		logger.Printf("Comments fetch failed: %v", msg.err)
+		if m.bottomViewMode == ViewComments {
+			m.updateBottomView()
+		}
+		return m, nil
+	}
+
+	if m.bottomViewMode == ViewComments {
+		// Currently viewing comments — go to pending, don't overwrite
+		m.commentsStatus = ""
+		if len(msg.comments) == 0 {
+			m.commentsStatus = "No comments for this song"
+		}
+		m.comments = msg.comments
+		m.commentsTotal = msg.total
+		m.commentsMore = msg.more
+		m.commentsOffset = msg.offset
+		m.updateBottomView()
+	} else {
+		// Not viewing comments — store for next time user enters
+		m.comments = msg.comments
+		m.commentsStatus = ""
+		m.commentsTotal = msg.total
+		m.commentsMore = msg.more
+		m.commentsOffset = msg.offset
+		if len(msg.comments) == 0 {
+			m.commentsStatus = "No comments for this song"
+		}
+	}
+
+	return m, nil
+}
+
 // prunePlaylist removes old songs from previous blocks, keeping up to 3 before
 // the currently playing song for prev-song functionality.
 // Only prunes songs that belong to an older block than the current song.
+// For channel 99 (no real blocks), prunes by position only.
 func (m *Model) prunePlaylist() {
 	if m.currentSongIndex < 0 || m.currentSongIndex >= len(m.songs) {
+		return
+	}
+
+	// Channel 99: simple position-based prune (no BlockID available)
+	if m.config.Channel == 99 {
+		keepStart := m.currentSongIndex - 3
+		if keepStart <= 0 {
+			return
+		}
+		pruneEnd := keepStart
+		m.songs = m.songs[pruneEnd:]
+		m.currentSongIndex -= pruneEnd
+		m.playlistStartIdx -= pruneEnd
+		logger.Printf("Channel 99: pruned %d old songs, currentIdx=%d", pruneEnd, m.currentSongIndex)
 		return
 	}
 
@@ -2706,6 +2963,45 @@ func (m *Model) updateBottomView() {
 			}
 		}
 
+	case ViewComments:
+		if !m.rpAPI.IsAuthenticated() {
+			content = "  Comments require RP authentication"
+		} else if m.commentsStatus != "" {
+			content = "  " + m.commentsStatus
+		} else if len(m.comments) == 0 {
+			content = "  Loading comments..."
+		} else {
+			var lines []string
+			for _, c := range m.comments {
+				// Format: <time> <username>
+				// <quoted text if any>
+				// <message>
+				timeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Accent))
+				userStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Cursor))
+				header := timeStyle.Render(c.PostedTime) + " " + userStyle.Render(c.Username)
+				lines = append(lines, header)
+				if c.QuotedText != "" {
+					for _, qLine := range strings.Split(c.QuotedText, "\n") {
+						lines = append(lines, "  "+m.styles.MutedStyle.Render("> "+qLine))
+					}
+				}
+				for _, mLine := range strings.Split(c.Message, "\n") {
+					lines = append(lines, "  "+mLine)
+				}
+				lines = append(lines, "")
+			}
+			// Show pagination hint if more comments available
+			if m.commentsMore && m.commentsTotal > 0 {
+				lines = append(lines, "")
+				lines = append(lines, m.styles.MutedStyle.Render(fmt.Sprintf("%d/%d comments — press 'l' to load more", len(m.comments), m.commentsTotal)))
+			} else if m.commentsTotal > 0 && len(m.comments) < m.commentsTotal {
+				lines = append(lines, "")
+				lines = append(lines, m.styles.MutedStyle.Render(fmt.Sprintf("%d/%d comments", len(m.comments), m.commentsTotal)))
+			}
+			// Pad with many newlines so viewport scrolls to blank space at bottom
+			content = strings.Join(lines, "\n") + strings.Repeat("\n", 10)
+		}
+
 	case ViewPlaylist:
 		// Playlist is rendered separately via table component
 		return
@@ -2769,6 +3065,12 @@ func (m *Model) songChangedCmds() tea.Cmd {
 	m.pendingArtistArtLoaded = false
 	m.pendingArtistArtWidth = 0
 	m.pendingArtistArtHeight = 0
+
+	// Clear comments for the new song, unless currently viewing them
+	if m.bottomViewMode != ViewComments {
+		m.comments = nil
+		m.commentsStatus = ""
+	}
 
 	// Only hold displayed content for the view the user is currently in.
 	// If we're not in that view, clear stale data so the view shows
@@ -2852,6 +3154,16 @@ func (m *Model) songChangedCmds() tea.Cmd {
 	if !m.offlineMode {
 		cmds = append(cmds, m.fetchLyricsCmd())
 		cmds = append(cmds, m.fetchArtistCmd())
+		// Don't auto-fetch comments when in comments view (preserve current content)
+		if m.bottomViewMode != ViewComments {
+			cmds = append(cmds, m.fetchCommentsCmd())
+		}
+	}
+
+	// Channel 99: refill when the last song in the playlist starts playing
+	if m.config.Channel == 99 && m.currentSongIndex == len(m.songs)-1 {
+		logger.Printf("Channel 99: last song started, refilling 2 more songs")
+		cmds = append(cmds, m.fetchChan99Cmd(2))
 	}
 
 	return tea.Batch(cmds...)
@@ -2967,6 +3279,75 @@ func (m Model) fetchLyricsCmd() tea.Cmd {
 			eventID: song.EventID,
 			plain:   result.PlainLyrics,
 			synced:  syncedLyrics,
+		}
+	}
+}
+
+// fetchChan99Cmd returns a command that fetches n songs from channel 99
+func (m Model) fetchChan99Cmd(n int) tea.Cmd {
+	return fetchChan99Cmd(m.rpAPI, n)
+}
+
+// fetchCommentsCmd fetches comments for the current song from RP
+func (m Model) fetchCommentsCmd() tea.Cmd {
+	if m.currentSong == nil || m.currentSong.SongID == 0 {
+		return nil
+	}
+	if !m.rpAPI.IsAuthenticated() {
+		return nil
+	}
+
+	songID := m.currentSong.SongID
+	return func() tea.Msg {
+		resp, err := m.commentsClient.GetComments(songID, 20, "oldest")
+		if err != nil {
+			return commentsFetchedMsg{songID: songID, err: err}
+		}
+		comments := make([]*api.Comment, len(resp.Comments))
+		for i := range resp.Comments {
+			comments[i] = &resp.Comments[i]
+		}
+		return commentsFetchedMsg{
+			songID:   songID,
+			comments: comments,
+			total:    resp.TotalComments,
+			more:     resp.MoreComments,
+			offset:   resp.MoreOffset,
+		}
+	}
+}
+
+// loadMoreCommentsCmd fetches additional comments starting from the current offset
+func (m Model) loadMoreCommentsCmd() tea.Cmd {
+	if m.currentSong == nil || m.currentSong.SongID == 0 {
+		return nil
+	}
+	if !m.rpAPI.IsAuthenticated() {
+		return nil
+	}
+
+	songID := m.currentSong.SongID
+	offset := m.commentsOffset
+	existing := m.comments
+	existingTotal := m.commentsTotal
+
+	return func() tea.Msg {
+		resp, err := m.commentsClient.GetCommentsWithOffset(songID, 20, "oldest", offset)
+		if err != nil {
+			return commentsFetchedMsg{songID: songID, err: err}
+		}
+		comments := make([]*api.Comment, len(resp.Comments))
+		for i := range resp.Comments {
+			comments[i] = &resp.Comments[i]
+		}
+		// Append to existing comments
+		allComments := append(existing, comments...)
+		return commentsFetchedMsg{
+			songID:   songID,
+			comments: allComments,
+			total:    existingTotal,
+			more:     resp.MoreComments,
+			offset:   resp.MoreOffset,
 		}
 	}
 }
@@ -3347,6 +3728,10 @@ func (m Model) View() tea.View {
 			if m.stationWarningModal != nil {
 				modalView = m.stationWarningModal.View()
 			}
+		case ModalRating:
+			if m.ratingModal != nil {
+				modalView = m.ratingModal.View()
+			}
 		}
 
 		if modalView != "" {
@@ -3446,6 +3831,8 @@ func (m Model) View() tea.View {
 		m.jukeboxTotal,
 		m.offlineMode,
 		offlineCacheInfo,
+		m.getUserRating(),
+		m.theme.Cursor,
 	)
 
 	var b strings.Builder
@@ -3711,6 +4098,14 @@ func (m Model) getSkipsAvailable() int {
 
 func (m Model) getPrevAvailable() int {
 	return m.currentSongIndex
+}
+
+// getUserRating returns the current song's user rating if authenticated, empty string otherwise
+func (m Model) getUserRating() string {
+	if m.currentSong == nil || !m.rpAPI.IsAuthenticated() {
+		return ""
+	}
+	return m.currentSong.UserRating
 }
 
 func indentLines(s, prefix string) string {

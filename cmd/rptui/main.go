@@ -48,6 +48,9 @@ func main() {
 		case "--lastfm-auth":
 			handleLastFMAuth()
 			return
+		case "--rp-auth":
+			handleRPAuth()
+			return
 		case "--jukebox", "-j":
 			jukeboxMode = true
 		case "--layout":
@@ -154,6 +157,72 @@ func handleLastFMAuth() {
 		os.Exit(1)
 	}
 	fmt.Println("Session key saved to config. Last.fm scrobbling is now enabled.")
+}
+
+// handleRPAuth handles the --rp-auth flag for interactive RP login
+func handleRPAuth() {
+	cfg, err := config.NewConfig()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+		os.Exit(1)
+	}
+
+	authClient := api.NewRPAuthClient()
+
+	// Check if already authenticated
+	authDir := filepath.Join(xdg.ConfigHome, "rptui")
+	authPath := filepath.Join(authDir, "auth.toml")
+	if err := authClient.LoadState(authPath); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to load auth state: %v\n", err)
+	}
+
+	if authClient.HasAuth() {
+		fmt.Printf("Currently authenticated as: %s (user ID: %s)\n", authClient.Username(), authClient.UserID())
+		fmt.Print("Re-authenticate? (y/n): ")
+		reader := bufio.NewReader(os.Stdin)
+		line, _ := reader.ReadString('\n')
+		if strings.TrimSpace(strings.ToLower(line)) != "y" {
+			fmt.Println("Authentication unchanged.")
+			return
+		}
+	}
+
+	// Prompt for credentials
+	fmt.Print("RP username: ")
+	reader := bufio.NewReader(os.Stdin)
+	username, _ := reader.ReadString('\n')
+	username = strings.TrimSpace(username)
+
+	fmt.Print("RP password: ")
+	password, _ := reader.ReadString('\n')
+	password = strings.TrimSpace(password)
+
+	if username == "" || password == "" {
+		fmt.Println("Username and password are required.")
+		os.Exit(1)
+	}
+
+	// Attempt authentication
+	fmt.Println("\nAuthenticating with Radio Paradise...")
+	if err := authClient.Login(username, password); err != nil {
+		fmt.Fprintf(os.Stderr, "Authentication failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Save credentials to config
+	cfg.RPAuth.Username = username
+	cfg.RPAuth.Password = password
+	if err := cfg.Save(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to save config: %v\n", err)
+	}
+
+	// Save session tokens
+	if err := authClient.SaveState(authPath); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to save auth state: %v\n", err)
+	}
+
+	fmt.Printf("Successfully authenticated as %s (user ID: %s)\n", username, authClient.UserID())
+	fmt.Println("Session tokens saved. Authenticated features are now available.")
 }
 
 // parseCacheRequest parses a --cache argument and its optional station/bitrate
@@ -605,6 +674,9 @@ OFFLINE CACHE:
 
 ACTIONS:
     --lastfm-auth           Run Last.fm OAuth authentication flow and save session key
+    --rp-auth               Authenticate with Radio Paradise account
+                            Enables user ratings, comments, favorites sync, and My Paradise channel
+                            (optional — all features work without an RP account)
 
 EXAMPLES:
     rptui                   Launch with default settings
