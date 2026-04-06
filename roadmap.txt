@@ -4,14 +4,29 @@
 not to implement (if ever) until later, all roadmap items above complete
 refer to rp_notes.txt
 
-RP login with /auth
-
-RP comments support (show, not create)
-
-RP song ratings
+[x] RP login with /auth
+[x] RP comments support (show, not create)
+[x] RP song ratings
 	show user rating
 	submit user rating
-
-RP favorites
+[x] RP favorites
 	user configurable 7-10 on RP website
 	channel 99 = My Paradise (favorites station)
+-------------------------------------
+
+prepare to publish to github
+	decide on version number
+	decide on license
+	create README.md
+		in human-written style (not too many emojis)
+		no "contributing" section
+		not comprehensive documentation
+		sell the app, list features
+		link to DOCUMENTATION.md
+		give attributions (especially cliamp --used their visualizations)
+	take screenshots
+		show layouts
+		show themes
+		illustrate features
+	what else?
+	
