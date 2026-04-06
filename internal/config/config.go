@@ -18,6 +18,7 @@ var StationNames = map[int]string{
 	3:   "The Globe",
 	5:   "Beyond...",
 	42:  "Serenity",
+	99:  "My Paradise",
 	945: "KFAT",
 }
 
@@ -61,6 +62,9 @@ type Config struct {
 	NotificationsEnabled bool `toml:"notifications_enabled" comment:"show desktop notifications on song changes (default: false)"`
 	NotificationsShowArt bool `toml:"notifications_show_art" comment:"include album art thumbnail in notifications (default: true)"`
 
+	// RP Auth (optional, enables ratings, comments, favorites sync, channel 99)
+	RPAuth RPAuthConfig `toml:"rp_auth" comment:"Radio Paradise account (optional)\nenables user ratings, comments, favorites sync, and My Paradise channel\nusername: your RP account username\npassword: your RP account password (used to obtain session token)"`
+
 	// Layout mode
 	Layout string `toml:"layout" comment:"UI layout mode\nlarge: full layout with all elements (default)\nmedium: no bottom view (no playlist/lyrics/visualizer)\ncompact: no album art, no bottom view, mini footer\nnarrow: album art top-left, now playing below, mini footer (default: large)"`
 
@@ -85,6 +89,12 @@ type LastFMConfig struct {
 type ListenBrainzConfig struct {
 	Enabled bool   `toml:"enabled" comment:"enable ListenBrainz scrobbling (default: false)"`
 	Token   string `toml:"token" comment:"user token from https://listenbrainz.org/profile/ (default: '')"`
+}
+
+// RPAuthConfig holds Radio Paradise account credentials (optional)
+type RPAuthConfig struct {
+	Username string `toml:"username" comment:"RP account username"`
+	Password string `toml:"password" comment:"RP account password (used to obtain session token)"`
 }
 
 // VisualizerConfig holds visualizer settings

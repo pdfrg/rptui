@@ -25,6 +25,13 @@ type blockFetchedMsg struct {
 	err       error
 }
 
+// chan99FetchedMsg is sent when channel 99 songs are fetched
+type chan99FetchedMsg struct {
+	songs []*models.Song
+	count int // how many were requested
+	err   error
+}
+
 // progressTickMsg is sent every second to update progress
 type progressTickMsg time.Time
 
@@ -50,6 +57,16 @@ type artistFetchedMsg struct {
 	eventID int64
 	info    *models.ArtistInfo
 	err     error
+}
+
+// commentsFetchedMsg is sent when comments are fetched
+type commentsFetchedMsg struct {
+	songID   int64
+	comments []*api.Comment
+	total    int
+	more     bool
+	offset   int
+	err      error
 }
 
 // imageLoadedMsg is sent when album art image is loaded
@@ -274,5 +291,51 @@ func startJukeboxCmd() tea.Cmd {
 func startOfflineCmd() tea.Cmd {
 	return func() tea.Msg {
 		return offlineStartMsg{}
+	}
+}
+
+// fetchCommentsCmd fetches comments for the given song
+func fetchCommentsCmd(client *api.RPCommentsClient, songID int64) tea.Cmd {
+	return func() tea.Msg {
+		if client == nil || songID == 0 {
+			return commentsFetchedMsg{songID: songID, err: fmt.Errorf("no comments available")}
+		}
+		resp, err := client.GetComments(songID, 20, "oldest")
+		if err != nil {
+			return commentsFetchedMsg{songID: songID, err: err}
+		}
+		comments := make([]*api.Comment, len(resp.Comments))
+		for i := range resp.Comments {
+			comments[i] = &resp.Comments[i]
+		}
+		return commentsFetchedMsg{
+			songID:   songID,
+			comments: comments,
+			total:    resp.TotalComments,
+			more:     resp.MoreComments,
+			offset:   resp.MoreOffset,
+		}
+	}
+}
+
+// fetchChan99Cmd fetches n songs from channel 99 by calling /play n times
+func fetchChan99Cmd(rpAPI *api.RadioParadiseAPI, count int) tea.Cmd {
+	return func() tea.Msg {
+		var allSongs []*models.Song
+		for i := 0; i < count; i++ {
+			block, err := rpAPI.GetBlock(context.Background())
+			if err != nil {
+				return chan99FetchedMsg{count: count, err: fmt.Errorf("failed to fetch channel 99 song %d: %w", i+1, err)}
+			}
+			songs, _ := rpAPI.ParseBlockSongs(block)
+			if len(songs) == 0 {
+				continue
+			}
+			allSongs = append(allSongs, songs...)
+		}
+		if len(allSongs) == 0 {
+			return chan99FetchedMsg{count: count, err: fmt.Errorf("no songs returned from channel 99")}
+		}
+		return chan99FetchedMsg{songs: allSongs, count: count}
 	}
 }

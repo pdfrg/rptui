@@ -13,6 +13,8 @@ type Song struct {
 	Year           string `json:"year"`
 	Rating         string `json:"rating"`          // From get_block (average user rating)
 	ListenerRating string `json:"listener_rating"` // From nowplaying_list
+	UserRating     string `json:"user_rating"`     // Logged-in user's rating ("0"-"10")
+	SongID         int64  `json:"song_id"`         // RP song ID (needed for comments, ratings)
 	CoverLarge     string `json:"cover_large"`
 	CoverMedium    string `json:"cover_medium"`
 	CoverSmall     string `json:"cover_small"`
@@ -35,6 +37,8 @@ func NewSong(data map[string]any, imageBase string) *Song {
 		Year:           getString(data, "year", "—"),
 		Rating:         getString(data, "rating", "—"),
 		ListenerRating: getString(data, "listener_rating", "—"),
+		UserRating:     getString(data, "user_rating", "0"),
+		SongID:         getInt64(data, "song_id", 0),
 		Duration:       getInt64(data, "duration", 0),
 		EventID:        getInt64(data, "event", 0),
 		PlayTime:       getInt64(data, "sched_time_millis", 0),

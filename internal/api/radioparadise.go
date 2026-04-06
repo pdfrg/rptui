@@ -67,6 +67,7 @@ type RadioParadiseAPI struct {
 	baseURL    string
 	imageBase  string
 	httpClient *http.Client
+	authClient *RPAuthClient
 }
 
 // NewRadioParadiseAPI creates a new Radio Paradise API client
@@ -80,6 +81,33 @@ func NewRadioParadiseAPI(channel, bitrate int) *RadioParadiseAPI {
 			Timeout: 10 * time.Second,
 		},
 	}
+}
+
+// WithAuth attaches an RP authentication client to the API client.
+// When auth is available, all requests will include session cookies.
+func (r *RadioParadiseAPI) WithAuth(authClient *RPAuthClient) *RadioParadiseAPI {
+	r.authClient = authClient
+	return r
+}
+
+// IsAuthenticated returns true if an auth client is attached and has valid tokens
+func (r *RadioParadiseAPI) IsAuthenticated() bool {
+	return r.authClient != nil && r.authClient.HasAuth()
+}
+
+// doRequest creates an HTTP request with auth cookies if available
+func (r *RadioParadiseAPI) doRequest(method, url string) (*http.Response, error) {
+	req, err := http.NewRequest(method, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if r.authClient != nil && r.authClient.HasAuth() {
+		req.Header.Set("Cookie", r.authClient.CookieString())
+	}
+	req.Header.Set("User-Agent", "rptui/0.1")
+
+	return r.httpClient.Do(req)
 }
 
 // NowPlayingResponse represents the /now_playing API response
@@ -98,7 +126,7 @@ type NowPlayingResponse struct {
 func (r *RadioParadiseAPI) GetNowPlaying(ctx context.Context) (*NowPlayingResponse, error) {
 	url := fmt.Sprintf("%s/now_playing?chan=%d", r.baseURL, r.channel)
 
-	resp, err := r.httpClient.Get(url)
+	resp, err := r.doRequest("GET", url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch now playing: %w", err)
 	}
@@ -128,7 +156,7 @@ type PlaylistResponse struct {
 func (r *RadioParadiseAPI) GetPlaylist(ctx context.Context) (*PlaylistResponse, error) {
 	url := fmt.Sprintf("%s/nowplaying_list_v2022?chan=%d", r.baseURL, r.channel)
 
-	resp, err := r.httpClient.Get(url)
+	resp, err := r.doRequest("GET", url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch playlist: %w", err)
 	}
@@ -174,7 +202,7 @@ func (r *RadioParadiseAPI) GetBlock(ctx context.Context) (*BlockResponse, error)
 		r.baseURL, r.bitrate, r.channel,
 	)
 
-	resp, err := r.httpClient.Get(url)
+	resp, err := r.doRequest("GET", url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch block: %w", err)
 	}
@@ -266,7 +294,7 @@ type ListChannelsResponse []struct {
 func (r *RadioParadiseAPI) ListChannels(ctx context.Context) (ListChannelsResponse, error) {
 	url := fmt.Sprintf("%s/list_chan", r.baseURL)
 
-	resp, err := r.httpClient.Get(url)
+	resp, err := r.doRequest("GET", url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch channels: %w", err)
 	}
