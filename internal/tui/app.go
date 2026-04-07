@@ -169,22 +169,28 @@ type Model struct {
 	lastFavoriteQueuedAt time.Time
 
 	// Bottom view content (displayed to user)
-	lyrics         string
-	syncedLyrics   []api.SyncedLyric
-	artistInfo     *models.ArtistInfo
-	artistStatus   string                        // current loading status for artist view
-	artistCache    map[string]*models.ArtistInfo // keyed by lowercase artist name
-	comments       []*api.Comment                // loaded comments for current song
-	commentsStatus string                        // loading status for comments view
-	commentsTotal  int                           // total number of comments available
-	commentsMore   bool                          // whether more comments can be loaded
-	commentsOffset int                           // offset for loading more comments
+	lyrics          string
+	syncedLyrics    []api.SyncedLyric
+	artistInfo      *models.ArtistInfo
+	artistStatus    string                        // current loading status for artist view
+	artistCache     map[string]*models.ArtistInfo // keyed by lowercase artist name
+	comments        []*api.Comment                // all loaded comments for current song
+	commentsStatus  string                        // loading status for comments view
+	commentsTotal   int                           // total number of comments available
+	commentsPage    int                           // current page (0-indexed)
+	commentsPerPage int                           // comments per page (default 20)
+	commentsSongID  int64                         // song ID that the displayed comments belong to
+	commentsLoaded  bool                          // whether more comments can be loaded from API
 
 	// Pending content (fetched for current song, not yet shown).
 	// User presses 'u' to update displayed content from pending.
 	// Synced lyrics bypass this — they always auto-update.
 	pendingLyrics          string
 	pendingArtistInfo      *models.ArtistInfo
+	pendingComments        []*api.Comment // pending comments for new song
+	pendingCommentsTotal   int
+	pendingCommentsMore    bool
+	pendingCommentsOffset  int
 	pendingEventID         int64  // eventID the pending data belongs to
 	pendingArtistArtStr    string // pending rendered artist thumbnail
 	pendingArtistArtLoaded bool
@@ -448,6 +454,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 		downloadResults:   make(chan favoriteDownloadMsg, 1),
 		jukeboxMode:       startJukebox,
 		jukeboxBatchSize:  10,
+		commentsPerPage:   20,
 	}
 
 	// Determine layout mode
@@ -1169,6 +1176,16 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case "P":
+		// Previous comments page when in comments view
+		if m.bottomViewMode == ViewComments && m.commentsPage > 0 {
+			m.commentsPage--
+			m.commentsStatus = ""
+			m.updateBottomView()
+			return m, nil
+		}
+		return m, nil
+
 	case "p":
 		// Previous song
 		if m.currentSongIndex > 0 {
@@ -1180,7 +1197,6 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return m, m.songChangedCmds()
 			}
 		} else {
-			// Restart current song if at beginning
 			if err := m.mpvBackend.SeekToStart(); err == nil {
 				return m, setStatus(&m, "Restarting song", false)
 			}
@@ -1316,28 +1332,48 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if m.artistArtLoaded && m.artistArtStr != "" {
 				cmds = append(cmds, renderArtistArtAfterDelay())
 			}
+		} else if m.bottomViewMode == ViewComments {
+			// Fetch comments if not already loaded for current song
+			if m.currentSong != nil && m.commentsSongID != m.currentSong.SongID {
+				m.commentsSongID = m.currentSong.SongID
+				cmds = append(cmds, m.fetchCommentsCmd())
+			}
 		}
 
 		m.updateBottomView()
 		return m, tea.Batch(cmds...)
 
 	case "l":
-		// Load more comments when in comments view
+		// Load next page or navigate to next loaded page of comments
 		if m.bottomViewMode != ViewComments {
 			return m, nil
 		}
 		if !m.rpAPI.IsAuthenticated() {
 			return m, setStatus(&m, "Comments require RP authentication", true)
 		}
-		if !m.commentsMore || m.currentSong == nil {
+		if m.commentsTotal == 0 || m.currentSong == nil {
 			return m, setStatus(&m, "No more comments", false)
 		}
-		m.commentsStatus = "Loading more comments..."
+		// Calculate the last page that has been loaded
+		maxLoadedPage := (len(m.comments) - 1) / m.commentsPerPage
+		if m.commentsPage >= maxLoadedPage {
+			// We're on the last loaded page — try to load more from API
+			if m.commentsLoaded {
+				return m, setStatus(&m, "No more comments", false)
+			}
+			m.commentsPage++
+			m.commentsStatus = "Loading comments..."
+			return m, tea.Batch(setStatus(&m, "Loading comments...", false), m.fetchCommentsPageCmd(m.commentsPage))
+		}
+		// Navigate to next already-loaded page
+		m.commentsPage++
 		m.updateBottomView()
-		return m, m.loadMoreCommentsCmd()
+		m.viewport.GotoTop()
+		return m, nil
 
 	case "u":
-		// Update displayed lyrics/artist info from pending
+		// Update displayed lyrics/artist info/comments from pending
+		applied := false
 		if m.hasPendingUpdate() {
 			hadPendingArt := m.pendingArtistArtLoaded
 			m.applyPendingUpdate()
@@ -1345,7 +1381,25 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if hadPendingArt && m.bottomViewMode == ViewArtist {
 				cmd = renderArtistArtAfterDelay()
 			}
-			return m, tea.Batch(cmd, setStatus(&m, "Updated to current song", false))
+			applied = true
+			tea.Batch(cmd, setStatus(&m, "Updated to current song", false))
+		}
+		if m.pendingComments != nil && m.bottomViewMode == ViewComments {
+			m.comments = m.pendingComments
+			m.commentsTotal = m.pendingCommentsTotal
+			m.commentsPage = 0
+			m.commentsStatus = ""
+			if m.currentSong != nil {
+				m.commentsSongID = m.currentSong.SongID
+			}
+			m.pendingComments = nil
+			m.pendingCommentsTotal = 0
+			m.updateBottomView()
+			applied = true
+			setStatus(&m, "Updated to current song", false)
+		}
+		if applied {
+			return m, setStatus(&m, "Updated to current song", false)
 		}
 		return m, nil
 
@@ -2677,23 +2731,41 @@ func (m Model) handleCommentsFetched(msg commentsFetchedMsg) (tea.Model, tea.Cmd
 	}
 
 	if m.bottomViewMode == ViewComments {
-		// Currently viewing comments — go to pending, don't overwrite
-		m.commentsStatus = ""
-		if len(msg.comments) == 0 {
-			m.commentsStatus = "No comments for this song"
+		// Check if this is for the same song we're currently displaying
+		if msg.songID == m.commentsSongID {
+			// Same song — either initial or load more
+			m.commentsStatus = ""
+			if len(msg.comments) == 0 {
+				m.commentsStatus = "No comments for this song"
+			}
+			if msg.loadMore {
+				// Appending more comments — keep current page position
+				m.comments = msg.comments
+				m.commentsLoaded = !msg.more
+			} else {
+				// Initial fetch — reset page
+				m.comments = msg.comments
+				m.commentsPage = 0
+				m.commentsLoaded = !msg.more
+			}
+			m.commentsTotal = msg.total
+			m.updateBottomView()
+			m.viewport.GotoTop()
+		} else {
+			// Different song (song changed while viewing) — store in pending
+			m.pendingComments = msg.comments
+			m.pendingCommentsTotal = msg.total
+			m.pendingCommentsMore = msg.more
+			m.pendingCommentsOffset = msg.offset
+			m.updateBottomView()
 		}
-		m.comments = msg.comments
-		m.commentsTotal = msg.total
-		m.commentsMore = msg.more
-		m.commentsOffset = msg.offset
-		m.updateBottomView()
 	} else {
 		// Not viewing comments — store for next time user enters
 		m.comments = msg.comments
 		m.commentsStatus = ""
 		m.commentsTotal = msg.total
-		m.commentsMore = msg.more
-		m.commentsOffset = msg.offset
+		m.commentsPage = 0
+		m.commentsSongID = msg.songID
 		if len(msg.comments) == 0 {
 			m.commentsStatus = "No comments for this song"
 		}
@@ -2972,7 +3044,25 @@ func (m *Model) updateBottomView() {
 			content = "  Loading comments..."
 		} else {
 			var lines []string
-			for _, c := range m.comments {
+			// Calculate visible range for current page
+			start := m.commentsPage * m.commentsPerPage
+			if start >= len(m.comments) {
+				// If we're loading more comments, show a loading indicator instead of resetting
+				if m.commentsStatus != "" {
+					content = "  " + m.commentsStatus
+					m.viewport.SetContent(content)
+					return
+				}
+				start = 0
+				m.commentsPage = 0
+			}
+			end := start + m.commentsPerPage
+			if end > len(m.comments) {
+				end = len(m.comments)
+			}
+			visibleComments := m.comments[start:end]
+
+			for _, c := range visibleComments {
 				// Format: <time> <username>
 				// <quoted text if any>
 				// <message>
@@ -2990,13 +3080,30 @@ func (m *Model) updateBottomView() {
 				}
 				lines = append(lines, "")
 			}
-			// Show pagination hint if more comments available
-			if m.commentsMore && m.commentsTotal > 0 {
+			// Show pagination info
+			if m.commentsTotal > 0 {
+				totalPages := (m.commentsTotal - 1) / m.commentsPerPage
+				currentPage := m.commentsPage + 1
+				pageStart := start + 1
+				pageEnd := end
 				lines = append(lines, "")
-				lines = append(lines, m.styles.MutedStyle.Render(fmt.Sprintf("%d/%d comments — press 'l' to load more", len(m.comments), m.commentsTotal)))
-			} else if m.commentsTotal > 0 && len(m.comments) < m.commentsTotal {
+				if totalPages > 0 {
+					nav := fmt.Sprintf("Page %d/%d (%d-%d/%d comments)", currentPage, totalPages+1, pageStart, pageEnd, m.commentsTotal)
+					if !m.commentsLoaded {
+						nav += " — press 'l' to load more"
+					}
+					if m.commentsPage > 0 {
+						nav += ", 'P' for previous"
+					}
+					lines = append(lines, m.styles.MutedStyle.Render(nav))
+				} else {
+					lines = append(lines, m.styles.MutedStyle.Render(fmt.Sprintf("%d comments", len(m.comments))))
+				}
+			}
+			// Show pending update indicator
+			if m.pendingComments != nil {
 				lines = append(lines, "")
-				lines = append(lines, m.styles.MutedStyle.Render(fmt.Sprintf("%d/%d comments", len(m.comments), m.commentsTotal)))
+				lines = append(lines, m.styles.MutedStyle.Render("(press 'u' to update to current song)"))
 			}
 			// Pad with many newlines so viewport scrolls to blank space at bottom
 			content = strings.Join(lines, "\n") + strings.Repeat("\n", 10)
@@ -3070,6 +3177,8 @@ func (m *Model) songChangedCmds() tea.Cmd {
 	if m.bottomViewMode != ViewComments {
 		m.comments = nil
 		m.commentsStatus = ""
+		m.commentsPage = 0
+		m.commentsSongID = 0
 	}
 
 	// Only hold displayed content for the view the user is currently in.
@@ -3154,10 +3263,9 @@ func (m *Model) songChangedCmds() tea.Cmd {
 	if !m.offlineMode {
 		cmds = append(cmds, m.fetchLyricsCmd())
 		cmds = append(cmds, m.fetchArtistCmd())
-		// Don't auto-fetch comments when in comments view (preserve current content)
-		if m.bottomViewMode != ViewComments {
-			cmds = append(cmds, m.fetchCommentsCmd())
-		}
+		// Always fetch comments for new song
+		// When in comments view, they go to pending so user can press 'u' to update
+		cmds = append(cmds, m.fetchCommentsCmd())
 	}
 
 	// Channel 99: refill when the last song in the playlist starts playing
@@ -3298,8 +3406,12 @@ func (m Model) fetchCommentsCmd() tea.Cmd {
 	}
 
 	songID := m.currentSong.SongID
+	perPage := m.commentsPerPage
+	if perPage == 0 {
+		perPage = 20
+	}
 	return func() tea.Msg {
-		resp, err := m.commentsClient.GetComments(songID, 20, "oldest")
+		resp, err := m.commentsClient.GetComments(songID, perPage, "oldest")
 		if err != nil {
 			return commentsFetchedMsg{songID: songID, err: err}
 		}
@@ -3313,12 +3425,13 @@ func (m Model) fetchCommentsCmd() tea.Cmd {
 			total:    resp.TotalComments,
 			more:     resp.MoreComments,
 			offset:   resp.MoreOffset,
+			loadMore: false,
 		}
 	}
 }
 
-// loadMoreCommentsCmd fetches additional comments starting from the current offset
-func (m Model) loadMoreCommentsCmd() tea.Cmd {
+// fetchCommentsPageCmd fetches a specific page of comments
+func (m Model) fetchCommentsPageCmd(page int) tea.Cmd {
 	if m.currentSong == nil || m.currentSong.SongID == 0 {
 		return nil
 	}
@@ -3327,12 +3440,16 @@ func (m Model) loadMoreCommentsCmd() tea.Cmd {
 	}
 
 	songID := m.currentSong.SongID
-	offset := m.commentsOffset
+	perPage := m.commentsPerPage
+	if perPage == 0 {
+		perPage = 20
+	}
+	offset := page * perPage
 	existing := m.comments
 	existingTotal := m.commentsTotal
 
 	return func() tea.Msg {
-		resp, err := m.commentsClient.GetCommentsWithOffset(songID, 20, "oldest", offset)
+		resp, err := m.commentsClient.GetCommentsWithOffset(songID, perPage, "oldest", offset)
 		if err != nil {
 			return commentsFetchedMsg{songID: songID, err: err}
 		}
@@ -3348,6 +3465,7 @@ func (m Model) loadMoreCommentsCmd() tea.Cmd {
 			total:    existingTotal,
 			more:     resp.MoreComments,
 			offset:   resp.MoreOffset,
+			loadMore: true,
 		}
 	}
 }

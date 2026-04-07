@@ -67,6 +67,7 @@ type commentsFetchedMsg struct {
 	more     bool
 	offset   int
 	err      error
+	loadMore bool // true when loading additional pages (not initial fetch)
 }
 
 // imageLoadedMsg is sent when album art image is loaded
