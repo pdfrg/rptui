@@ -183,8 +183,9 @@ func (c *RPCommentsClient) GetCommentsWithOffset(songID int64, numComments int, 
 	}, nil
 }
 
-// quotePattern matches: <strong...>username wrote:</strong><div class="quote">...</div>
-var quotePattern = regexp.MustCompile(`<strong[^>]*>([^<]*)wrote:</strong>\s*<div class="quote">(.*?)</div>`)
+// quotePattern matches: <strong...>username wrote:</strong>...<div class="quote">...</div>
+// (?s) makes . match newlines to handle HTML with line breaks between elements
+var quotePattern = regexp.MustCompile(`(?s)<strong[^>]*>([^<]*)wrote:</strong>.*?<div class="quote">(.*?)</div>`)
 
 // htmlTagPattern matches HTML tags
 var htmlTagPattern = regexp.MustCompile(`<[^>]+>`)
