@@ -782,23 +782,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 
 		// For compact/narrow layouts, constrain header/footer to now-playing width
-		// so they align left instead of centering across the full terminal
+		// so they align with nowplaying widget
 		widgetWidth := msg.Width
-		if m.layoutMode == LayoutCompact || m.layoutMode == LayoutNarrow {
+		if m.layoutMode == LayoutNarrow {
 			artHeight := 16
 			artWidth := int(float64(artHeight) * m.cellRatio)
 			if artWidth < 10 {
 				artWidth = 10
 			}
-			if m.layoutMode == LayoutNarrow {
-				widgetWidth = artWidth
-			} else {
-				// Compact: use a reasonable width (half terminal or 60, whichever is smaller)
-				widgetWidth = min(msg.Width/2, 60)
-				if widgetWidth < 40 {
-					widgetWidth = 40
-				}
-			}
+			widgetWidth = artWidth
+		} else if m.layoutMode == LayoutCompact {
+			// Compact: use same width as nowplaying widget
+			widgetWidth = msg.Width - 4
 		}
 		m.headerWidget.SetWidth(widgetWidth)
 		m.footerWidget.SetWidth(widgetWidth)
@@ -3991,8 +3986,8 @@ func (m Model) View() tea.View {
 		return m.renderFullscreenVisualizer()
 	}
 
-	// 1. Header
-	header := m.headerWidget.View()
+	// 1. Header - render after NowPlaying width is configured for proper centering in compact mode
+	// (moved from above to after width configuration below)
 
 	// Determine display info based on mode
 	offlineCacheInfo := ""
@@ -4032,9 +4027,10 @@ func (m Model) View() tea.View {
 		m.nowPlayingWidget.SetMaxWidth(0)
 	}
 
-	// Determine RP favorites indicator
+	// Determine RP favorites indicator (needed for NowPlaying view)
 	rpFavIndicator := m.getRPFavoriteIndicator()
 
+	// First render NowPlaying to get actual content width
 	nowPlayingView := m.nowPlayingWidget.View(
 		m.currentSong,
 		m.isPaused,
@@ -4060,6 +4056,25 @@ func (m Model) View() tea.View {
 		m.theme.Cursor,
 	)
 
+	// For compact layout, center header over NowPlaying widget's actual width
+	if isCompact {
+		nowPlayingLines := strings.Split(nowPlayingView, "\n")
+		actualWidth := 0
+		for _, line := range nowPlayingLines {
+			w := lipgloss.Width(line)
+			if w > actualWidth {
+				actualWidth = w
+			}
+		}
+		if actualWidth > 0 {
+			m.headerWidget.SetWidth(actualWidth)
+		}
+	}
+
+	// 1. Header (rendered after width configuration for correct centering in compact mode)
+	header := m.headerWidget.View()
+
+	// Write header to buffer
 	var b strings.Builder
 	b.WriteString(header + "\n\n")
 
@@ -4072,10 +4087,10 @@ func (m Model) View() tea.View {
 		}
 	}
 
-	// Now-playing info
-	// NowPlaying widget already ends with trailing newlines; add less padding for compact layouts
+	// Now-playing info - compact/narrow use less vertical spacing
 	if isCompact || isNarrow {
-		b.WriteString(nowPlayingView)
+		// Remove one trailing blank line for compact/narrow layouts
+		b.WriteString(strings.TrimSuffix(nowPlayingView, "\n\n") + "\n")
 	} else {
 		b.WriteString(nowPlayingView + "\n\n")
 	}
@@ -4086,15 +4101,34 @@ func (m Model) View() tea.View {
 		b.WriteString(m.styles.MutedStyle.Render("Ahead of livestream. Awaiting new songs"+m.spinner.View()+" ") + "\n")
 	}
 
-	// Determine footer height based on layout
-	footerLines := 1
-	if !isCompact && !isNarrow {
-		footerLines = 2
+	// Footer rendering
+	m.footerWidget.SetFlashState(m.scrobbleFlashState)
+	m.footerWidget.SetJukeboxMode(m.jukeboxMode)
+	m.footerWidget.SetOfflineMode(m.offlineMode, m.offlineCache)
+	m.footerWidget.SetMiniMode(isCompact || isNarrow)
+	// For compact layout, center footer over NowPlaying widget's actual width
+	// For large/medium, use full width; narrow keeps width from WindowSizeMsg
+	if isCompact {
+		// Calculate actual width from rendered NowPlaying content
+		nowPlayingLines := strings.Split(nowPlayingView, "\n")
+		actualWidth := 0
+		for _, line := range nowPlayingLines {
+			w := lipgloss.Width(line)
+			if w > actualWidth {
+				actualWidth = w
+			}
+		}
+		m.footerWidget.SetWidth(actualWidth)
+	} else if !isNarrow {
+		m.footerWidget.SetWidth(m.width)
 	}
+	footer := m.footerWidget.View()
+	footerHeight := lipgloss.Height(footer)
 
 	// The bottom section should fill the remaining space except for the footer
 	currentHeight := lipgloss.Height(b.String())
-	remainingHeight := m.height - currentHeight - footerLines
+
+	remainingHeight := m.height - currentHeight - footerHeight
 
 	// Sync viewport height to actual available space so scroll math is correct
 	if showBottomSection && m.bottomViewMode != ViewPlaylist && m.bottomViewMode != ViewOff && remainingHeight > 0 {
@@ -4152,16 +4186,9 @@ func (m Model) View() tea.View {
 		}
 	}
 
-	// 4. Footer
-	if m.scrobbleFlashState != flashOff && time.Since(m.scrobbleFlashAt) >= flashDuration {
-		m.scrobbleFlashState = flashOff
+	if showBottomSection {
+		b.WriteString("\n")
 	}
-	m.footerWidget.SetFlashState(m.scrobbleFlashState)
-	m.footerWidget.SetJukeboxMode(m.jukeboxMode)
-	m.footerWidget.SetOfflineMode(m.offlineMode, m.offlineCache)
-	m.footerWidget.SetMiniMode(isCompact || isNarrow)
-	footer := m.footerWidget.View()
-
 	b.WriteString(footer)
 
 	return m.altView(b.String())

@@ -105,6 +105,11 @@ func (h *Footer) SetWidth(width int) {
 	h.width = width
 }
 
+// GetWidth returns the current width of the footer
+func (h *Footer) GetWidth() int {
+	return h.width
+}
+
 // UpdateStyles updates the footer styles with new theme colors
 func (h *Footer) UpdateStyles(accentStyle, mutedStyle lipgloss.Style) {
 	h.accentStyle = accentStyle
@@ -164,36 +169,6 @@ func (h Footer) scrobbleIndicator() string {
 
 // View renders the footer (two lines: controls + stations)
 func (h Footer) View() string {
-	if h.miniMode {
-		renderLine := func(bindings []KeyBinding) string {
-			var parts []string
-			for _, kb := range bindings {
-				keyPart := h.accentStyle.Render(kb.Key)
-				var descPart string
-				if kb.Icon != "" {
-					descPart = h.mutedStyle.Render(kb.Icon)
-				} else if kb.Label != "" {
-					descPart = h.mutedStyle.Render(kb.Label)
-				}
-				if descPart != "" {
-					parts = append(parts, keyPart+" "+descPart)
-				} else {
-					parts = append(parts, keyPart)
-				}
-			}
-			content := strings.Join(parts, "  ")
-			if h.width > 0 {
-				contentWidth := lipgloss.Width(content)
-				if h.width > contentWidth {
-					padding := (h.width - contentWidth) / 2
-					content = strings.Repeat(" ", padding) + content
-				}
-			}
-			return content
-		}
-		return "\n" + renderLine(h.miniKeys)
-	}
-
 	renderLine := func(bindings []KeyBinding) string {
 		var parts []string
 		for _, kb := range bindings {
@@ -215,7 +190,7 @@ func (h Footer) View() string {
 
 		content := strings.Join(parts, "  ")
 
-		// Center only if width has been set
+		// Only center if width is set and content is narrower than width
 		if h.width > 0 {
 			contentWidth := lipgloss.Width(content)
 			if h.width > contentWidth {
@@ -225,6 +200,11 @@ func (h Footer) View() string {
 		}
 
 		return content
+	}
+
+	if h.miniMode {
+		line := renderLine(h.miniKeys)
+		return "\n" + line
 	}
 
 	stationLine := renderLine(h.stationKeys)
