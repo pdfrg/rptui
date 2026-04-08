@@ -14,12 +14,13 @@ import (
 
 // RPAuthClient handles Radio Paradise authentication
 type RPAuthClient struct {
-	username   string
-	password   string
-	cPasswd    string
-	userID     string
-	cValidated string
-	httpClient *http.Client
+	username     string
+	password     string
+	cPasswd      string
+	userID       string
+	cValidated   string
+	chan99Cutoff int
+	httpClient   *http.Client
 }
 
 // RPAuthResponse represents the /api/auth JSON response
@@ -34,9 +35,10 @@ type RPAuthResponse struct {
 
 // RPAuthState represents persisted session tokens
 type RPAuthState struct {
-	CPasswd    string `toml:"c_passwd"`
-	UserID     string `toml:"c_user_id"`
-	CValidated string `toml:"c_validated"`
+	CPasswd      string `toml:"c_passwd"`
+	UserID       string `toml:"c_user_id"`
+	CValidated   string `toml:"c_validated"`
+	Chan99Cutoff int    `toml:"chan_99_cutoff"`
 }
 
 // NewRPAuthClient creates a new auth client (unauthenticated until Login or LoadState)
@@ -107,9 +109,10 @@ func (a *RPAuthClient) SetCredentials(username, password string) {
 // SaveState persists session tokens to disk
 func (a *RPAuthClient) SaveState(path string) error {
 	state := RPAuthState{
-		CPasswd:    a.cPasswd,
-		UserID:     a.userID,
-		CValidated: a.cValidated,
+		CPasswd:      a.cPasswd,
+		UserID:       a.userID,
+		CValidated:   a.cValidated,
+		Chan99Cutoff: a.chan99Cutoff,
 	}
 
 	dir := filepath.Dir(path)
@@ -147,6 +150,7 @@ func (a *RPAuthClient) LoadState(path string) error {
 	a.cPasswd = state.CPasswd
 	a.userID = state.UserID
 	a.cValidated = state.CValidated
+	a.chan99Cutoff = state.Chan99Cutoff
 
 	return nil
 }
@@ -157,4 +161,17 @@ func (a *RPAuthClient) Reauth() error {
 		return fmt.Errorf("no stored credentials for re-authentication")
 	}
 	return a.Login(a.username, a.password)
+}
+
+// SetChan99Cutoff stores the RP favorites rating threshold
+func (a *RPAuthClient) SetChan99Cutoff(cutoff int) {
+	a.chan99Cutoff = cutoff
+}
+
+// Chan99Cutoff returns the RP favorites rating threshold (default 7 if not set)
+func (a *RPAuthClient) Chan99Cutoff() int {
+	if a.chan99Cutoff < 1 {
+		return 7
+	}
+	return a.chan99Cutoff
 }

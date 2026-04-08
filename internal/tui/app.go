@@ -129,6 +129,7 @@ type Model struct {
 
 	// API Clients
 	rpAPI             *api.RadioParadiseAPI
+	authClient        *api.RPAuthClient
 	commentsClient    *api.RPCommentsClient
 	ratingsClient     *api.RPRatingsClient
 	lyricsClient      *api.LRCLibClient
@@ -367,6 +368,19 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 	commentsClient := api.NewRPCommentsClient(authClient)
 	ratingsClient := api.NewRPRatingsClient(authClient)
 
+	// Fetch chan_99_cutoff if authenticated (used for RP favorites integration)
+	if authClient.HasAuth() {
+		if favsCount, err := ratingsClient.GetFavsCount(); err == nil {
+			authClient.SetChan99Cutoff(favsCount.Chan99Cutoff)
+			logger.Printf("RP API: chan_99_cutoff=%d, favsCount.R7=%s", favsCount.Chan99Cutoff, favsCount.FavsCount.R7)
+			if saveErr := authClient.SaveState(authPath); saveErr != nil {
+				logger.Printf("Warning: failed to save RP auth state with cutoff: %v", saveErr)
+			}
+		} else {
+			logger.Printf("Warning: failed to fetch RP favs count, using default cutoff=7: %v", err)
+		}
+	}
+
 	lyricsClient := api.NewLRCLibClient()
 	wikipediaClient := api.NewWikipediaClient()
 	discogsClient := api.NewDiscogsClient(cfg.DiscogsToken, cfg.DiscogsKey, cfg.DiscogsSecret)
@@ -390,6 +404,29 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 	}
 	if err := cacheManager.EnsureDirectories(); err != nil {
 		logger.Printf("Warning: failed to create cache directories: %v", err)
+	}
+
+	// Auto-blocklist sync: fetch low-rated songs from RP and sync blocklist
+	if cfg.AutoBlocklistRPEnabled && authClient.HasAuth() {
+		logger.Printf("Auto-blocklist: syncing songs rated <= %d from RP", cfg.AutoBlocklistRPThreshold)
+		songs, err := ratingsClient.GetAllProfileFavorites(authClient.UserID(), "Low", 1, cfg.AutoBlocklistRPThreshold)
+		if err != nil {
+			logger.Printf("Auto-blocklist: failed to fetch RP ratings: %v", err)
+		} else {
+			songIDs := make(map[int64]string)
+			for _, s := range songs {
+				var songID int64
+				fmt.Sscanf(s.SongID, "%d", &songID)
+				if songID > 0 {
+					songIDs[songID] = s.Title
+				}
+			}
+			if err := cacheManager.SyncAutoBlocklist(songIDs); err != nil {
+				logger.Printf("Auto-blocklist: failed to sync: %v", err)
+			} else {
+				logger.Printf("Auto-blocklist: blocked %d songs from RP ratings", len(songIDs))
+			}
+		}
 	}
 
 	// Initialize custom widgets
@@ -430,6 +467,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 		styles:            styles,
 		themeWatcher:      themeWatcher,
 		rpAPI:             rpAPI,
+		authClient:        authClient,
 		commentsClient:    commentsClient,
 		ratingsClient:     ratingsClient,
 		lyricsClient:      lyricsClient,
@@ -1054,6 +1092,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				// Update local user rating
 				m.currentSong.UserRating = fmt.Sprintf("%d", msg.Rating)
+
+				// Auto-blocklist if rating is at or below threshold
+				if m.config.AutoBlocklistRPEnabled && msg.Rating <= m.config.AutoBlocklistRPThreshold {
+					if err := m.cacheManager.AddBlocklist(m.currentSong, false); err == nil {
+						return m, setStatus(&m, fmt.Sprintf("Rated %d/10, added to blocklist", msg.Rating), false)
+					}
+				}
 				return m, setStatus(&m, fmt.Sprintf("Rated %d/10", msg.Rating), false)
 			}
 		}
@@ -1421,8 +1466,50 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				// Start download
 				m.downloadingFav = m.currentSong.EventID
 				m.updatePlaylist()
+
+				// When authenticated, ensure RP rating matches cutoff if song isn't already rated high enough
+				var ratingCmd tea.Cmd
+				if m.rpAPI.IsAuthenticated() && m.currentSong.SongID != 0 && m.ratingsClient != nil {
+					cutoff := m.authClient.Chan99Cutoff()
+					userRating := 0
+					if m.currentSong.UserRating != "" && m.currentSong.UserRating != "0" {
+						fmt.Sscanf(m.currentSong.UserRating, "%d", &userRating)
+					}
+					if userRating < cutoff {
+						// Song isn't an RP favorite yet — submit rating at cutoff
+						ratingCmd = func() tea.Msg {
+							_, err := m.ratingsClient.SubmitRating(m.currentSong.SongID, cutoff)
+							if err == nil {
+								m.currentSong.UserRating = fmt.Sprintf("%d", cutoff)
+							} else {
+								logger.Printf("Failed to sync RP rating: %v", err)
+							}
+							return nil
+						}
+					}
+				}
+
+				statusMsg := "Downloading favorite..."
+				if m.rpAPI.IsAuthenticated() {
+					cutoff := m.authClient.Chan99Cutoff()
+					userRating := 0
+					if m.currentSong.UserRating != "" && m.currentSong.UserRating != "0" {
+						fmt.Sscanf(m.currentSong.UserRating, "%d", &userRating)
+					}
+					if userRating < cutoff {
+						statusMsg = fmt.Sprintf("Downloading favorite, rating %d/10...", cutoff)
+					}
+				}
+
+				if ratingCmd != nil {
+					return m, tea.Batch(
+						setStatus(&m, statusMsg, false),
+						favoriteDownloadCmd(m.cacheManager, m.currentSong, m.rpAPI.GetFileExtension(), m.downloadResults),
+						ratingCmd,
+					)
+				}
 				return m, tea.Batch(
-					setStatus(&m, "Downloading favorite...", false),
+					setStatus(&m, statusMsg, false),
 					favoriteDownloadCmd(m.cacheManager, m.currentSong, m.rpAPI.GetFileExtension(), m.downloadResults),
 				)
 			}
@@ -2217,7 +2304,6 @@ func (m Model) handleBlockFetched(msg blockFetchedMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// First load (not initialized yet) — start MPV
-	logger.Printf("DEBUG: handleBlockFetched first load path, initialized=%v", m.initialized)
 	urls := make([]string, len(msg.songs))
 	for i, song := range msg.songs {
 		urls[i] = song.GaplessURL
@@ -3247,6 +3333,23 @@ func (m *Model) songChangedCmds() tea.Cmd {
 		cmds = append(cmds, cmd)
 	}
 
+	// Auto-download RP favorites if enabled
+	if !m.offlineMode && !m.jukeboxMode && m.rpAPI.IsAuthenticated() && m.config.AutoDownloadRPFavorites && m.currentSong != nil && m.currentSong.SongID != 0 {
+		if !m.cacheManager.IsFavorite(m.currentSong) && m.downloadingFav != m.currentSong.EventID {
+			cutoff := m.authClient.Chan99Cutoff()
+			userRating := 0
+			if m.currentSong.UserRating != "" && m.currentSong.UserRating != "0" {
+				fmt.Sscanf(m.currentSong.UserRating, "%d", &userRating)
+			}
+			if userRating >= cutoff {
+				m.downloadingFav = m.currentSong.EventID
+				m.updatePlaylist()
+				logger.Printf("Auto-downloading RP favorite: %s - %s (rating %d >= cutoff %d)", m.currentSong.Artist, m.currentSong.Title, userRating, cutoff)
+				cmds = append(cmds, favoriteDownloadCmd(m.cacheManager, m.currentSong, m.rpAPI.GetFileExtension(), m.downloadResults))
+			}
+		}
+	}
+
 	// Load album art (if available)
 	if m.currentSong.CoverLarge != "" {
 		logger.Printf("Loading album art: %s", m.currentSong.CoverLarge)
@@ -3929,6 +4032,9 @@ func (m Model) View() tea.View {
 		m.nowPlayingWidget.SetMaxWidth(0)
 	}
 
+	// Determine RP favorites indicator
+	rpFavIndicator := m.getRPFavoriteIndicator()
+
 	nowPlayingView := m.nowPlayingWidget.View(
 		m.currentSong,
 		m.isPaused,
@@ -3950,6 +4056,7 @@ func (m Model) View() tea.View {
 		m.offlineMode,
 		offlineCacheInfo,
 		m.getUserRating(),
+		rpFavIndicator,
 		m.theme.Cursor,
 	)
 
@@ -4224,6 +4331,29 @@ func (m Model) getUserRating() string {
 		return ""
 	}
 	return m.currentSong.UserRating
+}
+
+// getRPFavoriteIndicator returns an indicator emoji when a song is an RP favorite
+// but not yet downloaded locally, and auto-download is disabled
+func (m Model) getRPFavoriteIndicator() string {
+	if m.currentSong == nil || !m.rpAPI.IsAuthenticated() {
+		return ""
+	}
+	if m.config.AutoDownloadRPFavorites {
+		return ""
+	}
+	if m.cacheManager.IsFavorite(m.currentSong) {
+		return ""
+	}
+	cutoff := m.authClient.Chan99Cutoff()
+	userRating := 0
+	if m.currentSong.UserRating != "" && m.currentSong.UserRating != "0" {
+		fmt.Sscanf(m.currentSong.UserRating, "%d", &userRating)
+	}
+	if userRating >= cutoff {
+		return "⬇️❔"
+	}
+	return ""
 }
 
 func indentLines(s, prefix string) string {

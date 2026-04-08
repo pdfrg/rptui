@@ -245,7 +245,7 @@ func (f *Favorites) Update(msg tea.Msg) tea.Cmd {
 				if f.activeTab == TabFavorites {
 					f.cacheManager.RemoveFavorite(item.EventID)
 				} else {
-					f.cacheManager.RemoveBlocklist(item.EventID)
+					f.cacheManager.RemoveBlocklist(item.SongID)
 				}
 				f.loadData()
 				items = f.filteredItems()
