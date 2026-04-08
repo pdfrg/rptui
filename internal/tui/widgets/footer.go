@@ -7,6 +7,8 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
+const connStateDisconnected = "disconnected"
+
 // KeyBinding represents a keyboard shortcut
 type KeyBinding struct {
 	Key   string
@@ -28,6 +30,7 @@ type Footer struct {
 	offlineMode  bool
 	offlineCache string
 	miniMode     bool
+	connState    string // "connected", "disconnected", or ""
 
 	// Scrobble indicator
 	scrobbleServices []string // e.g. ["fm", "lb"]
@@ -143,6 +146,11 @@ func (h *Footer) SetMiniMode(mini bool) {
 	h.miniMode = mini
 }
 
+// SetConnectionState sets the connection state for scrobble indicator logic
+func (h *Footer) SetConnectionState(state string) {
+	h.connState = state
+}
+
 // AddChannel99 adds "My Paradise" channel to station shortcuts (when RP auth is active)
 func (h *Footer) AddChannel99() {
 	h.stationKeys = append(h.stationKeys, KeyBinding{Key: "9", Icon: "", Label: "MyParadise"})
@@ -151,6 +159,11 @@ func (h *Footer) AddChannel99() {
 // scrobbleIndicator returns the rendered scrobble indicator string, or empty if none.
 func (h Footer) scrobbleIndicator() string {
 	if len(h.scrobbleServices) == 0 {
+		return ""
+	}
+
+	// In jukebox mode, only show scrobble indicator if connected
+	if h.jukeboxMode && h.connState == connStateDisconnected {
 		return ""
 	}
 

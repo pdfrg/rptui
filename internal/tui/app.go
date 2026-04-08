@@ -711,7 +711,10 @@ func (m Model) Init() tea.Cmd {
 	}
 
 	// Station validation runs in background (non-blocking, 3s timeout)
-	cmds = append(cmds, m.checkStationsCmd)
+	// Skip in offline mode - no network calls needed
+	if !m.offlineMode {
+		cmds = append(cmds, m.checkStationsCmd)
+	}
 
 	return tea.Batch(cmds...)
 }
@@ -4106,6 +4109,7 @@ func (m Model) View() tea.View {
 	m.footerWidget.SetJukeboxMode(m.jukeboxMode)
 	m.footerWidget.SetOfflineMode(m.offlineMode, m.offlineCache)
 	m.footerWidget.SetMiniMode(isCompact || isNarrow)
+	m.footerWidget.SetConnectionState(m.connState)
 	// For compact layout, center footer over NowPlaying widget's actual width
 	// For large/medium, use full width; narrow keeps width from WindowSizeMsg
 	if isCompact {
