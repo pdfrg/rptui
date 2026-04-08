@@ -32,12 +32,12 @@ type ProfileFavoritesResponse struct {
 
 // FavsCount represents the user's rating distribution
 type FavsCount struct {
-	R5  int `json:"r5"`
-	R6  int `json:"r6"`
-	R7  int `json:"r7"`
-	R8  int `json:"r8"`
-	R9  int `json:"r9"`
-	R10 int `json:"r10"`
+	R5  string `json:"r5"`
+	R6  string `json:"r6"`
+	R7  string `json:"r7"`
+	R8  string `json:"r8"`
+	R9  string `json:"r9"`
+	R10 string `json:"r10"`
 }
 
 // FavsCountResponse represents the list_chan_favscount API response

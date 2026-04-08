@@ -27,6 +27,7 @@ func init() {
 // CachedSong represents a song stored in cache
 type CachedSong struct {
 	EventID         int64  `json:"event_id"`
+	SongID          int64  `json:"song_id,omitempty"`
 	Title           string `json:"title"`
 	Artist          string `json:"artist"`
 	Album           string `json:"album"`
@@ -39,6 +40,7 @@ type CachedSong struct {
 	AudioPath       string `json:"audio_path,omitempty"`
 	SchedTimeMillis int64  `json:"sched_time_millis,omitempty"`
 	AddedAt         int64  `json:"added_at"`
+	AutoBlocked     bool   `json:"auto_blocked,omitempty"`
 }
 
 // UnmarshalJSON implements custom JSON unmarshaling to handle string event_id
@@ -169,12 +171,16 @@ func (c *CacheManager) IsFavorite(song *models.Song) bool {
 	return false
 }
 
-// IsBlocked checks if a song is in blocklist
+// IsBlocked checks if a song is in blocklist by SongID
 func (c *CacheManager) IsBlocked(song *models.Song) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	for _, b := range c.blocklist {
-		if b.EventID == song.EventID {
+		if b.SongID != 0 && b.SongID == song.SongID {
+			return true
+		}
+		// Fallback: legacy entries without SongID match by EventID
+		if b.SongID == 0 && b.EventID == song.EventID {
 			return true
 		}
 	}
@@ -255,41 +261,45 @@ func (c *CacheManager) ToggleFavorite(song *models.Song, fileExt string) (bool, 
 }
 
 // AddBlocklist adds a song to blocklist
-func (c *CacheManager) AddBlocklist(song *models.Song) error {
+func (c *CacheManager) AddBlocklist(song *models.Song, autoBlocked bool) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// Check for duplicate by SongID (preferred) or EventID
 	for _, b := range c.blocklist {
+		if song.SongID != 0 && b.SongID != 0 && b.SongID == song.SongID {
+			return nil
+		}
 		if b.EventID == song.EventID {
 			return nil
 		}
 	}
 
 	cached := CachedSong{
-		EventID:        song.EventID,
-		Title:          song.Title,
-		Artist:         song.Artist,
-		Album:          song.Album,
-		Year:           song.Year,
-		Duration:       song.Duration,
-		GaplessURL:     song.GaplessURL,
-		CoverLarge:     song.CoverLarge,
-		Rating:         song.Rating,
-		ListenerRating: song.ListenerRating,
-		AddedAt:        time.Now().Unix(),
+		EventID:     song.EventID,
+		SongID:      song.SongID,
+		Title:       song.Title,
+		Artist:      song.Artist,
+		Album:       song.Album,
+		Year:        song.Year,
+		Duration:    song.Duration,
+		GaplessURL:  song.GaplessURL,
+		CoverLarge:  song.CoverLarge,
+		AddedAt:     time.Now().Unix(),
+		AutoBlocked: autoBlocked,
 	}
 
 	c.blocklist = append([]CachedSong{cached}, c.blocklist...)
 	return c.saveMetadata(c.blocklistDir, c.blocklist)
 }
 
-// RemoveBlocklist removes a song from blocklist by event ID
-func (c *CacheManager) RemoveBlocklist(eventID int64) error {
+// RemoveBlocklist removes a song from blocklist by SongID
+func (c *CacheManager) RemoveBlocklist(songID int64) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	for i, b := range c.blocklist {
-		if b.EventID == eventID {
+		if b.SongID != 0 && b.SongID == songID {
 			c.blocklist = append(c.blocklist[:i], c.blocklist[i+1:]...)
 			return c.saveMetadata(c.blocklistDir, c.blocklist)
 		}
@@ -297,19 +307,64 @@ func (c *CacheManager) RemoveBlocklist(eventID int64) error {
 	return nil
 }
 
-// ToggleBlocklist adds or removes a song from blocklist
+// ToggleBlocklist adds or removes a song from blocklist (manual, not auto)
 func (c *CacheManager) ToggleBlocklist(song *models.Song) (bool, error) {
 	if c.IsBlocked(song) {
-		if err := c.RemoveBlocklist(song.EventID); err != nil {
+		if err := c.RemoveBlocklist(song.SongID); err != nil {
 			return false, err
 		}
 		return false, nil
 	}
 
-	if err := c.AddBlocklist(song); err != nil {
+	if err := c.AddBlocklist(song, false); err != nil {
 		return false, err
 	}
 	return true, nil
+}
+
+// SyncAutoBlocklist synchronizes the auto-blocklist with the fetched RP low-rated songs.
+// It removes stale AutoBlocked=true entries whose SongID is not in the new list,
+// and adds new entries for songs that aren't already in the blocklist.
+// songIDs are the RP song IDs that should be auto-blocked.
+func (c *CacheManager) SyncAutoBlocklist(songIDs map[int64]string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Remove stale auto-blocked entries
+	var kept []CachedSong
+	for _, b := range c.blocklist {
+		if b.AutoBlocked {
+			if _, exists := songIDs[b.SongID]; !exists {
+				continue // remove stale auto-blocked entry
+			}
+		}
+		kept = append(kept, b)
+	}
+
+	// Add new auto-blocked entries that aren't already in the blocklist
+	existingSongIDs := make(map[int64]bool)
+	for _, b := range kept {
+		if b.SongID > 0 {
+			existingSongIDs[b.SongID] = true
+		}
+	}
+
+	var added int
+	for songID, title := range songIDs {
+		if !existingSongIDs[songID] {
+			cached := CachedSong{
+				SongID:      songID,
+				Title:       title,
+				AddedAt:     time.Now().Unix(),
+				AutoBlocked: true,
+			}
+			kept = append([]CachedSong{cached}, kept...)
+			added++
+		}
+	}
+
+	c.blocklist = kept
+	return c.saveMetadata(c.blocklistDir, c.blocklist)
 }
 
 // GetFavorites returns all favorite songs (newest first)

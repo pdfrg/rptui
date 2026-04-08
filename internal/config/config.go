@@ -65,6 +65,13 @@ type Config struct {
 	// RP Auth (optional, enables ratings, comments, favorites sync, channel 99)
 	RPAuth RPAuthConfig `toml:"rp_auth" comment:"Radio Paradise account (optional)\nenables user ratings, comments, favorites sync, and My Paradise channel\nusername: your RP account username\npassword: your RP account password (used to obtain session token)"`
 
+	// RP Favorites auto-download
+	AutoDownloadRPFavorites bool `toml:"auto_download_rp_favorites" comment:"when authenticated, automatically download songs to local favorites\nif your RP rating >= your My Paradise cutoff (chan_99_cutoff)\nuseful for keeping local favorites in sync with RP favorites (default: false)"`
+
+	// RP auto-blocklist (blocks songs with low user ratings)
+	AutoBlocklistRPEnabled   bool `toml:"auto_blocklist_rp_enabled" comment:"when authenticated, automatically blocklist songs rated at or below the threshold\nthreshold: rating value 1-4, songs rated <= threshold are blocked (default: false)"`
+	AutoBlocklistRPThreshold int  `toml:"auto_blocklist_rp_threshold" comment:"rating threshold for auto-blocklist (1-4, default: 3)\nsongs with your RP rating <= this value are automatically blocked"`
+
 	// Layout mode
 	Layout string `toml:"layout" comment:"UI layout mode\nlarge: full layout with all elements (default)\nmedium: no bottom view (no playlist/lyrics/visualizer)\ncompact: no album art, no bottom view, mini footer\nnarrow: album art top-left, now playing below, mini footer (default: large)"`
 
@@ -125,8 +132,10 @@ func DefaultConfig() *Config {
 			InfoDuration: 5,
 			RealAudio:    true,
 		},
-		NotificationsEnabled: false,
-		NotificationsShowArt: true,
+		NotificationsEnabled:     false,
+		NotificationsShowArt:     true,
+		AutoBlocklistRPEnabled:   false,
+		AutoBlocklistRPThreshold: 3,
 		Jukebox: JukeboxConfig{
 			MinFaves:          20,
 			Repeat:            false,
@@ -261,6 +270,11 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Jukebox.CrossfadeDuration < 0 {
 		c.Jukebox.CrossfadeDuration = defaults.Jukebox.CrossfadeDuration
+	}
+
+	// Validate auto-blocklist threshold (must be 1-4)
+	if c.AutoBlocklistRPThreshold < 1 || c.AutoBlocklistRPThreshold > 4 {
+		c.AutoBlocklistRPThreshold = defaults.AutoBlocklistRPThreshold
 	}
 
 	// Validate layout

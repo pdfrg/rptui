@@ -135,6 +135,7 @@ func (n NowPlaying) View(
 	offlineMode bool,
 	offlineCacheInfo string,
 	userRating string,
+	rpFavIndicator string,
 	cursorColor string,
 ) string {
 	if song == nil {
@@ -187,9 +188,14 @@ func (n NowPlaying) View(
 			displayRating = "--"
 		}
 		userRatingStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(cursorColor)).Render(displayRating)
-		ratingLine = fmt.Sprintf("%s  %s %s %s", n.accentStyle.Render(rating), keyStyle, keyEmoji, userRatingStyle)
+		ratingLine = fmt.Sprintf("%s  %s  %s %s", n.accentStyle.Render(rating), keyStyle, keyEmoji, userRatingStyle)
 	} else {
 		ratingLine = n.accentStyle.Render(rating)
+	}
+
+	// Append RP favorites indicator if present
+	if rpFavIndicator != "" {
+		ratingLine = fmt.Sprintf("%s  %s", ratingLine, rpFavIndicator)
 	}
 	ratingStr := ratingLine
 
