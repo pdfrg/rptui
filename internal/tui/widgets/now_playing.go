@@ -81,6 +81,11 @@ func (n *NowPlaying) SetWidth(width int) {
 	n.progress.SetWidth(progWidth)
 }
 
+// GetWidth returns the current width of the widget
+func (n *NowPlaying) GetWidth() int {
+	return n.width
+}
+
 // SetMaxWidth sets the maximum width for text fields (title/artist/album).
 // When > 0, text is truncated with ellipsis to prevent wrapping.
 func (n *NowPlaying) SetMaxWidth(maxWidth int) {
