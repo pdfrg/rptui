@@ -3177,13 +3177,10 @@ func (m *Model) updateBottomView() {
 						lines = append(lines, indent+"Source: "+m.artistInfo.DiscoSource)
 					}
 				}
-				// Album description + sales (from TADB album search)
+				// Album description (from TADB album search)
 				if m.artistInfo.AlbumDescription != "" {
 					lines = append(lines, "")
 					lines = append(lines, indent+m.artistInfo.AlbumDescription)
-					if m.artistInfo.AlbumSales != "" {
-						lines = append(lines, indent+"Sales: "+m.artistInfo.AlbumSales)
-					}
 					if m.artistInfo.AlbumSource != "" {
 						lines = append(lines, indent+"Source: "+m.artistInfo.AlbumSource)
 					}
@@ -3744,9 +3741,6 @@ func (m Model) fetchArtistCmd() tea.Cmd {
 				if tadb.artist.AlbumInfo.Description != "" {
 					info.AlbumDescription = tadb.artist.AlbumInfo.Description
 					info.AlbumSource = "theaudiodb"
-				}
-				if tadb.artist.AlbumInfo.Sales != "" {
-					info.AlbumSales = tadb.artist.AlbumInfo.Sales
 				}
 			}
 		}

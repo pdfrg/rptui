@@ -26,7 +26,6 @@ type TADBArtist struct {
 // TADBAlbumInfo holds album info from album search
 type TADBAlbumInfo struct {
 	Description string // Album description/blurb
-	Sales       string // Sales figures (e.g., "14300000")
 }
 
 // NewTheAudioDBClient creates a new TheAudioDB API client
@@ -63,7 +62,6 @@ func (t *TheAudioDBClient) SearchArtist(ctx context.Context, artistName, albumNa
 					IDArtist    string `json:"idArtist"`
 					StrAlbum    string `json:"strAlbum"`
 					Description string `json:"strDescription"`
-					Sales       string `json:"intSales"`
 				} `json:"album"`
 			}
 
@@ -72,7 +70,6 @@ func (t *TheAudioDBClient) SearchArtist(ctx context.Context, artistName, albumNa
 					alb := albumResult.Album[0]
 					albumInfo = &TADBAlbumInfo{
 						Description: alb.Description,
-						Sales:       alb.Sales,
 					}
 					// Use artist ID from album search to get correct artist
 					if alb.IDArtist != "" {
