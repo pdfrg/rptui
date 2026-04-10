@@ -2,10 +2,13 @@
 package modals
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/adrg/xdg"
 	"rptui-bubbletea/internal/config"
 	"rptui-bubbletea/internal/tui/visualizer"
 )
@@ -20,6 +23,7 @@ type OptionsMsg struct {
 	NotificationsEnabled *bool
 	NotificationsShowArt *bool
 	VisualizerMode       *string
+	Theme                *string
 	Closed               bool
 }
 
@@ -33,8 +37,51 @@ const (
 	optNotificationsEnabled
 	optNotificationsShowArt
 	optVisualizerMode
+	optTheme
 	optCount // number of items
 )
+
+// Theme option list
+func themeOptions() []string {
+	return []string{
+		"Custom",
+		"Omarchy",
+		"Default",
+		"catppuccin-mocha",
+		"gruvbox-dark",
+		"dark-red",
+		"osaka-jade",
+		"synth",
+		"basic",
+	}
+}
+
+// themeFromConfig determines which theme option is currently active
+func themeFromConfig(colorsFile, themeName string) int {
+	opts := config.ThemeNames()
+
+	// Check for custom colors_file
+	if colorsFile != "" {
+		return 0 // "Custom"
+	}
+
+	// Check for built-in theme
+	for i, t := range opts {
+		if t == themeName {
+			// Found built-in theme, adjust for offset (first 3 are Custom, Omarchy, Default)
+			return i + 3
+		}
+	}
+
+	// Check if Omarchy theme exists
+	omarchyPath := filepath.Join(xdg.ConfigHome, "omarchy", "current", "theme", "colors.toml")
+	if _, err := os.Stat(omarchyPath); err == nil {
+		return 1 // "Omarchy"
+	}
+
+	// Default fallback
+	return 2 // "Default"
+}
 
 // Valid station IDs in order
 var stationIDs = []int{0, 1, 2, 3, 42, 5, 945}
@@ -56,6 +103,7 @@ type Options struct {
 	notificationsEnabled bool
 	notificationsShowArt bool
 	visModeIdx           int // index into visualizer mode names
+	themeIdx             int // index into theme options
 
 	// Original values for change detection
 	origStationIdx   int
@@ -66,6 +114,7 @@ type Options struct {
 	origNotifEnabled bool
 	origNotifShowArt bool
 	origVisModeIdx   int
+	origThemeIdx     int
 }
 
 // visualizerModeNames returns the display names of all visualizer modes.
@@ -74,7 +123,7 @@ func visualizerModeNames() []string {
 }
 
 // NewOptions creates a new Options modal
-func NewOptions(styles *config.ThemeStyles, currentStation, currentBitrate int, showAlbumArt, showSkipWarn, copyAlbumArt, notificationsEnabled, notificationsShowArt bool, visMode string) *Options {
+func NewOptions(styles *config.ThemeStyles, currentStation, currentBitrate int, showAlbumArt, showSkipWarn, copyAlbumArt, notificationsEnabled, notificationsShowArt bool, visMode, colorsFile, themeName string) *Options {
 	// Find index of current station in stationIDs
 	stationIdx := 0
 	for i, id := range stationIDs {
@@ -103,6 +152,9 @@ func NewOptions(styles *config.ThemeStyles, currentStation, currentBitrate int, 
 		}
 	}
 
+	// Find index of current theme
+	themeIdx := themeFromConfig(colorsFile, themeName)
+
 	return &Options{
 		styles:               styles,
 		stationIdx:           stationIdx,
@@ -113,6 +165,7 @@ func NewOptions(styles *config.ThemeStyles, currentStation, currentBitrate int, 
 		notificationsEnabled: notificationsEnabled,
 		notificationsShowArt: notificationsShowArt,
 		visModeIdx:           visModeIdx,
+		themeIdx:             themeIdx,
 		origStationIdx:       stationIdx,
 		origBitrateIdx:       bitrateIdx,
 		origAlbumArt:         showAlbumArt,
@@ -121,6 +174,7 @@ func NewOptions(styles *config.ThemeStyles, currentStation, currentBitrate int, 
 		origNotifEnabled:     notificationsEnabled,
 		origNotifShowArt:     notificationsShowArt,
 		origVisModeIdx:       visModeIdx,
+		origThemeIdx:         themeIdx,
 	}
 }
 
@@ -167,6 +221,8 @@ func (o *Options) Update(msg tea.Msg) tea.Cmd {
 				o.notificationsShowArt = !o.notificationsShowArt
 			case optVisualizerMode:
 				o.cycleRight()
+			case optTheme:
+				o.cycleRight()
 			}
 
 		case "a":
@@ -207,6 +263,13 @@ func (o *Options) cycleLeft() {
 		} else {
 			o.visModeIdx = len(visNames) - 1
 		}
+	case optTheme:
+		themeOpts := themeOptions()
+		if o.themeIdx > 0 {
+			o.themeIdx--
+		} else {
+			o.themeIdx = len(themeOpts) - 1
+		}
 	}
 }
 
@@ -241,6 +304,13 @@ func (o *Options) cycleRight() {
 		} else {
 			o.visModeIdx = 0
 		}
+	case optTheme:
+		themeOpts := themeOptions()
+		if o.themeIdx < len(themeOpts)-1 {
+			o.themeIdx++
+		} else {
+			o.themeIdx = 0
+		}
 	}
 }
 
@@ -254,8 +324,9 @@ func (o *Options) applyChanges() tea.Cmd {
 	notifEnabledChanged := o.notificationsEnabled != o.origNotifEnabled
 	notifShowArtChanged := o.notificationsShowArt != o.origNotifShowArt
 	visModeChanged := o.visModeIdx != o.origVisModeIdx
+	themeChanged := o.themeIdx != o.origThemeIdx
 
-	if !stationChanged && !bitrateChanged && !albumArtChanged && !skipWarnChanged && !copyArtChanged && !notifEnabledChanged && !notifShowArtChanged && !visModeChanged {
+	if !stationChanged && !bitrateChanged && !albumArtChanged && !skipWarnChanged && !copyArtChanged && !notifEnabledChanged && !notifShowArtChanged && !visModeChanged && !themeChanged {
 		return func() tea.Msg { return OptionsMsg{Closed: true} }
 	}
 
@@ -293,7 +364,35 @@ func (o *Options) applyChanges() tea.Cmd {
 		m := visNames[o.visModeIdx]
 		msg.VisualizerMode = &m
 	}
+	if themeChanged {
+		themeVal := themeOptionValue(o.themeIdx)
+		msg.Theme = &themeVal
+	}
 	return func() tea.Msg { return msg }
+}
+
+// themeOptionValue converts theme option index to config values
+// Returns string in format: "colorsFile|themeName" or just "themeName" for built-ins
+func themeOptionValue(idx int) string {
+	opts := config.ThemeNames()
+
+	if idx == 0 {
+		return "CUSTOM" // Signals use colors_file
+	}
+	if idx == 1 {
+		return "OMARCHY" // Signals use omarchy theme
+	}
+	if idx == 2 {
+		return "DEFAULT" // Signals use default fallback chain
+	}
+
+	// Built-in theme (adjust for offset of 3)
+	builtInIdx := idx - 3
+	if builtInIdx >= 0 && builtInIdx < len(opts) {
+		return opts[builtInIdx]
+	}
+
+	return "DEFAULT"
 }
 
 // View renders the modal
@@ -320,6 +419,12 @@ func (o Options) View() string {
 		visModeName = visNames[o.visModeIdx]
 	}
 
+	themeOpts := themeOptions()
+	themeName := themeOpts[0]
+	if o.themeIdx >= 0 && o.themeIdx < len(themeOpts) {
+		themeName = themeOpts[o.themeIdx]
+	}
+
 	items := []struct {
 		label string
 		value string
@@ -332,6 +437,7 @@ func (o Options) View() string {
 		{"Desktop notifications", o.renderToggle(o.notificationsEnabled, o.cursor == optNotificationsEnabled)},
 		{"  Show album art", o.renderToggle(o.notificationsShowArt, o.cursor == optNotificationsShowArt)},
 		{"Visualizer mode", o.renderPicker(visModeName, o.cursor == optVisualizerMode)},
+		{"Theme", o.renderPicker(themeName, o.cursor == optTheme)},
 	}
 
 	labelColWidth := 22
