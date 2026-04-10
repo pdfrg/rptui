@@ -418,15 +418,21 @@ func (d *DiscogsClient) SearchArtist(ctx context.Context, artistName, albumName 
 
 	artistID := 0
 
-	// If we have album info and multiple candidates, try album disambiguation FIRST
-	// This helps avoid selecting the wrong artist when there are multiple "Jack White" entries
-	// The search API returns results sorted by relevance, but the actual Jack White from The White Stripes
-	// might not be first (a German musician named Jack White might appear first)
+	// Strategy (since RP always provides album):
+	// 1. Check top 5 artists from search results
+	// 2. For each, check if they have the album in their releases
+	// 3. First match wins
+	// 4. If none match, fallback to exact/normalized match
+	//
+	// This handles the "Jack White" edge case where exact match is wrong
+	// while minimizing API calls (max 5 release lookups instead of 50)
 	if albumNorm != "" && len(allMatches) > 1 {
 		if discogsLogger != nil {
 			discogsLogger.Printf("Discogs: album disambiguation for '%s' (%d candidates)", albumNorm, len(allMatches))
 		}
-		for _, cand := range allMatches {
+		// Only check first 5 candidates to limit API calls
+		for i := 0; i < min(5, len(allMatches)); i++ {
+			cand := allMatches[i]
 			if discogsLogger != nil {
 				discogsLogger.Printf("Discogs: checking artist ID %d (%s) for album '%s'", cand.id, cand.title, albumNorm)
 			}
@@ -440,12 +446,12 @@ func (d *DiscogsClient) SearchArtist(ctx context.Context, artistName, albumName 
 		}
 	}
 
-	// Pass 1: exact match (case-insensitive) - only if no album match
+	// Fallback: exact match
 	if artistID == 0 && len(exactMatches) > 0 {
 		artistID = exactMatches[0].id
 	}
 
-	// Pass 2: normalized match (strip "the", accents, punctuation) - only if no album match
+	// Fallback: normalized match
 	if artistID == 0 && len(normMatches) > 0 {
 		artistID = normMatches[0].id
 	}
