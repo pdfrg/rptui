@@ -1421,13 +1421,9 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "u":
 		// Update displayed lyrics/artist info/comments from pending
 		applied := false
+		var cmd tea.Cmd
 		if m.hasPendingUpdate() {
-			hadPendingArt := m.pendingArtistArtLoaded
-			m.applyPendingUpdate()
-			var cmd tea.Cmd
-			if hadPendingArt && m.bottomViewMode == ViewArtist {
-				cmd = renderArtistArtAfterDelay()
-			}
+			cmd = m.applyPendingUpdate()
 			applied = true
 			tea.Batch(cmd, setStatus(&m, "Updated to current song", false))
 		}
@@ -1446,7 +1442,12 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			setStatus(&m, "Updated to current song", false)
 		}
 		if applied {
-			return m, setStatus(&m, "Updated to current song", false)
+			var cmds []tea.Cmd
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			cmds = append(cmds, setStatus(&m, "Updated to current song", false))
+			return m, tea.Batch(cmds...)
 		}
 		return m, nil
 
@@ -2957,16 +2958,17 @@ func (m *Model) hasPendingUpdate() bool {
 	if m.bottomViewMode == ViewArtist {
 		hasInfo := m.pendingArtistInfo != nil && m.pendingArtistInfo != m.artistInfo
 		hasArt := m.pendingArtistArtLoaded
-		return hasInfo || hasArt
+		return hasInfo && hasArt
 	}
 	return false
 }
 
 // applyPendingUpdate copies pending data into the displayed fields and
-// refreshes the current view.  Called when the user presses 'u'.
-func (m *Model) applyPendingUpdate() {
+// refreshes the current view. Called when the user presses 'u'.
+// Returns a command to redraw images if needed.
+func (m *Model) applyPendingUpdate() tea.Cmd {
 	if m.currentSong == nil || m.pendingEventID != m.currentSong.EventID {
-		return
+		return nil
 	}
 	if m.pendingLyrics != "" {
 		m.lyrics = m.pendingLyrics
@@ -2990,6 +2992,12 @@ func (m *Model) applyPendingUpdate() {
 		m.pendingArtistArtLoaded = false
 	}
 	m.updateBottomView()
+
+	// Trigger artist thumbnail redraw if in artist view
+	if m.bottomViewMode == ViewArtist && m.artistArtLoaded && m.artistArtStr != "" {
+		return renderArtistArtAfterDelay()
+	}
+	return nil
 }
 
 // updateBottomView updates the viewport content based on current mode
