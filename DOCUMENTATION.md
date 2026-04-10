@@ -57,9 +57,9 @@ BITRATES:
     1 - 64k AAC   2 - 128k AAC   3 - 320k AAC   4 - FLAC
 
 CONFIGURATION:
-    Config file: ~/.config/rptui/config.toml
-    Cache dir:   $XDG_CACHE_HOME/rptui/
-    Log file:    rptui.log (in project directory)
+    Config file: $XDG_CONFIG_HOME/rptui/config.toml (default: ~/.config/rptui/config.toml)
+    Cache dir:   $XDG_CACHE_HOME/rptui/ (default: ~/.cache/rptui/)
+    Log file:    $XDG_STATE_HOME/rptui/rptui.log (default: ~/.local/state/rptui/)
 ```
 
 ## Configuration File
@@ -249,11 +249,20 @@ color15 = "#a6adc8"    # bright white
 
 ## File Paths
 
-- **Config**: `~/.config/rptui/config.toml`
-- **Favorites**: `~/.cache/rptui/favorites/`
-- **Blocklist**: `~/.cache/rptui/blocklist/`
-- **Offline cache**: `~/.cache/rptui/offline/`
-- **Log**: `rptui.log` (in project directory or current working directory)
+The app follows the XDG Base Directory Specification:
+
+| Path | Default | Env Variable |
+|------|---------|--------------|
+| Config | `~/.config/rptui/` | `$XDG_CONFIG_HOME` |
+| Cache | `~/.cache/rptui/` | `$XDG_CACHE_HOME` |
+| State | `~/.local/state/rptui/` | `$XDG_STATE_HOME` |
+
+- **Config**: `$XDG_CONFIG_HOME/rptui/config.toml`
+- **Auth**: `$XDG_CONFIG_HOME/rptui/auth.toml`
+- **Favorites**: `$XDG_CACHE_HOME/rptui/favorites/`
+- **Blocklist**: `$XDG_CACHE_HOME/rptui/blocklist/`
+- **Offline cache**: `$XDG_CACHE_HOME/rptui/offline/`
+- **Log**: `$XDG_STATE_HOME/rptui/rptui.log`
 
 ## External Dependencies
 
