@@ -22,14 +22,11 @@ sometimes on entry to visualizer, gets stuck at loading message
 		
 any other config file options that should be added to options modal?
 
-discogs artist matching sometimes returns wrong artist
-	e.g. "Jack White" is not the one from The White Stripes
-	how could this matching be improved?
-		can we do something similar to how we do matching with musicbrainz
-			namely, does this artist have an album that matches the album of the song being played
-		or some entirely different way
-
 move scrobble indicators from footer to ratings line
 	for both enabled, rather than combined indicator [fm+lb], use separate [fm] [lb]
 		that both color independently based on scrobble success/failure
 	this enables scrobbling to be seen easily in all layouts
+
+when in artist info view for a song transition and press "u" to update, thumb doesn't update
+	probably will have to redraw albumart too, even though it does update on song change (but that's OK)
+	
