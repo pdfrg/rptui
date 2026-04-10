@@ -2309,6 +2309,10 @@ func (m Model) handleBlockFetched(msg blockFetchedMsg) (tea.Model, tea.Cmd) {
 			logger.Printf("DEBUG: handleBlockFetched mpvWasStopped path, setting initialized=true")
 			m.currentSongIndex = len(m.songs) // will point to first new song
 			m.songs = append(m.songs, msg.songs...)
+			// Stamp new songs with block ID for pruning
+			for i := m.currentSongIndex; i < len(m.songs); i++ {
+				m.songs[i].BlockID = int64(msg.blockID)
+			}
 			m.playlistStartIdx = m.currentSongIndex
 			if err := m.mpvBackend.Start(urls); err != nil {
 				logger.Printf("Failed to restart MPV: %v", err)
@@ -2323,7 +2327,12 @@ func (m Model) handleBlockFetched(msg blockFetchedMsg) (tea.Model, tea.Cmd) {
 				logger.Printf("Failed to append to playlist: %v", err)
 				return m, nil
 			}
+			oldLen := len(m.songs)
 			m.songs = append(m.songs, msg.songs...)
+			// Stamp new songs with block ID for pruning
+			for i := oldLen; i < len(m.songs); i++ {
+				m.songs[i].BlockID = int64(msg.blockID)
+			}
 
 			// Unmute if we muted for a blocked song, and skip past it
 			if m.mutedForBlocked {
@@ -2358,6 +2367,9 @@ func (m Model) handleBlockFetched(msg blockFetchedMsg) (tea.Model, tea.Cmd) {
 		return m, setStatus(&m, fmt.Sprintf("Error: %v", err), true)
 	}
 
+	for i := range msg.songs {
+		msg.songs[i].BlockID = int64(msg.blockID)
+	}
 	m.songs = msg.songs
 	m.imageBase = msg.imageBase
 	m.lastBlockID = msg.blockID
