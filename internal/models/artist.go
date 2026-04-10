@@ -12,4 +12,9 @@ type ArtistInfo struct {
 	Discography   string   // Newline-separated "Album (Year)" entries
 	DiscoSource   string   // "musicbrainz", "wikipedia"
 	PageURL       string   // Link to source page
+
+	// Album info from TADB (shown after discography)
+	AlbumDescription string // Album description/blurb from searchalbum
+	AlbumSales       string // Sales figures (e.g., "14300000")
+	AlbumSource      string // "theaudiodb"
 }
