@@ -17,6 +17,3 @@ better offline/online management
 		unless offline mode specifically started when online
 	offer "O" toggle between offline and normal, same way we do with "J" for jukebox mode
 
-place log file in standard location?
-	if installed with "go install", then where would log go?  in install directory?
-	

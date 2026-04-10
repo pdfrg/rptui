@@ -7,19 +7,24 @@ package loginit
 import (
 	"log"
 	"os"
+	"path/filepath"
+
+	"github.com/adrg/xdg"
 )
 
-const LogFile = "rptui.log"
+var LogFile string
 
 func init() {
-	// Truncate log file on each app start
+	stateDir := filepath.Join(xdg.StateHome, "rptui")
+	os.MkdirAll(stateDir, 0755)
+	LogFile = filepath.Join(stateDir, "rptui.log")
+
 	f, err := os.OpenFile(LogFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err == nil {
 		f.Close()
 	}
 }
 
-// InitLogger creates a logger with the given prefix that writes to the shared log file.
 func InitLogger(prefix string) *log.Logger {
 	f, err := os.OpenFile(LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {

@@ -699,8 +699,9 @@ BITRATES:
 
 CONFIGURATION:
     Config file: ~/.config/rptui/config.toml
-    Cache dir:   $XDG_CACHE_HOME/rptui/
-    Log file:    rptui.log (in project directory)
+    Config dir: $XDG_CONFIG_HOME/rptui/ (default: ~/.config/rptui/)
+    Cache dir:   $XDG_CACHE_HOME/rptui/ (default: ~/.cache/rptui/)
+    Log file:    $XDG_STATE_HOME/rptui/rptui.log (default: ~/.local/state/rptui/)
 `
 	fmt.Print(help)
 }
