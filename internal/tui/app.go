@@ -3113,6 +3113,17 @@ func (m *Model) updateBottomView() {
 						lines = append(lines, indent+"Source: "+m.artistInfo.DiscoSource)
 					}
 				}
+				// Album description + sales (from TADB album search)
+				if m.artistInfo.AlbumDescription != "" {
+					lines = append(lines, "")
+					lines = append(lines, indent+m.artistInfo.AlbumDescription)
+					if m.artistInfo.AlbumSales != "" {
+						lines = append(lines, indent+"Sales: "+m.artistInfo.AlbumSales)
+					}
+					if m.artistInfo.AlbumSource != "" {
+						lines = append(lines, indent+"Source: "+m.artistInfo.AlbumSource)
+					}
+				}
 				if m.artistInfo.ThumbSource != "" {
 					lines = append(lines, "")
 					lines = append(lines, indent+"thumb: "+m.artistInfo.ThumbSource)
@@ -3636,7 +3647,7 @@ func (m Model) fetchArtistCmd() tea.Cmd {
 		mbCh := make(chan mbResult, 1)
 
 		go func() {
-			a, e := tadbClient.SearchArtist(ctx, song.Artist)
+			a, e := tadbClient.SearchArtist(ctx, song.Artist, song.Album)
 			tadbCh <- tadbResult{a, e}
 		}()
 		go func() {
@@ -3663,6 +3674,16 @@ func (m Model) fetchArtistCmd() tea.Cmd {
 			if len(tadb.artist.FanArts) > 0 {
 				info.GalleryURLs = tadb.artist.FanArts
 				info.GallerySource = "theaudiodb"
+			}
+			// Album info (description + sales) from album search
+			if tadb.artist.AlbumInfo != nil {
+				if tadb.artist.AlbumInfo.Description != "" {
+					info.AlbumDescription = tadb.artist.AlbumInfo.Description
+					info.AlbumSource = "theaudiodb"
+				}
+				if tadb.artist.AlbumInfo.Sales != "" {
+					info.AlbumSales = tadb.artist.AlbumInfo.Sales
+				}
 			}
 		}
 
