@@ -241,11 +241,12 @@ type Model struct {
 	statusSeq     int
 
 	// Scrobble support
-	scrobbler          *api.Scrobbler
-	songStartTime      time.Time
-	scrobbleEligible   bool
-	scrobbleFlashAt    time.Time // when scrobble flash started
-	scrobbleFlashState int       // 0=off, 1=solid accent (success), 2=blink-on, 3=blink-off
+	scrobbler        *api.Scrobbler
+	songStartTime    time.Time
+	scrobbleEligible bool
+	scrobbleFlashAt  time.Time      // when scrobble flash started
+	scrobbleStates   map[string]int // per-service flash state: "fm" -> 0/1/2/3
+	scrobbleServices []string       // list of active services: ["fm", "lb"]
 
 	// Connection monitoring
 	connState           string // "connected", "disconnected", "reconnecting"
@@ -1106,11 +1107,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case scrobbleResultMsg:
 		m.scrobbleFlashAt = time.Now()
-		m.scrobbleFlashState = flashSolid // default to success
+		m.scrobbleStates = make(map[string]int)
+		m.scrobbleServices = make([]string, 0, len(msg.results))
 		for _, r := range msg.results {
-			if !r.Success {
-				m.scrobbleFlashState = flashBlinkOn // any failure triggers blink
-				break
+			m.scrobbleServices = append(m.scrobbleServices, r.Service)
+			if r.Success {
+				m.scrobbleStates[r.Service] = flashSolid
+			} else {
+				m.scrobbleStates[r.Service] = flashBlinkOn
 			}
 		}
 
@@ -2618,16 +2622,22 @@ func (m Model) handleProgressTick(msg progressTickMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Toggle scrobble blink state for failure indication (every 1 second)
-	if m.scrobbleFlashState == flashBlinkOn || m.scrobbleFlashState == flashBlinkOff {
-		if time.Since(m.scrobbleFlashAt) >= flashDuration {
-			m.scrobbleFlashState = flashOff
-		} else {
-			elapsed := time.Since(m.scrobbleFlashAt)
-			if int(elapsed.Seconds())%2 == 0 {
-				m.scrobbleFlashState = flashBlinkOn
+	// Handle per-service scrobble flash states (timeout and blink)
+	for service, state := range m.scrobbleStates {
+		if state == flashSolid {
+			if time.Since(m.scrobbleFlashAt) >= flashDuration {
+				m.scrobbleStates[service] = flashOff
+			}
+		} else if state == flashBlinkOn || state == flashBlinkOff {
+			if time.Since(m.scrobbleFlashAt) >= flashDuration {
+				m.scrobbleStates[service] = flashOff
 			} else {
-				m.scrobbleFlashState = flashBlinkOff
+				elapsed := time.Since(m.scrobbleFlashAt)
+				if int(elapsed.Seconds())%2 == 0 {
+					m.scrobbleStates[service] = flashBlinkOn
+				} else {
+					m.scrobbleStates[service] = flashBlinkOff
+				}
 			}
 		}
 	}
@@ -4192,7 +4202,7 @@ func (m Model) View() tea.View {
 	}
 
 	// Footer rendering
-	m.footerWidget.SetFlashState(m.scrobbleFlashState)
+	m.footerWidget.SetFlashStateByService(m.scrobbleStates)
 	m.footerWidget.SetJukeboxMode(m.jukeboxMode)
 	m.footerWidget.SetOfflineMode(m.offlineMode, m.offlineCache)
 	m.footerWidget.SetMiniMode(isCompact || isNarrow)
