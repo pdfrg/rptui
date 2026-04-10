@@ -1,15 +1,6 @@
 # problems or improvements of current features
 # roadmap.txt is for major new features or changes
 
-make sure log is the best it can be
-	print result of station verification to log
-	logging all useful information
-	removing debug logs or redundant info we don't need
-	consider running app with debug logs enabled
-		need new cli flag e.g. rptui --debug (?)
-		maybe not, already removed most of debug log entries
-	need to keep visualizer debugging in place until that issue is resolved
-
 sometimes on entry to visualizer, gets stuck at loading message
 	unclear why this happens
 	usually if you cycle all the way back around through the views, next time it works OK
@@ -19,14 +10,13 @@ sometimes on entry to visualizer, gets stuck at loading message
 		next time it fails to load, save log and submit for analysis
 		saved session as session-ses_294e-vis-debug.md
 			load on next attempt
-		
-any other config file options that should be added to options modal?
 
-move scrobble indicators from footer to ratings line
-	for both enabled, rather than combined indicator [fm+lb], use separate [fm] [lb]
-		that both color independently based on scrobble success/failure
-	this enables scrobbling to be seen easily in all layouts
+better offline/online management
+	when connected/online, then detect offline AND offline cache available, offer to switch to offline mode
+	when offline and detect online, show status and/or offer to go to normal mode
+		unless offline mode specifically started when online
+	offer "O" toggle between offline and normal, same way we do with "J" for jukebox mode
 
-when in artist info view for a song transition and press "u" to update, thumb doesn't update
-	probably will have to redraw albumart too, even though it does update on song change (but that's OK)
+place log file in standard location?
+	if installed with "go install", then where would log go?  in install directory?
 	

@@ -85,6 +85,9 @@ func main() {
 				fmt.Fprintf(os.Stderr, "Error: --delete-cache requires a cache name\n")
 				os.Exit(1)
 			}
+		case "--create-colors-file":
+			handleCreateColorsFile()
+			return
 		}
 	}
 
@@ -677,6 +680,7 @@ ACTIONS:
     --rp-auth               Authenticate with Radio Paradise account
                             Enables user ratings, comments, favorites sync, and My Paradise channel
                             (optional — all features work without an RP account)
+    --create-colors-file    Print color theme template to stdout
 
 EXAMPLES:
     rptui                   Launch with default settings
@@ -714,4 +718,45 @@ func printVersion() {
 	}
 
 	fmt.Printf("rptui %s (%s, %s)\n", version, goVersion, osArch)
+}
+
+// handleCreateColorsFile outputs a color template file to stdout
+func handleCreateColorsFile() {
+	template := `# RadioParadise TUI Color Theme
+# Place in ~/.config/rptui/colors.toml and reference in config.toml:
+#   colors_file = "/home/username/.config/rptui/colors.toml"
+# Priority: colors_file > theme > Omarchy > Catppuccin Mocha fallback
+
+# [base] - Core UI colors (required)
+# [colors] - ANSI 256-color palette (optional, used for fallbacks)
+
+[base]
+# Main UI colors
+background = "#1e1e2e"  # Window background, panels
+foreground = "#cdd6f4"  # Primary text, song info
+accent = "#89b4fa"     # Song titles, hotkeys, progress bar gradient, current selection
+muted = "#6c7086"      # Secondary text, borders, inactive elements
+cursor = "#f5c2e7"     # Playback position indicator, current playlist item
+
+[colors]
+# ANSI 256-color palette (colors 0-7 standard, 8-15 bright)
+# Used as fallbacks when accent/cursor need to differ from foreground
+color0  = "#45475a"    # black
+color1  = "#f38ba8"    # red
+color2  = "#a6e3a1"    # green
+color3  = "#f9e2af"    # yellow
+color4  = "#89b4fa"    # blue
+color5  = "#f5c2e7"    # magenta
+color6  = "#94e2d5"    # cyan
+color7  = "#bac2de"    # white
+color8  = "#585b70"    # bright black (gray)
+color9  = "#f38ba8"    # bright red
+color10 = "#a6e3a1"    # bright green
+color11 = "#f9e2af"    # bright yellow
+color12 = "#89b4fa"    # bright blue
+color13 = "#f5c2e7"    # bright magenta
+color14 = "#94e2d5"    # bright cyan
+color15 = "#a6adc8"    # bright white
+`
+	fmt.Print(template)
 }
