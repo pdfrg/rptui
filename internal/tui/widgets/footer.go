@@ -33,8 +33,8 @@ type Footer struct {
 	connState    string // "connected", "disconnected", or ""
 
 	// Scrobble indicator
-	scrobbleServices []string // e.g. ["fm", "lb"]
-	flashState       int      // 0=off, 1=solid accent, 2=blink-on, 3=blink-off
+	scrobbleServices     []string       // e.g. ["fm", "lb"]
+	flashStatesByService map[string]int // per-service state: "fm" -> 0/1/2/3
 }
 
 // NewFooter creates a new Footer widget
@@ -124,10 +124,10 @@ func (h *Footer) SetScrobbleServices(services []string) {
 	h.scrobbleServices = services
 }
 
-// SetFlashState sets the scrobble indicator flash state.
-// 0=off, 1=solid accent (success), 2=blink-on (failure), 3=blink-off (failure).
-func (h *Footer) SetFlashState(state int) {
-	h.flashState = state
+// SetFlashStateByService sets the scrobble flash state per service.
+// Map: service name (e.g. "fm", "lb") -> state (0=off, 1=solid, 2=blink-on, 3=blink-off).
+func (h *Footer) SetFlashStateByService(states map[string]int) {
+	h.flashStatesByService = states
 }
 
 // SetJukeboxMode toggles between normal and jukebox key bindings
@@ -156,28 +156,40 @@ func (h *Footer) AddChannel99() {
 	h.stationKeys = append(h.stationKeys, KeyBinding{Key: "9", Icon: "", Label: "MyParadise"})
 }
 
-// scrobbleIndicator returns the rendered scrobble indicator string, or empty if none.
+const (
+	flashOff     = 0
+	flashSolid   = 1
+	flashBlinkOn = 2
+)
+
+// scrobbleIndicator returns rendered scrobble indicators, one per service: [fm][lb].
 func (h Footer) scrobbleIndicator() string {
 	if len(h.scrobbleServices) == 0 {
 		return ""
 	}
 
-	// In jukebox mode, only show scrobble indicator if connected
 	if h.jukeboxMode && h.connState == connStateDisconnected {
 		return ""
 	}
 
-	var style lipgloss.Style
-	switch h.flashState {
-	case 1: // solid accent (success)
-		style = h.accentStyle
-	case 2: // blink-on (failure)
-		style = h.accentStyle
-	default: // off or blink-off
-		style = h.mutedStyle
+	var parts []string
+	for _, svc := range h.scrobbleServices {
+		state := flashOff
+		if h.flashStatesByService != nil {
+			state = h.flashStatesByService[svc]
+		}
+		var style lipgloss.Style
+		switch state {
+		case flashSolid:
+			style = h.accentStyle
+		case flashBlinkOn:
+			style = h.accentStyle
+		default:
+			style = h.mutedStyle
+		}
+		parts = append(parts, style.Render("["+svc+"]"))
 	}
-
-	return style.Render("[" + strings.Join(h.scrobbleServices, "+") + "]")
+	return strings.Join(parts, "")
 }
 
 // View renders the footer (two lines: controls + stations)
