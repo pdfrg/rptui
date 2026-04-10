@@ -4,12 +4,19 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"os/exec"
 	"strconv"
 	"strings"
 	"sync/atomic"
 )
+
+var audioLogger *log.Logger
+
+func SetAudioLogger(l *log.Logger) {
+	audioLogger = l
+}
 
 // ringBuffer is a lock-free single-writer/single-reader ring buffer for float32 samples.
 type ringBuffer struct {
@@ -132,13 +139,22 @@ func findMonitorSourceNode() (int, error) {
 // Returns nil if pw-record is not available or no sink is found.
 func NewAudioTap() *AudioTap {
 	if _, err := exec.LookPath("pw-record"); err != nil {
+		if audioLogger != nil {
+			audioLogger.Printf("AudioTap: pw-record not found: %v", err)
+		}
 		return nil
 	}
 
 	// Find the default sink's monitor source node to capture system audio output
 	monitorNode, err := findMonitorSourceNode()
 	if err != nil {
+		if audioLogger != nil {
+			audioLogger.Printf("AudioTap: findMonitorSourceNode failed: %v", err)
+		}
 		return nil
+	}
+	if audioLogger != nil {
+		audioLogger.Printf("AudioTap: found monitor node %d", monitorNode)
 	}
 
 	cmd := exec.Command("pw-record",
@@ -153,15 +169,27 @@ func NewAudioTap() *AudioTap {
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
+		if audioLogger != nil {
+			audioLogger.Printf("AudioTap: StdoutPipe failed: %v", err)
+		}
 		return nil
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
+		if audioLogger != nil {
+			audioLogger.Printf("AudioTap: StderrPipe failed: %v", err)
+		}
 		return nil
 	}
 
 	if err := cmd.Start(); err != nil {
+		if audioLogger != nil {
+			audioLogger.Printf("AudioTap: cmd.Start failed: %v", err)
+		}
 		return nil
+	}
+	if audioLogger != nil {
+		audioLogger.Printf("AudioTap: pw-record started successfully (PID: %d)", cmd.Process.Pid)
 	}
 
 	tap := &AudioTap{

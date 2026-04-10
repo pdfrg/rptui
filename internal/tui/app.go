@@ -43,6 +43,7 @@ var logger *log.Logger
 
 func init() {
 	logger = loginit.InitLogger("[TUI] ")
+	api.SetDiscogsLogger(logger)
 	visualizer.SetLogger(logger)
 	visualizer.SetAudioLogger(logger)
 	visualizer.SetFFTLogger(logger)

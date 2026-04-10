@@ -2,8 +2,15 @@
 package visualizer
 
 import (
+	"log"
 	"math"
 )
+
+var logger *log.Logger
+
+func SetLogger(l *log.Logger) {
+	logger = l
+}
 
 const (
 	DefaultBandCount = 10
@@ -180,23 +187,44 @@ func (v *Visualizer) updateFromAudio() {
 	}
 
 	n := v.audioTap.ReadSamples(v.sampleBuf)
+	if logger != nil {
+		logger.Printf("Visualizer: ReadSamples returned %d (need %d)", n, fftSize)
+	}
 	if n < fftSize {
 		// Buffer not full yet — keep waiting
 		return
 	}
 
+	// Log first few samples to debug NaN issue
+	if logger != nil {
+		logger.Printf("Visualizer: first 5 samples: %v", v.sampleBuf[:5])
+	}
+
 	bands := v.analyzer.Analyze(v.sampleBuf[:n])
+	if logger != nil {
+		if bands == nil {
+			logger.Printf("Visualizer: Analyze returned nil")
+		} else {
+			logger.Printf("Visualizer: Analyze returned bands, len=%d", len(bands))
+		}
+	}
 	if bands == nil {
 		return
 	}
 
 	// Check if audio has any energy — skip if silent (monitor may be suspended)
 	hasEnergy := false
+	if logger != nil {
+		logger.Printf("Visualizer: bands before energy check: %v", bands)
+	}
 	for _, b := range bands {
 		if b > 0.001 {
 			hasEnergy = true
 			break
 		}
+	}
+	if logger != nil {
+		logger.Printf("Visualizer: hasEnergy=%v", hasEnergy)
 	}
 	if !hasEnergy {
 		return
@@ -263,6 +291,14 @@ func (v *Visualizer) AudioReady() bool {
 		return false
 	}
 	return v.audioReady
+}
+
+// AvailableSamples returns the number of samples available in the audio tap buffer.
+func (v *Visualizer) AvailableSamples() uint64 {
+	if v == nil || v.audioTap == nil {
+		return 0
+	}
+	return v.audioTap.AvailableSamples()
 }
 
 // Close stops the audio tap if running.

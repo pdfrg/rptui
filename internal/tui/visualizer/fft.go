@@ -1,6 +1,7 @@
 package visualizer
 
 import (
+	"log"
 	"math"
 
 	"gonum.org/v1/gonum/dsp/fourier"
@@ -11,6 +12,16 @@ const (
 	bandCount  = 10
 	sampleRate = 48000.0
 )
+
+var fftLogger *log.Logger
+
+func SetFFTLogger(l *log.Logger) {
+	fftLogger = l
+}
+
+func isInf(f float64) bool {
+	return f == math.Inf(1) || f == math.Inf(-1)
+}
 
 // Analyzer performs FFT analysis on audio samples and extracts frequency bands.
 type Analyzer struct {
@@ -88,9 +99,29 @@ func (a *Analyzer) Analyze(samples []float32) []float64 {
 		return nil
 	}
 
+	// Check for NaN or invalid samples
+	if fftLogger != nil {
+		hasNaN := false
+		for i := 0; i < min(10, len(samples)); i++ {
+			v := float64(samples[i])
+			if math.IsNaN(v) || isInf(v) {
+				hasNaN = true
+				break
+			}
+		}
+		if hasNaN {
+			fftLogger.Printf("FFT: Input samples contain NaN/Inf, first 10: %v", samples[:10])
+		}
+	}
+
 	// Convert float32 to float64 and apply window
 	for i := range fftSize {
-		a.samples[i] = float64(samples[i]) * a.window[i]
+		val := float64(samples[i])
+		if math.IsNaN(val) || isInf(val) {
+			a.samples[i] = 0
+		} else {
+			a.samples[i] = val * a.window[i]
+		}
 	}
 
 	// FFT
@@ -99,7 +130,17 @@ func (a *Analyzer) Analyze(samples []float32) []float64 {
 	// Compute magnitudes
 	for i := range a.magBuf {
 		c := a.complexBuf[i]
-		a.magBuf[i] = math.Sqrt(real(c)*real(c) + imag(c)*imag(c))
+		realPart := real(c)
+		imagPart := imag(c)
+		if math.IsNaN(realPart) || math.IsNaN(imagPart) || isInf(realPart) || isInf(imagPart) {
+			a.magBuf[i] = 0
+		} else {
+			a.magBuf[i] = math.Sqrt(realPart*realPart + imagPart*imagPart)
+		}
+	}
+
+	if fftLogger != nil {
+		fftLogger.Printf("FFT: magBuf first 10: %v", a.magBuf[:10])
 	}
 
 	// Extract bands
