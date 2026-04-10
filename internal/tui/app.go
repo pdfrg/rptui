@@ -444,7 +444,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 	playlistWidget := widgets.NewPlaylist(styles)
 
 	// Initialize modal widgets
-	optionsModal := modals.NewOptions(styles, cfg.Channel, cfg.Bitrate, cfg.ShowAlbumArt, cfg.ShowSkipWarning, cfg.CopyAlbumArt, cfg.NotificationsEnabled, cfg.NotificationsShowArt, cfg.Visualizer.Mode)
+	optionsModal := modals.NewOptions(styles, cfg.Channel, cfg.Bitrate, cfg.ShowAlbumArt, cfg.ShowSkipWarning, cfg.CopyAlbumArt, cfg.NotificationsEnabled, cfg.NotificationsShowArt, cfg.Visualizer.Mode, cfg.ColorsFile, cfg.Theme)
 	skipWarningModal := modals.NewSkipWarning(styles, cfg.MinFavorites)
 
 	// Initialize viewport for bottom views
@@ -576,7 +576,7 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 	playlistWidget := widgets.NewPlaylist(styles)
 
 	// Initialize modal widgets
-	optionsModal := modals.NewOptions(styles, cfg.Channel, cfg.Bitrate, cfg.ShowAlbumArt, cfg.ShowSkipWarning, cfg.CopyAlbumArt, cfg.NotificationsEnabled, cfg.NotificationsShowArt, cfg.Visualizer.Mode)
+	optionsModal := modals.NewOptions(styles, cfg.Channel, cfg.Bitrate, cfg.ShowAlbumArt, cfg.ShowSkipWarning, cfg.CopyAlbumArt, cfg.NotificationsEnabled, cfg.NotificationsShowArt, cfg.Visualizer.Mode, cfg.ColorsFile, cfg.Theme)
 	skipWarningModal := modals.NewSkipWarning(styles, cfg.MinFavorites)
 
 	// Initialize viewport for bottom views
@@ -871,6 +871,48 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				mode := visualizer.ModeFromString(*msg.VisualizerMode)
 				m.vis.SetMode(mode)
 				m.vis.RequestRefresh()
+			}
+		}
+
+		// Apply theme changes
+		if msg.Theme != nil {
+			themeVal := *msg.Theme
+			switch themeVal {
+			case "CUSTOM":
+				// Keep colors_file as-is, clear theme name
+				m.config.Theme = ""
+			case "OMARCHY":
+				// Clear colors_file and theme to trigger omarchy fallback
+				m.config.ColorsFile = ""
+				m.config.Theme = ""
+			case "DEFAULT":
+				// Clear both to use full fallback chain
+				m.config.ColorsFile = ""
+				m.config.Theme = ""
+			default:
+				// Built-in theme - set theme name, clear colors_file
+				m.config.Theme = themeVal
+				m.config.ColorsFile = ""
+			}
+
+			// Reload theme
+			newTheme, err := config.LoadTheme(m.config.ColorsFile, m.config.Theme)
+			if err != nil {
+				log.Printf("Failed to reload theme: %v", err)
+			} else {
+				m.theme = newTheme
+				m.styles = config.NewThemeStyles(newTheme)
+				m.nowPlayingWidget.UpdateStyles(
+					m.styles.ForegroundStyle,
+					m.styles.AccentStyle,
+					m.styles.MutedStyle,
+					newTheme.Accent,
+					newTheme.Cursor,
+					newTheme.Background,
+				)
+				m.playlistWidget.UpdateStyles(m.styles)
+				m.headerWidget.UpdateStyles(m.styles.Header)
+				m.footerWidget.UpdateStyles(m.styles.AccentStyle, m.styles.MutedStyle)
 			}
 		}
 
@@ -1573,7 +1615,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.visFullscreen {
 			return m, nil
 		}
-		m.optionsModal = modals.NewOptions(m.styles, m.config.Channel, m.config.Bitrate, m.config.ShowAlbumArt, m.config.ShowSkipWarning, m.config.CopyAlbumArt, m.config.NotificationsEnabled, m.config.NotificationsShowArt, m.config.Visualizer.Mode)
+		m.optionsModal = modals.NewOptions(m.styles, m.config.Channel, m.config.Bitrate, m.config.ShowAlbumArt, m.config.ShowSkipWarning, m.config.CopyAlbumArt, m.config.NotificationsEnabled, m.config.NotificationsShowArt, m.config.Visualizer.Mode, m.config.ColorsFile, m.config.Theme)
 		m.activeModal = ModalOptions
 		return m, clearKittyImagesCmd()
 
