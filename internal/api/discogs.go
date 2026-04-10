@@ -520,12 +520,20 @@ func (d *DiscogsClient) SearchArtist(ctx context.Context, artistName, albumName 
 }
 
 // hasReleaseWithAlbum checks if an artist has a release matching the given album name.
-// Uses a release search with the artist to find the album - more efficient than fetching all releases.
+// Uses release search with artist+title, verifies via master endpoint.
 func (d *DiscogsClient) hasReleaseWithAlbum(ctx context.Context, artistID int, albumNorm string) bool {
-	// First try the direct release search (more efficient)
-	// Use artist ID as filter to confirm this artist has the album
-	reqURL := fmt.Sprintf("https://api.discogs.com/database/search?artist=%d&q=%s&type=release&per_page=5",
-		artistID, url.QueryEscape(albumNorm))
+	// Get artist name to use in search
+	artistName, err := d.fetchArtistName(ctx, artistID)
+	if err != nil || artistName == "" {
+		return false
+	}
+
+	// Strip disambiguation suffix like " (2)" for search
+	searchName := regexp.MustCompile(`\s*\(\d+\)$`).ReplaceAllString(artistName, "")
+
+	// Search for release with artist+title
+	reqURL := fmt.Sprintf("https://api.discogs.com/database/search?artist=%s&title=%s&type=release&per_page=3",
+		url.QueryEscape(searchName), url.QueryEscape(albumNorm))
 	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
 	if err != nil {
 		return false
@@ -535,32 +543,93 @@ func (d *DiscogsClient) hasReleaseWithAlbum(ctx context.Context, artistID int, a
 
 	resp, err := d.httpClient.Do(req)
 	if err != nil {
-		return false
+		return d.checkArtistReleasesFallback(ctx, artistID, albumNorm)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusOK {
-		var result struct {
-			Results []struct {
-				Title string `json:"title"`
-			} `json:"results"`
+	if resp.StatusCode != http.StatusOK {
+		return d.checkArtistReleasesFallback(ctx, artistID, albumNorm)
+	}
+
+	var searchResult struct {
+		Results []struct {
+			MasterID int    `json:"master_id"`
+			Title    string `json:"title"`
+		} `json:"results"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&searchResult); err != nil {
+		return d.checkArtistReleasesFallback(ctx, artistID, albumNorm)
+	}
+
+	// Check each result's master to verify artist ID matches
+	for _, r := range searchResult.Results {
+		if r.MasterID == 0 {
+			continue
 		}
-		if err := json.NewDecoder(resp.Body).Decode(&result); err == nil && len(result.Results) > 0 {
-			return true
+		// Fetch master to get the actual artist
+		masterURL := fmt.Sprintf("https://api.discogs.com/masters/%d", r.MasterID)
+		masterReq, _ := http.NewRequestWithContext(ctx, "GET", masterURL, nil)
+		masterReq.Header.Set("User-Agent", "rptui/1.0")
+		d.setAuth(masterReq)
+
+		masterResp, _ := d.httpClient.Do(masterReq)
+		if masterResp == nil || masterResp.StatusCode != http.StatusOK {
+			continue
+		}
+		defer masterResp.Body.Close()
+
+		var master struct {
+			Artists []struct {
+				ID int `json:"id"`
+			} `json:"artists"`
+		}
+		if json.NewDecoder(masterResp.Body).Decode(&master); err == nil && len(master.Artists) > 0 {
+			if master.Artists[0].ID == artistID {
+				return true
+			}
 		}
 	}
 
-	// Fallback: check artist's releases if release search didn't work
-	// Only fetch first 50 releases - most artists have their main albums in first page
-	reqURL = fmt.Sprintf("https://api.discogs.com/artists/%d/releases?per_page=50", artistID)
-	req, err = http.NewRequestWithContext(ctx, "GET", reqURL, nil)
+	// Fallback: check first 50 releases
+	return d.checkArtistReleasesFallback(ctx, artistID, albumNorm)
+}
+
+// fetchArtistName gets the artist name from their ID
+func (d *DiscogsClient) fetchArtistName(ctx context.Context, artistID int) (string, error) {
+	reqURL := fmt.Sprintf("https://api.discogs.com/artists/%d", artistID)
+	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "rptui/1.0")
+	d.setAuth(req)
+
+	resp, err := d.httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
+	return result.Name, nil
+}
+
+// checkArtistReleasesFallback checks first 50 releases for album match
+func (d *DiscogsClient) checkArtistReleasesFallback(ctx context.Context, artistID int, albumNorm string) bool {
+	reqURL := fmt.Sprintf("https://api.discogs.com/artists/%d/releases?per_page=50", artistID)
+	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
 	if err != nil {
 		return false
 	}
 	req.Header.Set("User-Agent", "rptui/1.0")
 	d.setAuth(req)
 
-	resp, err = d.httpClient.Do(req)
+	resp, err := d.httpClient.Do(req)
 	if err != nil {
 		return false
 	}
