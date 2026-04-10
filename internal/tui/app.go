@@ -43,6 +43,9 @@ var logger *log.Logger
 
 func init() {
 	logger = loginit.InitLogger("[TUI] ")
+	visualizer.SetLogger(logger)
+	visualizer.SetAudioLogger(logger)
+	visualizer.SetFFTLogger(logger)
 }
 
 // artistArtCacheEntry stores a cached artist thumbnail render
@@ -3676,7 +3679,7 @@ func (m Model) fetchArtistCmd() tea.Cmd {
 		// or if bio still needed (bio: tadb > discogs > wikipedia)
 		if info.Bio == "" || discogsClient.HasAuth() {
 			logger.Printf("Artist fetch: phase 2 (Discogs) for %s", song.Artist)
-			discogsArtist, err := discogsClient.SearchArtist(ctx, song.Artist)
+			discogsArtist, err := discogsClient.SearchArtist(ctx, song.Artist, song.Album)
 			if err != nil {
 				logger.Printf("Discogs error for %s: %v", song.Artist, err)
 			}
@@ -4155,10 +4158,12 @@ func (m Model) View() tea.View {
 				// Show loading message while audio tap connects
 				modeName := m.vis.ModeName()
 				source := m.vis.AudioSource()
+				available := m.vis.AvailableSamples()
 				lines := []string{
 					"",
 					fmt.Sprintf("Loading %s visualization...", modeName),
 					fmt.Sprintf("Connecting to %s audio...", source),
+					fmt.Sprintf("Samples available: %d (need %d)", available, 2048),
 					"",
 				}
 				bottomSection = strings.Join(lines, "\n")

@@ -341,8 +341,9 @@ func cleanDiscogsProfile(text string, resolveID func(string) string) string {
 }
 
 // SearchArtist searches for an artist and fetches their details.
-// Returns nil if the artist is not found.
-func (d *DiscogsClient) SearchArtist(ctx context.Context, artistName string) (*DiscogsArtist, error) {
+// If albumName is provided, it will be used to disambiguate when multiple artists match
+// by checking if the artist has a release matching that album.
+func (d *DiscogsClient) SearchArtist(ctx context.Context, artistName, albumName string) (*DiscogsArtist, error) {
 	// Step 1: Search for artist
 	reqURL := fmt.Sprintf("https://api.discogs.com/database/search?q=%s&type=artist",
 		url.QueryEscape(artistName))
@@ -380,24 +381,70 @@ func (d *DiscogsClient) SearchArtist(ctx context.Context, artistName string) (*D
 		return nil, nil // not found
 	}
 
-	// Find best match
+	// Find best match using multiple passes
 	artistLower := strings.ToLower(artistName)
 	artistNorm := normalizeForCompare(artistLower)
-	artistID := searchResult.Results[0].ID
+	albumNorm := ""
+	if albumName != "" {
+		albumNorm = normalizeForCompare(strings.ToLower(albumName))
+	}
+
+	// Collect candidates for album-based disambiguation
+	type candidate struct {
+		id    int
+		title string
+	}
+	var exactMatches []candidate
+	var normMatches []candidate
+	var allMatches []candidate
 
 	for _, r := range searchResult.Results {
+		entry := candidate{id: r.ID, title: r.Title}
+		allMatches = append(allMatches, entry)
 		if strings.ToLower(r.Title) == artistLower {
-			artistID = r.ID
-			break
+			exactMatches = append(exactMatches, entry)
+		}
+		if normalizeForCompare(strings.ToLower(r.Title)) == artistNorm {
+			normMatches = append(normMatches, entry)
 		}
 	}
-	if artistID == searchResult.Results[0].ID {
+
+	artistID := 0
+
+	// Pass 1: exact match (case-insensitive)
+	if len(exactMatches) > 0 {
+		artistID = exactMatches[0].id
+	}
+
+	// Pass 2: normalized match (strip "the", accents, punctuation)
+	if artistID == 0 && len(normMatches) > 0 {
+		artistID = normMatches[0].id
+	}
+
+	// Pass 3: album-based disambiguation (if we have an album name and no exact/normalized match)
+	if artistID == 0 && albumNorm != "" && len(allMatches) > 1 {
+		// For each candidate, check if they have a release matching the album
+		for _, cand := range allMatches {
+			if d.hasReleaseWithAlbum(ctx, cand.id, albumNorm) {
+				artistID = cand.id
+				break
+			}
+		}
+	}
+
+	// Pass 4: forward contains match (result name contains query)
+	if artistID == 0 {
 		for _, r := range searchResult.Results {
-			if normalizeForCompare(strings.ToLower(r.Title)) == artistNorm {
+			if strings.Contains(strings.ToLower(r.Title), artistLower) {
 				artistID = r.ID
 				break
 			}
 		}
+	}
+
+	// Fallback to first result
+	if artistID == 0 {
+		artistID = searchResult.Results[0].ID
 	}
 
 	// Step 2: Fetch artist details
@@ -446,4 +493,43 @@ func (d *DiscogsClient) SearchArtist(ctx context.Context, artistName string) (*D
 	}
 
 	return artist, nil
+}
+
+// hasReleaseWithAlbum checks if an artist has a release matching the given album name.
+// Returns true if we find a release where the title contains the album name.
+func (d *DiscogsClient) hasReleaseWithAlbum(ctx context.Context, artistID int, albumNorm string) bool {
+	reqURL := fmt.Sprintf("https://api.discogs.com/artists/%d/releases?per_page=10", artistID)
+	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
+	if err != nil {
+		return false
+	}
+	req.Header.Set("User-Agent", "rptui/1.0")
+	d.setAuth(req)
+
+	resp, err := d.httpClient.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+
+	var result struct {
+		Releases []struct {
+			Title string `json:"title"`
+		} `json:"releases"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return false
+	}
+
+	for _, rel := range result.Releases {
+		relNorm := normalizeForCompare(strings.ToLower(rel.Title))
+		if strings.Contains(relNorm, albumNorm) || strings.Contains(albumNorm, relNorm) {
+			return true
+		}
+	}
+	return false
 }
