@@ -96,6 +96,13 @@ const (
 	ModalGallery
 	ModalStationWarning
 	ModalRating
+	ModalNetworkTransition
+)
+
+// Network transition variants
+const (
+	NetworkGoingOffline = iota
+	NetworkGoingOnline
 )
 
 // Layout mode constants
@@ -224,12 +231,13 @@ type Model struct {
 	playlistWidget   *widgets.Playlist
 
 	// Modal Widgets
-	optionsModal        *modals.Options
-	skipWarningModal    *modals.SkipWarning
-	favoritesModal      *modals.Favorites
-	galleryModal        *modals.Gallery
-	stationWarningModal *modals.StationWarning
-	ratingModal         *modals.Rating
+	optionsModal           *modals.Options
+	skipWarningModal       *modals.SkipWarning
+	favoritesModal         *modals.Favorites
+	galleryModal           *modals.Gallery
+	stationWarningModal    *modals.StationWarning
+	ratingModal            *modals.Rating
+	networkTransitionModal *modals.NetworkTransition
 
 	// UI dimensions
 	width  int
@@ -297,12 +305,13 @@ type Model struct {
 	crossfading      bool               // whether currently doing a crossfade volume ramp
 
 	// Offline mode
-	offlineMode    bool               // whether offline mode is active
-	offlineCache   string             // name of the offline cache being played
-	offlineSongs   []cache.CachedSong // all songs in the offline cache
-	offlineIndex   int                // current position in offlineSongs
-	offlineStation int                // station from cache config
-	offlineBitrate int                // bitrate from cache config
+	offlineMode                 bool   // whether offline mode is active
+	offlineCache                string // name of the offline cache being played
+	offlineSongs                []cache.CachedSong
+	offlineIndex                int
+	offlineStation              int
+	offlineBitrate              int
+	offlineModeStartedConnected bool // true if --offline had connection on first check
 
 	// Layout mode
 	layoutMode int // LayoutLarge, LayoutMedium, LayoutCompact, LayoutNarrow
@@ -467,37 +476,38 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Accent))
 
 	m := &Model{
-		config:            cfg,
-		theme:             theme,
-		styles:            styles,
-		themeWatcher:      themeWatcher,
-		rpAPI:             rpAPI,
-		authClient:        authClient,
-		commentsClient:    commentsClient,
-		ratingsClient:     ratingsClient,
-		lyricsClient:      lyricsClient,
-		wikipediaClient:   wikipediaClient,
-		discogsClient:     discogsClient,
-		musicbrainzClient: musicbrainzClient,
-		theaudiodbClient:  theaudiodbClient,
-		mpvBackend:        mpvBackend,
-		cacheManager:      cacheManager,
-		scrobbler:         scrobbler,
-		bottomViewMode:    ViewPlaylist,
-		headerWidget:      headerWidget,
-		footerWidget:      footerWidget,
-		nowPlayingWidget:  nowPlayingWidget,
-		playlistWidget:    playlistWidget,
-		optionsModal:      optionsModal,
-		skipWarningModal:  skipWarningModal,
-		viewport:          viewport,
-		help:              help,
-		spinner:           sp,
-		cellRatio:         cellRatio,
-		downloadResults:   make(chan favoriteDownloadMsg, 1),
-		jukeboxMode:       startJukebox,
-		jukeboxBatchSize:  10,
-		commentsPerPage:   20,
+		config:                 cfg,
+		theme:                  theme,
+		styles:                 styles,
+		themeWatcher:           themeWatcher,
+		rpAPI:                  rpAPI,
+		authClient:             authClient,
+		commentsClient:         commentsClient,
+		ratingsClient:          ratingsClient,
+		lyricsClient:           lyricsClient,
+		wikipediaClient:        wikipediaClient,
+		discogsClient:          discogsClient,
+		musicbrainzClient:      musicbrainzClient,
+		theaudiodbClient:       theaudiodbClient,
+		mpvBackend:             mpvBackend,
+		cacheManager:           cacheManager,
+		scrobbler:              scrobbler,
+		bottomViewMode:         ViewPlaylist,
+		headerWidget:           headerWidget,
+		footerWidget:           footerWidget,
+		nowPlayingWidget:       nowPlayingWidget,
+		playlistWidget:         playlistWidget,
+		optionsModal:           optionsModal,
+		skipWarningModal:       skipWarningModal,
+		viewport:               viewport,
+		help:                   help,
+		spinner:                sp,
+		cellRatio:              cellRatio,
+		downloadResults:        make(chan favoriteDownloadMsg, 1),
+		jukeboxMode:            startJukebox,
+		jukeboxBatchSize:       10,
+		commentsPerPage:        20,
+		networkTransitionModal: nil,
 	}
 
 	// Determine layout mode
@@ -625,39 +635,41 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 	}
 
 	m := &Model{
-		config:            cfg,
-		theme:             theme,
-		styles:            styles,
-		themeWatcher:      themeWatcher,
-		rpAPI:             rpAPI,
-		lyricsClient:      lyricsClient,
-		wikipediaClient:   wikipediaClient,
-		discogsClient:     discogsClient,
-		musicbrainzClient: musicbrainzClient,
-		theaudiodbClient:  theaudiodbClient,
-		mpvBackend:        mpvBackend,
-		cacheManager:      cacheManager,
-		scrobbler:         scrobbler,
-		bottomViewMode:    ViewPlaylist,
-		headerWidget:      headerWidget,
-		footerWidget:      footerWidget,
-		nowPlayingWidget:  nowPlayingWidget,
-		playlistWidget:    playlistWidget,
-		optionsModal:      optionsModal,
-		skipWarningModal:  skipWarningModal,
-		viewport:          viewport,
-		help:              help,
-		spinner:           sp,
-		cellRatio:         cellRatio,
-		downloadResults:   make(chan favoriteDownloadMsg, 1),
-		offlineMode:       true,
-		offlineCache:      cacheName,
-		offlineSongs:      songs,
-		offlineIndex:      0,
-		offlineStation:    offlineStation,
-		offlineBitrate:    offlineBitrate,
-		songs:             modelSongs,
-		currentSongIndex:  0,
+		config:                      cfg,
+		theme:                       theme,
+		styles:                      styles,
+		themeWatcher:                themeWatcher,
+		rpAPI:                       rpAPI,
+		lyricsClient:                lyricsClient,
+		wikipediaClient:             wikipediaClient,
+		discogsClient:               discogsClient,
+		musicbrainzClient:           musicbrainzClient,
+		theaudiodbClient:            theaudiodbClient,
+		mpvBackend:                  mpvBackend,
+		cacheManager:                cacheManager,
+		scrobbler:                   scrobbler,
+		bottomViewMode:              ViewPlaylist,
+		headerWidget:                headerWidget,
+		footerWidget:                footerWidget,
+		nowPlayingWidget:            nowPlayingWidget,
+		playlistWidget:              playlistWidget,
+		optionsModal:                optionsModal,
+		skipWarningModal:            skipWarningModal,
+		viewport:                    viewport,
+		help:                        help,
+		spinner:                     sp,
+		cellRatio:                   cellRatio,
+		downloadResults:             make(chan favoriteDownloadMsg, 1),
+		offlineMode:                 true,
+		offlineCache:                cacheName,
+		offlineSongs:                songs,
+		offlineIndex:                0,
+		offlineStation:              offlineStation,
+		offlineBitrate:              offlineBitrate,
+		offlineModeStartedConnected: false,
+		songs:                       modelSongs,
+		currentSongIndex:            0,
+		networkTransitionModal:      nil,
 	}
 
 	// Determine layout mode
@@ -834,6 +846,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			case ModalStationWarning:
 				cmd = m.stationWarningModal.Update(msg)
+			case ModalNetworkTransition:
+				if m.networkTransitionModal != nil {
+					cmd = m.networkTransitionModal.Update(msg)
+				}
 			case ModalRating:
 				if m.ratingModal != nil {
 					cmd = m.ratingModal.Update(msg)
@@ -980,6 +996,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case modals.StationWarningMsg:
 		m.activeModal = ModalNone
 		return handle(m, renderAlbumArtAfterDelay())
+
+	case modals.NetworkTransitionMsg:
+		m.activeModal = ModalNone
+
+		switch msg.Action {
+		case "select":
+			// User selected an offline cache - switch to it
+			return m.switchToOfflineMode(msg.Cache)
+
+		case "dismiss":
+			// User dismissed - continue with retry logic
+			return m, tickConnRetryCmd(m.retryInterval)
+
+		case "confirm":
+			if msg.Response {
+				// User confirmed - return to live stream
+				return m.exitOfflineMode()
+			}
+			// User declined - stay in offline mode
+			return m, nil
+		}
+		return m, nil
 
 	case modals.FavoritesMsg:
 		if !msg.StayOpen {
@@ -1815,6 +1853,101 @@ func (m Model) handleOfflineStart() (tea.Model, tea.Cmd) {
 	)
 }
 
+// switchToOfflineMode switches from normal mode to an offline cache
+func (m Model) switchToOfflineMode(cacheName string) (tea.Model, tea.Cmd) {
+	offlineDir := filepath.Join(filepath.Dir(m.config.GetFavoritesDir()), "offline")
+	songs, err := cache.LoadCache(offlineDir, cacheName)
+	if err != nil {
+		return m, setStatus(&m, fmt.Sprintf("Failed to load cache: %v", err), true)
+	}
+
+	if len(songs) == 0 {
+		return m, setStatus(&m, "No songs in cache", true)
+	}
+
+	// Load cache config if available
+	configPath := filepath.Join(offlineDir, cacheName, "config.json")
+	var cacheConfig struct {
+		Station int `json:"station"`
+		Bitrate int `json:"bitrate"`
+	}
+	station := m.config.Channel
+	bitrate := m.config.Bitrate
+	if data, err := os.ReadFile(configPath); err == nil {
+		if err := json.Unmarshal(data, &cacheConfig); err == nil {
+			station = cacheConfig.Station
+			bitrate = cacheConfig.Bitrate
+		}
+	}
+
+	m.offlineMode = true
+	m.offlineCache = cacheName
+	m.offlineSongs = songs
+	m.offlineIndex = 0
+	m.offlineStation = station
+	m.offlineBitrate = bitrate
+
+	// Initialize with batch
+	batchSize := 10
+	if len(songs) < batchSize {
+		batchSize = len(songs)
+	}
+
+	var urls []string
+	var batchSongs []*models.Song
+	for i := 0; i < batchSize; i++ {
+		cs := songs[i]
+		s := cs.ToSong()
+		urls = append(urls, cs.AudioPath)
+		batchSongs = append(batchSongs, s)
+	}
+
+	m.songs = batchSongs
+	m.currentSongIndex = 0
+	m.playlistStartIdx = 0
+	m.connectedAt = time.Now()
+	m.isPlaying = true
+	m.initialized = true
+
+	logger.Printf("Switched to offline mode: cache '%s' with %d songs", cacheName, len(songs))
+
+	m.mpvBackend.Start(urls)
+	m.updatePlaylist()
+
+	return m, tea.Batch(
+		setStatus(&m, fmt.Sprintf("Offline: %s", cacheName), false),
+		tickProgressCmd(),
+		m.songChangedCmds(),
+	)
+}
+
+// exitOfflineMode exits offline mode and returns to live stream
+func (m Model) exitOfflineMode() (tea.Model, tea.Cmd) {
+	m.offlineMode = false
+	m.offlineCache = ""
+	m.offlineSongs = nil
+	m.offlineIndex = 0
+	m.offlineStation = 0
+	m.offlineBitrate = 0
+	m.offlineModeStartedConnected = false
+
+	// Clear playlist and reset state for fresh start
+	m.songs = nil
+	m.currentSongIndex = 0
+	m.playlistStartIdx = 0
+	m.currentSong = nil
+	m.isPlaying = false
+	m.isPaused = false
+	m.pollingNextBlock = false
+	m.lastBlockID = 0
+
+	m.mpvBackend.Stop()
+
+	logger.Printf("Exited offline mode, fetching live stream")
+
+	return m, m.fetchBlockCmd
+}
+
 // toggleJukeboxMode enters or exits jukebox mode
 func (m Model) switchStation(channel int) (tea.Model, tea.Cmd) {
 	if channel == m.config.Channel {
@@ -2214,6 +2347,17 @@ func (m Model) handleBlockFetched(msg blockFetchedMsg) (tea.Model, tea.Cmd) {
 		logger.Printf("Block fetch error #%d (%s), retry in %v: %v",
 			m.consecutiveFailures, errLabel, m.retryInterval, msg.err)
 
+		// Check if we should show network transition modal (going offline)
+		// Show after 3 consecutive failures if not in jukebox mode
+		if m.consecutiveFailures >= 3 && !m.jukeboxMode {
+			offlineDir := filepath.Join(filepath.Dir(m.config.GetFavoritesDir()), "offline")
+			caches, _ := cache.ListCaches(offlineDir)
+			m.networkTransitionModal = modals.NewNetworkTransition(m.styles, NetworkGoingOffline, caches, errLabel)
+			m.activeModal = ModalNetworkTransition
+			logger.Printf("Showing network transition modal (going offline) after %d failures", m.consecutiveFailures)
+			return m, nil
+		}
+
 		return m, tickConnRetryCmd(m.retryInterval)
 	}
 
@@ -2232,6 +2376,19 @@ func (m Model) handleBlockFetched(msg blockFetchedMsg) (tea.Model, tea.Cmd) {
 	if wasDisconnected {
 		logger.Printf("Connection restored after %d failed attempt(s)", prevFailures)
 		reconnectedCmd = setStatus(&m, "✓ Reconnected", false)
+
+		// In offline mode: check if we should show going-online modal
+		// Only if we started offline mode without connection
+		if m.offlineMode && !m.offlineModeStartedConnected && !m.jukeboxMode {
+			m.networkTransitionModal = modals.NewNetworkTransition(m.styles, NetworkGoingOnline, nil, "")
+			m.activeModal = ModalNetworkTransition
+			logger.Printf("Showing network transition modal (going online) in offline mode")
+		}
+	}
+
+	// If in offline mode and this is first successful connection, mark it
+	if m.offlineMode && !m.offlineModeStartedConnected {
+		m.offlineModeStartedConnected = true
 	}
 
 	// Check for promo block (blockID == 0) — skip in all cases
@@ -4041,6 +4198,10 @@ func (m Model) View() tea.View {
 		case ModalRating:
 			if m.ratingModal != nil {
 				modalView = m.ratingModal.View()
+			}
+		case ModalNetworkTransition:
+			if m.networkTransitionModal != nil {
+				modalView = m.networkTransitionModal.View()
 			}
 		}
 
