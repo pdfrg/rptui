@@ -1,0 +1,319 @@
+api/play returns songID
+	remains the same for each song
+	this can be used to get comments
+	needs auth, eg.
+		curl 'https://api.radioparadise.com/siteapi.php?file=comments%3A%3Alist&song_id=41979&comments_num=100&order=oldest'   -H 'Accept: application/json, text/plain, */*'   -H 'Accept-Language: en-US,en;q=0.9'   -H 'Connection: keep-alive'   -b 'player_id=rp3_e2abe2ff-4bda-7114-ea45-c4dd9d3190f7; source=24; country_code=US; C_username=anonymous; C_user_id=1523955540; __stripe_mid=920c657c-fc46-4c3c-a97f-343aca2c92a289dd30; __stripe_sid=d39b4c39-759d-4fa9-9c50-c2bd1162dd03fcda3a'   -H 'Origin: https://radioparadise.com'   -H 'Referer: https://radioparadise.com/'   -H 'Sec-Fetch-Dest: empty'   -H 'Sec-Fetch-Mode: cors'   -H 'Sec-Fetch-Site: same-site'   -H 'Sec-GPC: 1'   -H 'User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'   -H 'sec-ch-ua: "Not:A-Brand";v="99", "Brave";v="145", "Chromium";v="145"'   -H 'sec-ch-ua-mobile: ?0'   -H 'sec-ch-ua-platform: "Linux"' | jq
+		curl 'https://api.radioparadise.com/siteapi.php?file=comments%3A%3Alist&song_id=41979&comments_num=100&order=oldest'   -b 'player_id=rptui; C_username=anonymous; C_user_id=1523955540'   -H 'User-Agent: rptui/0.1 (X11; Linux x86_64)'   -H 'sec-ch-ua-mobile: ?0'   -H 'sec-ch-ua-platform: "Linux"' | jq
+		without details returns "cookie auth failure"
+	could consider adding yet another bottom view
+		not sure want to deal with cookies/auth
+		users would have to go to RP website, open dev tools, R click, copy as cURL to get headers
+		could we use config file, or paste to separate cookies.txt?
+		or could we just extract from browser cookies?
+
+login on website		
+curl "https://api.radioparadise.com/api/auth?username=<username>&passwd=<password>" | jq
+{
+  "user_id": "1024676257",
+  "last_login": "1775335866",
+  "last_refresh": "1775199912",
+  "post_ok": "f",
+  "username": "pdfrg",
+  "level": "3",
+  "country_code": "US",
+  "avatar": null,
+  "privmsg_new": false,
+  "newsletter_r2050": 0,
+  "htsso": {
+    "hash": "def0353a21751a738aafae0989cb167ddcd08359",
+    "hash256": "cb242e9cebbbaf91226ad819ccbad7f2ee51b6a08ac460f16dfd3ebbbcf4f383",
+    "userData": "eyJ0aW1lc3RhbXAiOjE3NzUzMzU4OTIsImlkIjoxMDI0Njc2MjU3LCJuYW1lIjoicGRmcmciLCJlbWFpbCI6Im1kc2NvdHRAdHV0YW5vdGEuY29tIiwicGljdHVyZSI6Imh0dHBzOlwvXC9pbWcucmFkaW9wYXJhZGlzZS5jb21cL2F2YXRhcnNcLyIsInVybCI6Imh0dHBzOlwvXC9yYWRpb3BhcmFkaXNlLmNvbVwvYWNjb3VudFwvcHJvZmlsZVwvMTAyNDY3NjI1NyIsInBpY3R1cmVfdXJsIjoiaHR0cHM6XC9cL2ltZy5yYWRpb3BhcmFkaXNlLmNvbVwvYXZhdGFyc1wvIiwid2Vic2l0ZV91cmwiOiJodHRwczpcL1wvcmFkaW9wYXJhZGlzZS5jb21cL2FjY291bnRcL3Byb2ZpbGVcLzEwMjQ2NzYyNTcifQ==",
+    "loginURL": true,
+    "signupURL": true
+  },
+  "passwd": "ea77c74e-1543-4d28-8ac8-619148dc9c37",
+  "support_meter_percent": 100,
+  "status": "success"
+}
+
+song rating on website
+curl 'https://api.radioparadise.com/api/rating?song_id=61213&rating=5' \
+  -H 'Accept: application/json, text/plain, */*' \
+  -H 'Accept-Language: en-US,en;q=0.9' \
+  -H 'Connection: keep-alive' \
+  -b 'player_id=rp3_e2abe2ff-4bda-7114-ea45-c4dd9d3190f7; source=24; country_code=US; __stripe_mid=920c657c-fc46-4c3c-a97f-343aca2c92a289dd30; __stripe_sid=d39b4c39-759d-4fa9-9c50-c2bd1162dd03fcda3a; C_username=pdfrg; C_passwd=ea77c74e-1543-4d28-8ac8-619148dc9c37; C_validated=yes; C_user_id=1024676257' \
+  -H 'Origin: https://radioparadise.com' \
+  -H 'Referer: https://radioparadise.com/' \
+  -H 'Sec-Fetch-Dest: empty' \
+  -H 'Sec-Fetch-Mode: cors' \
+  -H 'Sec-Fetch-Site: same-site' \
+  -H 'Sec-GPC: 1' \
+  -H 'User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Brave";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Linux"'
+
+response
+{"status":"success","song_id":61213,"user_id":"1024676257","rating":5}
+
+from cli: (it worked!!! --could do song ratings from app?)
+curl 'https://api.radioparadise.com/api/rating?song_id=61213&rating=6' \
+  -b 'player_id=rptui; C_username=pdfrg; C_passwd=ea77c74e-1543-4d28-8ac8-619148dc9c37; C_validated=yes; C_user_id=1024676257'
+{"status":"success","song_id":61213,"user_id":"1024676257","rating":6}
+
+get song info to confirm user rating
+curl 'https://api.radioparadise.com/siteapi.php?file=music%3A%3Asong&withWiki=true&song_id=61213' \
+  -H 'Accept: application/json, text/plain, */*' \
+  -H 'Accept-Language: en-US,en;q=0.9' \
+  -H 'Connection: keep-alive' \
+  -b 'player_id=rp3_e2abe2ff-4bda-7114-ea45-c4dd9d3190f7; source=24; country_code=US; __stripe_mid=920c657c-fc46-4c3c-a97f-343aca2c92a289dd30; __stripe_sid=d39b4c39-759d-4fa9-9c50-c2bd1162dd03fcda3a; C_username=pdfrg; C_passwd=ea77c74e-1543-4d28-8ac8-619148dc9c37; C_validated=yes; C_user_id=1024676257' \
+  -H 'Origin: https://radioparadise.com' \
+  -H 'Referer: https://radioparadise.com/' \
+  -H 'Sec-Fetch-Dest: empty' \
+  -H 'Sec-Fetch-Mode: cors' \
+  -H 'Sec-Fetch-Site: same-site' \
+  -H 'Sec-GPC: 1' \
+  -H 'User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Brave";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Linux"'
+
+response: (I had just set rating to 6, works!!! --can show user ratings)
+{
+    "wiki_html": "<div class=\"wiki_artist_title\">Crooked Fingers<\/div><div class=\"wiki_image\" style=\"width:100%;height:auto;\"><img src=\"https:\/\/img.radioparadise.com\/artists\/raw\/27099.jpg\"><\/div><div class=\"wiki_description\"><p><p>Crooked Fingers is an American indie rock band, led by the former Archers of Loaf frontman Eric Bachmann. A vehicle for Bachmann's songwriting, the band's lineup changed between each record. Crooked Fingers released albums on WARM Records and Merge Records, and also independently.<\/p><\/p><\/div>",
+    "wiki_wikipedia_timestamp": "0",
+    "artist_image": "https:\/\/img.radioparadise.com\/artists\/raw\/27099.jpg",
+    "links": {
+        "facebook": "",
+        "twitter": "",
+        "wiki": "",
+        "website": "",
+        "amg": "",
+        "amazon_success": false,
+        "amazon_cd": "",
+        "amazon_mp3": "",
+        "itunes_success": false,
+        "itunes_song": false,
+        "itunes_album": false,
+        "itunes_artist": ""
+    },
+    "song_id": 61213,
+    "artist_id": "27099",
+    "album_id": "27235",
+    "asin": "27235",
+    "cover": "https:\/\/img.radioparadise.com\/covers\/l\/27235.jpg",
+    "title": "Insomnia",
+    "artist": "Crooked Fingers",
+    "album": "Swet Deth",
+    "rating": "6",
+    "release_date": "2026-02-27",
+    "ratings_dist": [
+        0,
+        1,
+        1,
+        2,
+        9,
+        9,
+        23,
+        9,
+        1,
+        3
+    ],
+    "ratings_num": "58",
+    "avg_rating": 6.6,
+    "avg_rating_rounded": 7,
+    "length": "0:00",
+    "month_plays": "0",
+    "month_plays_chans": [
+        {
+            "label": "(none)"
+        }
+    ],
+    "slideshow": "46678,76649",
+    "album_release_year": null,
+    "rp_song_link": "\/music\/song\/61213",
+    "rp_artist_link": "\/music\/artist\/27099",
+    "rp_album_link": "\/music\/album\/27235",
+    "lyrics": "(lyrics unavailable)",
+    "mm_lyrics": [],
+    "total_comments": 2,
+    "song_credit": "Crooked Fingers",
+    "song_credit_list": [
+        {
+            "artist_id": "27099",
+            "artist_title": "Crooked Fingers",
+            "artist_joinphrase": ""
+        }
+    ]
+}
+rating > logged in user rating
+avg_rating > average of all RP users
+can show both in TUI nowplaying widget
+I think the /play endpoint might show the user rating if logged in (?)
+
+get user ratings
+curl 'https://api.radioparadise.com/siteapi.php?file=account%3A%3Aprofile-favorites&profile_user_id=1024676257&mode=High&lower_limit=1&upper_limit=10&list_offset=0' \
+  -H 'Accept: application/json, text/plain, */*' \
+  -H 'Accept-Language: en-US,en;q=0.9' \
+  -H 'Connection: keep-alive' \
+  -b 'player_id=rp3_e2abe2ff-4bda-7114-ea45-c4dd9d3190f7; source=24; country_code=US; __stripe_mid=920c657c-fc46-4c3c-a97f-343aca2c92a289dd30; __stripe_sid=d39b4c39-759d-4fa9-9c50-c2bd1162dd03fcda3a; C_username=pdfrg; C_passwd=ea77c74e-1543-4d28-8ac8-619148dc9c37; C_validated=yes; C_user_id=1024676257' \
+  -H 'Origin: https://radioparadise.com' \
+  -H 'Referer: https://radioparadise.com/' \
+  -H 'Sec-Fetch-Dest: empty' \
+  -H 'Sec-Fetch-Mode: cors' \
+  -H 'Sec-Fetch-Site: same-site' \
+  -H 'Sec-GPC: 1' \
+  -H 'User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Brave";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Linux"'
+
+returns 20 songs, can filter by rating, change offset to get more
+most removed for brevity
+{
+  "suppress": false,
+  "songs": [
+    {
+      "artist": "alt-J",
+      "artist_id": "1136",
+      "song_id": "43236",
+      "title": "Tessellate (Broadbandits Afro Mix)",
+      "asin": "7758",
+      "album": "An Awesome Wave",
+      "album_id": "7758",
+      "cover": "https://img.radioparadise.com/covers/s/7758.jpg",
+      "year": "2012",
+      "rating": "9",
+      "listener_rating": "7.7",
+      "listener_rating_rounded": 8,
+      "ratings_dist": [
+        88,
+        58,
+        77,
+        91,
+        162,
+        448,
+        1848,
+        2703,
+        1265,
+        789
+      ],
+      "ratings_num": "7532"
+    },
+    {
+      "artist": "The White Stripes",
+      "artist_id": "4704",
+      "song_id": "33946",
+      "title": "Ball And Biscuit",
+      "asin": "8497",
+      "album": "Elephant",
+      "album_id": "8497",
+      "cover": "https://img.radioparadise.com/covers/s/8497.jpg",
+      "year": "2003",
+      "rating": "8",
+      "listener_rating": "7.3",
+      "listener_rating_rounded": 7,
+      "ratings_dist": [
+        64,
+        51,
+        63,
+        53,
+        80,
+        170,
+        565,
+        690,
+        391,
+        197
+      ],
+      "ratings_num": "2324"
+    }
+  ],
+  "num_songs": 161
+}
+
+num_songs = how many songs the user has rated (as filtered)
+favorites are rated 7-10
+could download list of user favorites
+	incorporate with our own favorite system
+	perhaps "f favorite" if logged in could assign rating of 7,8,9,10 (user config)
+	if a song is in RP faves, the next time we see it, offer to download?
+
+check RP settings for favorite cutoff
+curl 'https://api.radioparadise.com/api/list_chan_favscount?source=24' \
+  -H 'Accept: application/json, text/plain, */*' \
+  -H 'Accept-Language: en-US,en;q=0.9' \
+  -H 'Connection: keep-alive' \
+  -b 'player_id=rp3_e2abe2ff-4bda-7114-ea45-c4dd9d3190f7; source=24; country_code=US; __stripe_mid=920c657c-fc46-4c3c-a97f-343aca2c92a289dd30; __stripe_sid=d39b4c39-759d-4fa9-9c50-c2bd1162dd03fcda3a; C_username=pdfrg; C_passwd=ea77c74e-1543-4d28-8ac8-619148dc9c37; C_validated=yes; C_user_id=1024676257' \
+  -H 'Origin: https://radioparadise.com' \
+  -H 'Referer: https://radioparadise.com/' \
+  -H 'Sec-Fetch-Dest: empty' \
+  -H 'Sec-Fetch-Mode: cors' \
+  -H 'Sec-Fetch-Site: same-site' \
+  -H 'Sec-GPC: 1' \
+  -H 'User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Brave";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Linux"'
+
+mostly the same as /list_chan except the following very interesting:
+{
+            "chan": "99",
+            "title": "My Paradise",
+            "stream_name": "my-paradise",
+            "slug": "my-paradise",
+            "type": "flex",
+            "default_stream_url": "",
+            "current_listeners": "225",
+            "stream": {
+                "title": "",
+                "artist": "",
+                "album": "",
+                "cover": "",
+                "stream_url": ""
+            },
+            "player_type": "gapless-playlist",
+            "downloadable": true,
+            "modes": {
+                "type": "radio",
+                "subtype": "favorites",
+                "info": 1,
+                "list": 1,
+                "slideshow": 1
+            },
+            "chan_99_cutoff": 7,
+            "banner_url": "https:\/\/img.radioparadise.com\/channels\/0\/99\/banner_500x280\/0.jpg",
+            "banner_mini_url": "https:\/\/img.radioparadise.com\/channels\/0\/99\/banner_410x107\/0.png",
+            "carousel_url": "https:\/\/img.radioparadise.com\/channels\/0\/99\/carousel_500x500\/0.jpg",
+            "image": "https:\/\/img.radioparadise.com\/channels\/0\/99\/cover_512x512\/0.jpg",
+            "behaviour": {
+                "defaultPlayerMode": 0,
+                "slideshowDisplaySongInfo": true
+            }
+        },
+
+and...
+ ],
+    "favsCount": {
+        "r5": "161",
+        "r6": "161",
+        "r7": "160",
+        "r8": "15",
+        "r9": "2",
+        "r10": "0"
+    },
+    "chan_99_cutoff": 7
+}
+
+so 99 = My Paradise
+	this is your favrorites channel!
+	downloadable = true
+	you can play it like a normal station!
+		will clearly require auth
+		not sure how to combine with /play endpoint
+		will need trial and error, probably just submit the same headers
+	chan_99_cutoff = 7
+		rating must be >=7 to be included
+		this can be changed on the RP site (configured anywhere from 5-10)
+	favsCount
+		shows how many songs you have >= each rating
+		

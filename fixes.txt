@@ -1,3 +1,35 @@
 # problems or improvements of current features
 # roadmap.txt is for major new features or changes
 
+make sure log is the best it can be
+	print result of station verification to log
+	logging all useful information
+	removing debug logs or redundant info we don't need
+	consider running app with debug logs enabled
+		need new cli flag e.g. rptui --debug (?)
+		maybe not, already removed most of debug log entries
+	need to keep visualizer debugging in place until that issue is resolved
+
+sometimes on entry to visualizer, gets stuck at loading message
+	unclear why this happens
+	usually if you cycle all the way back around through the views, next time it works OK
+	added logging
+		during initial tests I had no failures, but we didn't "fix" anything
+		on repeated testing visualizer is now "just working" without failure to load
+		next time it fails to load, save log and submit for analysis
+		saved session as session-ses_294e-vis-debug.md
+			load on next attempt
+		
+any other config file options that should be added to options modal?
+
+discogs artist matching sometimes returns wrong artist
+	e.g. "Jack White" is not the one from The White Stripes
+	how could this matching be improved?
+		can we do something similar to how we do matching with musicbrainz
+			namely, does this artist have an album that matches the album of the song being played
+		or some entirely different way
+
+move scrobble indicators from footer to ratings line
+	for both enabled, rather than combined indicator [fm+lb], use separate [fm] [lb]
+		that both color independently based on scrobble success/failure
+	this enables scrobbling to be seen easily in all layouts

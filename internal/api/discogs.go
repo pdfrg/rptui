@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,6 +14,12 @@ import (
 	"sync"
 	"time"
 )
+
+var discogsLogger *log.Logger
+
+func SetDiscogsLogger(l *log.Logger) {
+	discogsLogger = l
+}
 
 // DiscogsClient provides access to the Discogs API.
 // Supports three auth methods (none required, all optional):
@@ -411,25 +418,36 @@ func (d *DiscogsClient) SearchArtist(ctx context.Context, artistName, albumName 
 
 	artistID := 0
 
-	// Pass 1: exact match (case-insensitive)
-	if len(exactMatches) > 0 {
-		artistID = exactMatches[0].id
-	}
-
-	// Pass 2: normalized match (strip "the", accents, punctuation)
-	if artistID == 0 && len(normMatches) > 0 {
-		artistID = normMatches[0].id
-	}
-
-	// Pass 3: album-based disambiguation (if we have an album name and no exact/normalized match)
-	if artistID == 0 && albumNorm != "" && len(allMatches) > 1 {
-		// For each candidate, check if they have a release matching the album
+	// If we have album info and multiple candidates, try album disambiguation FIRST
+	// This helps avoid selecting the wrong artist when there are multiple "Jack White" entries
+	// The search API returns results sorted by relevance, but the actual Jack White from The White Stripes
+	// might not be first (a German musician named Jack White might appear first)
+	if albumNorm != "" && len(allMatches) > 1 {
+		if discogsLogger != nil {
+			discogsLogger.Printf("Discogs: album disambiguation for '%s' (%d candidates)", albumNorm, len(allMatches))
+		}
 		for _, cand := range allMatches {
+			if discogsLogger != nil {
+				discogsLogger.Printf("Discogs: checking artist ID %d (%s) for album '%s'", cand.id, cand.title, albumNorm)
+			}
 			if d.hasReleaseWithAlbum(ctx, cand.id, albumNorm) {
 				artistID = cand.id
+				if discogsLogger != nil {
+					discogsLogger.Printf("Discogs: album match found, selected ID=%d", artistID)
+				}
 				break
 			}
 		}
+	}
+
+	// Pass 1: exact match (case-insensitive) - only if no album match
+	if artistID == 0 && len(exactMatches) > 0 {
+		artistID = exactMatches[0].id
+	}
+
+	// Pass 2: normalized match (strip "the", accents, punctuation) - only if no album match
+	if artistID == 0 && len(normMatches) > 0 {
+		artistID = normMatches[0].id
 	}
 
 	// Pass 4: forward contains match (result name contains query)
@@ -498,7 +516,8 @@ func (d *DiscogsClient) SearchArtist(ctx context.Context, artistName, albumName 
 // hasReleaseWithAlbum checks if an artist has a release matching the given album name.
 // Returns true if we find a release where the title contains the album name.
 func (d *DiscogsClient) hasReleaseWithAlbum(ctx context.Context, artistID int, albumNorm string) bool {
-	reqURL := fmt.Sprintf("https://api.discogs.com/artists/%d/releases?per_page=10", artistID)
+	// Fetch more releases to increase chances of finding the album (pagination may be needed)
+	reqURL := fmt.Sprintf("https://api.discogs.com/artists/%d/releases?per_page=50", artistID)
 	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
 	if err != nil {
 		return false
