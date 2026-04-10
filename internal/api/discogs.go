@@ -520,10 +520,12 @@ func (d *DiscogsClient) SearchArtist(ctx context.Context, artistName, albumName 
 }
 
 // hasReleaseWithAlbum checks if an artist has a release matching the given album name.
-// Returns true if we find a release where the title contains the album name.
+// Uses a release search with the artist to find the album - more efficient than fetching all releases.
 func (d *DiscogsClient) hasReleaseWithAlbum(ctx context.Context, artistID int, albumNorm string) bool {
-	// Fetch more releases to increase chances of finding the album (pagination may be needed)
-	reqURL := fmt.Sprintf("https://api.discogs.com/artists/%d/releases?per_page=50", artistID)
+	// First try the direct release search (more efficient)
+	// Use artist ID as filter to confirm this artist has the album
+	reqURL := fmt.Sprintf("https://api.discogs.com/database/search?artist=%d&q=%s&type=release&per_page=5",
+		artistID, url.QueryEscape(albumNorm))
 	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
 	if err != nil {
 		return false
@@ -532,6 +534,33 @@ func (d *DiscogsClient) hasReleaseWithAlbum(ctx context.Context, artistID int, a
 	d.setAuth(req)
 
 	resp, err := d.httpClient.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		var result struct {
+			Results []struct {
+				Title string `json:"title"`
+			} `json:"results"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&result); err == nil && len(result.Results) > 0 {
+			return true
+		}
+	}
+
+	// Fallback: check artist's releases if release search didn't work
+	// Only fetch first 50 releases - most artists have their main albums in first page
+	reqURL = fmt.Sprintf("https://api.discogs.com/artists/%d/releases?per_page=50", artistID)
+	req, err = http.NewRequestWithContext(ctx, "GET", reqURL, nil)
+	if err != nil {
+		return false
+	}
+	req.Header.Set("User-Agent", "rptui/1.0")
+	d.setAuth(req)
+
+	resp, err = d.httpClient.Do(req)
 	if err != nil {
 		return false
 	}
