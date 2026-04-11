@@ -21,9 +21,9 @@ While Radio Paradise offers the absolute best internet radio stations, human-cur
 
 ## Features
 
-- **All RP Stations/Qualities**: Play any RadioParadise channel (Main Mix, Mellow Mix, RockIt!, The Globe, Beyond..., Serenity, KFAT) at your choice of bitrate (64k/128k/320k/FLAC).
+- **All RP Stations / Qualities**: Play any RadioParadise channel (Main Mix, Mellow Mix, RockIt!, The Globe, Beyond..., Serenity, KFAT) at your choice of bitrate (64k 128k 320k FLAC).
 - **No Stream Buffering**: Uses the same full audio file-based playback as the official clients.
-- **Skip/Previous/Seek/Restart Song**: Same functionality as provided by local music players.
+- **Skip / Previous / Seek / Restart Song**: Same functionality as provided by local music players.
 - **Favorites**: Mark songs as favorites > saved to cache for later playback. Auto-queues favorites for playback when skipped ahead of livestream.  Random play favorites in jukebox mode.  Search favorites with `/`, play immediately or enqueue.
 - **Blocklist**: Add songs to blocklist.  Auto-skips blocklisted songs.
 - **Lyrics**: Fetch lyrics from [LRCLib](https://lrclib.net/) — plain and synced (when available).
@@ -33,25 +33,25 @@ While Radio Paradise offers the absolute best internet radio stations, human-cur
 - **Album Art**: Smart terminal support via [go-termimg](https://github.com/blacktop/go-termimg) (Kitty, iTerm2, Sixel, Unicode fallback).  Terminals with Kitty image protocol support recommended (Kitty, Ghostty, Konsole, WezTerm, and others).
 - **Visualizations**: 9 real-time audio visualizations (bars, braille, braille bars, wave, rain, stars, binary, segmented, classic peak).  Full terminal window toggle, true fullscreen when terminal maximized.
 - **Scrobbling**: [Last.fm](https://www.last.fm/) and [ListenBrainz](https://listenbrainz.org/) support.
-- **Themes**: Automatic current Omarchy theme detection live-reloads, 6 built-in themes, and custom colors.toml support.  Smart parsing of Omarchy themes for optimum color choices (tested on 70 themes).
+- **Themes**: Automatic current Omarchy theme detection with live-reloads, 6 built-in themes, and custom colors.toml support.  Smart parsing of Omarchy themes for optimum color choices (tested on 70 themes).
 - **Jukebox Mode**: Random play all favorites, optional re-shuffle and repeat all for endless playback.  Works offline.
 - **Offline Mode**: Cache any station for any duration.  Playback anytime, even while offline.  Album art included.
 - **Network Status Handling**: Smart prompts offer to change modes when network change detected, so that music keeps playing. 
 - **Desktop Integration**: MPRIS metadata, media key support, desktop notifications with optional album art, save album art to file for desktop widget use.
 - **Four Smart Layouts**: `large` (default, full dashboard with multiple bottom views available), `medium`, `compact`, and `narrow` (perfect vertical sidebar).
 - **Keyboard Navigation**: Hotkeys and RP stations shown in footer. Change stations with a single keypress.
-- **Sleep Timer/Alarm**: Fall asleep or wake up to the sounds of RP.
+- **Sleep Timer / Alarm**: Fall asleep or wake up to the sounds of RP.
 
 ## RP Account Support
 - **Ratings**: Displays all your user ratings.  Submit ratings (1-10), just as in the official clients.
 - **Comments**: Show song comments.  Loads 20 comments at a time with pagination.
-- **My Paradise**: Appears as additional station.  Stream all songs above rating threshold (set in RP account, default 7+) without need to download.
+- **My Paradise**: Appears as an additional station.  Stream all songs above rating threshold (set in RP account, default 7+) without need to download.
 - **Auto-Download Favorites**: Configurable setting (default = false).  Grabs all songs with user rating above threshold when they appear on the RP playlist.
 - **Auto-Add to Blocklist**: Configurable setting (default = false).  Auto-skip all songs with user rating below configurable threshhold (default <4).
 
 ## Screenshots
 
-**Visualizer**
+**Full-Window Visualizer**
 ![Visualizer](assets/rptui-visualizer-fullscreen.png)
 
 rptui offers four unique layouts and multiple views (playlist, lyrics, synced lyrics, artist info, artist image gallery, song comments, visualizer, and full-window visualizer).
@@ -86,7 +86,7 @@ go build -o rptui ./cmd/rptui
 
 Both go install and go build require a last.fm API account for scrobbling, see [DOCUMENTATION.md](DOCUMENTATION.md)
 
-A pre-built binary for Linux/x86 with last.fm support baked-in is downloadable from releases.  Only a last.fm user account is required.  See DOCUMENTATION.md/Scrobbling for details.
+A pre-built binary for Linux/x86 with last.fm support baked-in is downloadable from releases.  Only a last.fm user account is required.  See DOCUMENTATION.md / Scrobbling for details.
 
 ## Attribution
 
