@@ -8,9 +8,6 @@ rptui-pre-image-render-change
 # Logs
 *.log
 
-# Screenshots
-*.png
-
 # Test files
 test_*.go
 
