@@ -142,7 +142,7 @@ The config file is located at `~/.config/rptui/config.toml`. It is created autom
 |---------|------|-------------|
 | `jukebox.min_faves` | int | Minimum favorites required |
 | `jukebox.repeat` | bool | Repeat after playing all favorites |
-| `jukebox.crossfade_duration` | float | Crossfade duration in seconds (0 to disable) |
+| `jukebox.crossfade_duration` | float | (Pseudo) crossfade duration in seconds (0 to disable) |
 
 ## Themes
 
@@ -207,7 +207,7 @@ color15 = "#a6adc8"    # bright white
 | `Space` | Play/Pause |
 | `s` | Stop playback |
 | `n` | Skip to next song |
-| `p` | Previous song (or restart if at beginning) |
+| `p` | Previous song (or restart if current song is first in playlist) |
 | `r` | Restart current song |
 | `←` | Seek backward 10 seconds |
 | `→` | Seek forward 10 seconds |
@@ -305,27 +305,28 @@ windowrule = match:class rptui.large, size 1060 850, float on, center on
 
 Community rating average / User rating when available
 
-**Key icon is only displayed when RP account configured and successfully authorized**
+**Key icon is only displayed when RP account configured and successfully authorized.**
 
-When no user rating set, displays "--"
+When no user is rating set, displays "--"
 
 `󰒮 5  󰒭 3  ⭐ 12/2 ✅ <12>`
 
 5: Songs in playlist before current (available uses of "play previous").
 
 3: Songs in playlist after current (available uses of "play next").
-(Useful for alternate layouts where playlist is not visible).
+
+Useful for alternate layouts where playlist is not visible.
 
 12: Total number of favorites.
 
 2: Minimum number of favorites required to auto-queue favorites when needed and disable skip warning.
 
-<12>: Number of favorites remaining to auto-queue (no repeats).  When all used, will re-shuffle and reset to total favorites.
+<12>: Number of favorites remaining to auto-queue (no repeats).  When all are used (value = 0), favorites will be re-shuffled and re-enabled.
 
 
 `[fm], [lb], or [fm][lb]`
 
-Only visible when scrobbling is enabled and successfully authorized.
+Only visible in the footer when scrobbling is enabled and successfully authorized.
 At song completion, will display in accent color for 5 seconds on success, flash 5 seconds on failure.  Check log on failure.
 When both configured, each updates independently.
 
@@ -335,7 +336,7 @@ To enable scrobbling, you will need to configure at least one service:
 
 **Last.fm**: Two options...
 1. Build from source or go install.
-Requires your own last.fm API account -- free, easy sign-up at [last.fm](https://www.last.fm/api/account/create)
+Requires your own last.fm API account -- free, easy sign-up at [last.fm](https://www.last.fm/api/account/create).
 Pass API key and shared secret as build flags.
 
 ```bash
@@ -343,7 +344,7 @@ go build -ldflags "-s -w -X rptui/internal/api.LastFMAPIKey=YOUR_KEY -X rptui/in
 ```
 2. Download binary with API key and shared secret built-in.
 
-For both methods (1) and (2): run `rptui --lastfm-auth`
+For both methods (1) and (2): run `rptui --lastfm-auth`.
 Will open default browser to last.fm login page to authorize app.
 Session key will be automatically added to rptui config file.
 Session key does not expire.

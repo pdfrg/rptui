@@ -22,25 +22,25 @@ While Radio Paradise offers the absolute best internet radio stations, human-cur
 ## Features
 
 - **All RP Stations/Qualities**: Play any RadioParadise channel (Main Mix, Mellow Mix, RockIt!, The Globe, Beyond..., Serenity, KFAT) at your choice of bitrate (64k/128k/320k/FLAC).
-- **No Stream Buffering**: Uses same full audio file based playback as the official clients.
+- **No Stream Buffering**: Uses the same full audio file-based playback as the official clients.
 - **Skip/Previous/Seek/Restart Song**: Same functionality as provided by local music players.
-- **Favorites**: Mark songs as favorites. Auto-queues favorites for playback when skipped ahead of livestream.  Random play favorites in jukebox mode.  Search favorites with `/`, play immediately or enqueue.
+- **Favorites**: Mark songs as favorites > saved to cache for later playback. Auto-queues favorites for playback when skipped ahead of livestream.  Random play favorites in jukebox mode.  Search favorites with `/`, play immediately or enqueue.
 - **Blocklist**: Add songs to blocklist.  Auto-skips blocklisted songs.
 - **Lyrics**: Fetch lyrics from [LRCLib](https://lrclib.net/) — plain and synced (when available).
 - **Artist Info**: Smart query for artist bios and album descriptions from [TheAudioDB](https://www.theaudiodb.com/), [Discogs](https://www.discogs.com/), and Wikipedia.
 - **Artist Images**: Smart query for artist thumbnails and image galleries from Discogs (requires user token) and TheAudioDB (no token required).
 - **Artist Discographies**: All official studio albums from [MusicBrainz](https://musicbrainz.org/)
-- **Album Art**: Smart terminal support via go-termimg (Kitty, iTerm2, Sixel, Unicode fallback).  Terminals with Kitty image protocol support recommended.
-- **Visualizations**: 9 real-time audio visualizations (bars, braille, wave, rain, classic, stars, etc.).  Full terminal window toggle, true fullscreen when terminal maximized.
+- **Album Art**: Smart terminal support via [go-termimg](https://github.com/blacktop/go-termimg) (Kitty, iTerm2, Sixel, Unicode fallback).  Terminals with Kitty image protocol support recommended (Kitty, Ghostty, Konsole, WezTerm, and others).
+- **Visualizations**: 9 real-time audio visualizations (bars, braille, braille bars, wave, rain, stars, binary, segmented, classic peak).  Full terminal window toggle, true fullscreen when terminal maximized.
 - **Scrobbling**: [Last.fm](https://www.last.fm/) and [ListenBrainz](https://listenbrainz.org/) support.
-- **Themes**: Automatic theme detection from Omarchy with live-reloads, 6 built-in themes, custom colors.toml support.  Smart parsing of Omarchy themes for optimum color choices (tested on 70 themes).
-- **Jukebox Mode**: Random play all favorites, option to re-shuffle and repeat all for endless playback.  Works offline.
-- **Offline Mode**: Cache and play any station from offline recordings.
+- **Themes**: Automatic current Omarchy theme detection live-reloads, 6 built-in themes, and custom colors.toml support.  Smart parsing of Omarchy themes for optimum color choices (tested on 70 themes).
+- **Jukebox Mode**: Random play all favorites, optional re-shuffle and repeat all for endless playback.  Works offline.
+- **Offline Mode**: Cache any station for any duration.  Playback anytime, even while offline.  Album art included.
 - **Network Status Handling**: Smart prompts offer to change modes when network change detected, so that music keeps playing. 
-- **Desktop Integration**: MPRIS metadata, media key support, desktop notifications.
-- **Four Smart Layouts**: `--layout large` (default, full dashboard with multiple bottom views available), `medium`, `compact`, and `narrow` (perfect vertical sidebar).
-- **Keyboard Navigation**: Hotkeys and RP stations shown in footer.
-- **Sleep Timer/Alarm**: Fall asleep or wake to the sounds of RP.  
+- **Desktop Integration**: MPRIS metadata, media key support, desktop notifications with optional album art, save album art to file for desktop widget use.
+- **Four Smart Layouts**: `large` (default, full dashboard with multiple bottom views available), `medium`, `compact`, and `narrow` (perfect vertical sidebar).
+- **Keyboard Navigation**: Hotkeys and RP stations shown in footer. Change stations with a single keypress.
+- **Sleep Timer/Alarm**: Fall asleep or wake up to the sounds of RP.
 
 ## RP Account Support
 - **Ratings**: Displays all your user ratings.  Submit ratings (1-10), just as in the official clients.
@@ -74,7 +74,6 @@ See [SCREENSHOTS.md](SCREENSHOTS.md) for the full gallery, including all built-i
 
 ```bash
 # Recommended: install via Go
-# Both go install and go build require last.fm API account for scrobbling, see DOCUMENTATION.md)
 go install github.com/pdfrg/rptui@latest
 ```
 ### Build from Source
@@ -85,7 +84,9 @@ cd rptui
 go build -o rptui ./cmd/rptui
 ```
 
-A pre-built binary for Linux/x86 with last.fm support baked-in is downloadable from releases.  Only a last.fm user account is required.  See DOCUMENTATION/Scrobbling for details.
+Both go install and go build require a last.fm API account for scrobbling, see [DOCUMENTATION.md](DOCUMENTATION.md)
+
+A pre-built binary for Linux/x86 with last.fm support baked-in is downloadable from releases.  Only a last.fm user account is required.  See DOCUMENTATION.md/Scrobbling for details.
 
 ## Attribution
 

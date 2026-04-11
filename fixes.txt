@@ -29,3 +29,6 @@ smart terminal size detection
 add a bunch of files to .gitignore
 	will these automatically be removed/not shown on github, even though they are there now?
 	
+change cli help to match DOCUMENTATION.md
+	just one change for --cache
+	
