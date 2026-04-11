@@ -146,10 +146,10 @@ The config file is located at `~/.config/rptui/config.toml`. It is created autom
 
 ## Themes
 
-Has 6 built in themes: basic, catppuccin-mocha, dark-red, gruvbox-dark, osaka-jade, synth.
+There are 6 built in themes: basic, catppuccin-mocha, dark-red, gruvbox-dark, osaka-jade, synth.
 View them all here: [SCREENSHOTS.md](SCREENSHOTS.md)
 
-Reads current Omarchy theme from at ~/.config/omarchy/current/theme/colors.toml
+Reads current Omarchy theme from `~/.config/omarchy/current/theme/colors.toml`
 
 Custom themes can be provided via a `colors.toml` file. To use a custom theme, add the path to your `config.toml`:
 
@@ -241,7 +241,7 @@ color15 = "#a6adc8"    # bright white
 | `m` | Open favorites modal |
 | `i` | Open artist gallery (when viewing artist with images) |
 
-### Comments (when in comments view)
+### Comments
 
 | Key | Action |
 |-----|--------|
@@ -278,14 +278,13 @@ On first run, a default configuration file is created.
 
 ## Hyprland (Omarchy) integration
 
-Add launchers for each layout
+**Add a Hyprland launcher for each layout.**
+Place in `~/.config/hypr/bindings.conf`.
+Customize command to point to the rptui binary on your system, or just 'rptui' if in PATH.
+Size is in the format (width height). Adjust to your preferences, though sizes below are recommeneded minimums.
+For large (default) and medium, more narrow will work, but some keybindings won't be shown in the footer.
 
 ```
-# place in ~/.config/hypr/bindings.conf
-# customize command to point to the rptui binary on your system, or just 'rptui' if in PATH
-# size is in the format (size width height), adjust to your preference, sizes below are recommeneded minimums
-# for large/default and medium, more narrow will work, but some keybindings won't be shown in footer
-
 bindd = SUPER SHIFT, R, rptui medium, exec, ghostty --class=rptui.medium --command="/path/to/rptui --layout medium"
 windowrule = match:class rptui.medium, size 1060 460, float on, center on
 
@@ -301,22 +300,29 @@ windowrule = match:class rptui.large, size 1060 850, float on, center on
 
 ## TUI Elements Explained
 
-6.2  │  🔑 --
+`6.2  │  🔑 --`
 
-Community rating average | User rating
-**Key icon only displayed when RP account configured and successfully authorized**
+Community rating average / User rating when available
+
+**Key icon is only displayed when RP account configured and successfully authorized**
+
 When no user rating set, displays "--"
 
-󰒮 5  󰒭 3  ⭐ 12/2 ✅ <12>
+`󰒮 5  󰒭 3  ⭐ 12/2 ✅ <12>`
 
-5: Songs in playlist before current (available uses of "play previous")
-3: Songs in playlist after current (available uses of "play next")
-Useful for alternate layouts where playlist is not visible
-12: Total number of favorites
-2: Minimum number of favorites to auto-queue favorites when needed and disable skip warning
-<12>: Number of favorites remaining to auto-queue (no repeats).  When all used, will re-shuffle and reset to total favorites
+5: Songs in playlist before current (available uses of "play previous").
 
-[fm], [lb], or [fm][lb]
+3: Songs in playlist after current (available uses of "play next").
+(Useful for alternate layouts where playlist is not visible).
+
+12: Total number of favorites.
+
+2: Minimum number of favorites to auto-queue favorites when needed and disable skip warning.
+
+<12>: Number of favorites remaining to auto-queue (no repeats).  When all used, will re-shuffle and reset to total favorites.
+
+
+`[fm], [lb], or [fm][lb]`
 
 Only visible when scrobbling is enabled and successfully authorized.
 At song completion, will display in accent color for 5 seconds on success, flash 5 seconds on failure.  Check log on failure.
@@ -324,11 +330,11 @@ When both configured, each updates independently.
 
 ## Scrobbling (Optional)
 
-To enable scrobbling, you'll need to configure at least one service:
+To enable scrobbling, you will need to configure at least one service:
 
 **Last.fm**: Two options...
 1. Build from source or go install.
-Requires your own last.fm developer account -- free, easy sign-up at [last.fm](https://www.last.fm/api/account/create)
+Requires your own last.fm API account -- free, easy sign-up at [last.fm](https://www.last.fm/api/account/create)
 Pass API key and shared secret as build flags.
 
 ```bash
