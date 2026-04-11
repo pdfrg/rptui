@@ -21,9 +21,13 @@ prepare to publish to github
 			special attention to build flags for last.fm support
 			consider providing binary download with last.fm support "compiled in"
 				for users who don't want to go through the hassle of getting their own last.fm dev account
-	take screenshots
+	take screenshots (in assets directory)
 		show layouts
 		show themes
 		illustrate features
 	what else?
 
+is it possible to detect DJ speaking at beginning or end of songs?
+	usually only one DJ -- William, very distinct voice
+	if so, give option to filter, auto-seek past those parts
+	

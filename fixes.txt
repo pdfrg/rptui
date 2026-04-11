@@ -11,17 +11,6 @@ sometimes on entry to visualizer, gets stuck at loading message
 		saved session as session-ses_294e-vis-debug.md
 			load on next attempt
 
-sleep timer/alarm
-	IMPLEMENTED
-	- "z" key opens sleep timer modal
-	- presets: 5/10/15/30/45/60 min
-	- connected line shows "• Sleep in Xm" appended
-	- countdown updates every minute
-	- timer fires: pause + 60s countdown to quit
-	- CLI: --sleep 20m, --sleep 1.5h
-	- CLI alarm: --alarm 7:20am, --alarm 19:20, etc
-	alarm blocks until time, shows spinner countdown
-
 smart terminal size detection
 	important for artist thumbs
 		if too short a window, image renders over footer, messing up display

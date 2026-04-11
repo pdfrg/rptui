@@ -24,7 +24,7 @@ OFFLINE CACHE:
                             DURATION: recording length (e.g., 2h, 3.5h)
                             STATION: station name or number (default: from config)
                             BITRATE: bitrate name or number (default: from config)
-                            Example: rptui --cache 2h "Rock Mix" FLAC
+                            Example: rptui --cache 2h Rock FLAC (station substrings accepted)
 
     --offline [CACHE_NAME]  Launch TUI in offline playback mode
                             If CACHE_NAME omitted, prompts for selection
@@ -34,6 +34,11 @@ OFFLINE CACHE:
 
     --delete-cache <NAME>   Delete a named offline cache (prompts for confirmation)
 
+SLEEP TIMER / ALARM:
+    --sleep <DURATION>       Start sleep timer (e.g., 20m, 1.5h)
+                            App pauses and quits after timer expires
+    --alarm <TIME>           Schedule alarm (e.g., 7:20am, 7:20 a.m., 19:20)
+                            App starts at specified time
 ACTIONS:
     --lastfm-auth           Run Last.fm OAuth authentication flow and save session key
     --rp-auth               Authenticate with Radio Paradise account
@@ -139,9 +144,14 @@ The config file is located at `~/.config/rptui/config.toml`. It is created autom
 | `jukebox.repeat` | bool | Repeat after playing all favorites |
 | `jukebox.crossfade_duration` | float | Crossfade duration in seconds (0 to disable) |
 
-## Theme Files
+## Themes
 
-Custom themes can be provided via a `colors.toml` file. To use a custom theme, add to your `config.toml`:
+Has 6 built in themes: basic, catppuccin-mocha, dark-red, gruvbox-dark, osaka-jade, synth.
+View them all here: [SCREENSHOTS.md](SCREENSHOTS.md)
+
+Reads current Omarchy theme from at ~/.config/omarchy/current/theme/colors.toml
+
+Custom themes can be provided via a `colors.toml` file. To use a custom theme, add the path to your `config.toml`:
 
 ```toml
 colors_file = "/path/to/your/colors.toml"
@@ -264,16 +274,7 @@ The app follows the XDG Base Directory Specification:
 - **Offline cache**: `$XDG_CACHE_HOME/rptui/offline/`
 - **Log**: `$XDG_STATE_HOME/rptui/rptui.log`
 
-## External Dependencies
-
-### Required
-- **mpv** - Audio playback
-
-### Recommended
-- **mpv-mpris** - MPRIS support for media keys
-- **notify-send** - Desktop notifications
-- **PipeWire** (with pipewire-alsa) - Audio visualization
-- **pw-record** - Real-time audio capture for visualization
+On first run, a default configuration file is created.
 
 ## Hyprland (Omarchy) integration
 
@@ -283,9 +284,10 @@ Add launchers for each layout
 # place in ~/.config/hypr/bindings.conf
 # customize command to point to the rptui binary on your system, or just 'rptui' if in PATH
 # size is in the format (size width height), adjust to your preference, sizes below are recommeneded minimums
+# for large/default and medium, more narrow will work, but some keybindings won't be shown in footer
 
 bindd = SUPER SHIFT, R, rptui medium, exec, ghostty --class=rptui.medium --command="/path/to/rptui --layout medium"
-windowrule = match:class rptui.medium, size 975 460, float on, center on
+windowrule = match:class rptui.medium, size 1060 460, float on, center on
 
 bindd = SUPER ALT SHIFT, R, rptui compact, exec, ghostty --class=rptui.compact --command="/path/to/rptui --layout compact"
 windowrule = match:class rptui.compact, size 370 400, float on, center on
@@ -294,10 +296,10 @@ bindd = SUPER CTRL SHIFT, R, rptui narrow, exec, ghostty --class=rptui.narrow --
 windowrule = match:class rptui.narrow, size 370 750, float on, center on
 
 bindd = SUPER, R, rptui, exec, ghostty --class=rptui.large --command="/path/to/rptui --layout large"
-windowrule = match:class rptui.large, size 975 850, float on, center on
+windowrule = match:class rptui.large, size 1060 850, float on, center on
 ```
 
-## UI Explained
+## TUI Elements Explained
 
 6.2  │  🔑 --
 
@@ -314,9 +316,34 @@ Useful for alternate layouts where playlist is not visible
 2: Minimum number of favorites to auto-queue favorites when needed and disable skip warning
 <12>: Number of favorites remaining to auto-queue (no repeats).  When all used, will re-shuffle and reset to total favorites
 
-[fm], [lb], or [fm+lb]
+[fm], [lb], or [fm][lb]
 
 Only visible when scrobbling is enabled and successfully authorized.
 At song completion, will display in accent color for 5 seconds on success, flash 5 seconds on failure.  Check log on failure.
+When both configured, each updates independently.
 
+## Scrobbling (Optional)
 
+To enable scrobbling, you'll need to configure at least one service:
+
+**Last.fm**: Two options...
+1. Build from source or go install.
+Requires your own last.fm developer account -- free, easy sign-up at [last.fm](https://www.last.fm/api/account/create)
+Pass API key and shared secret as build flags.
+
+```bash
+go build -ldflags "-s -w -X rptui/internal/api.LastFMAPIKey=YOUR_KEY -X rptui/internal/api.LastFMSharedSecret=YOUR_SECRET" -o rptui ./cmd/rptui
+```
+2. Download binary with API key and shared secret built-in.
+
+For both methods (1) and (2): run rptui --lastfm-auth
+Will open default browser to last.fm login page to authorize app.
+Session key will be automatically added to rptui config file.
+Session key does not expire.
+
+**ListenBrainz**: Get a free token from https://listenbrainz.org/settings/
+
+Set via config file:
+```toml
+listenbrainz_token = "your-token"
+```
