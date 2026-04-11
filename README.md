@@ -8,7 +8,7 @@ A fast, beautiful Go + Bubble Tea TUI designed for terminal lovers who want more
 
 
 
-## Why rptui?
+### Why rptui?
 
 While Radio Paradise offers the absolute best internet radio stations, human-curated and completely commercial-free, the official clients are heavy and limited, while generic internet radio players lack depth and suffer from buffering.  rptui delivers full audio file playback, beautiful visuals, real offline capability, tight Radio Paradise integration, and extensive customization in one fast, light package.
 
