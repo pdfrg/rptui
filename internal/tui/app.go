@@ -121,6 +121,56 @@ var layoutNames = map[int]string{
 	LayoutNarrow:  "narrow",
 }
 
+// Layout requirements (width x height in terminal cells)
+type layoutRequirements struct {
+	minCols int
+	minRows int
+	recCols int
+}
+
+var layoutReqs = map[string]layoutRequirements{
+	"large":   {minCols: 75, minRows: 32, recCols: 113},
+	"medium":  {minCols: 75, minRows: 21, recCols: 113},
+	"compact": {minCols: 36, minRows: 18, recCols: 36},
+	"narrow":  {minCols: 36, minRows: 35, recCols: 36},
+}
+
+// checkTerminalSize checks if terminal is large enough for the given layout
+func checkTerminalSize(width, height int, layout string) (fits bool, suboptimal bool, warning string, options []string) {
+	req, ok := layoutReqs[layout]
+	if !ok {
+		return true, false, "", nil
+	}
+
+	// Check minimum requirements
+	if width < req.minCols || height < req.minRows {
+		return false, false, "terminal too narrow or too short", nil
+	}
+
+	// Check suboptimal zone (large/medium only)
+	if (layout == "large" || layout == "medium") && width >= req.minCols && width < req.recCols {
+		return false, true, "Some hotkeys and scrobble indicators (if configured) may not be visible at this terminal width.", nil
+	}
+
+	// Fits well
+	return true, false, "", nil
+}
+
+// getFittingLayouts returns all layouts that fit the given terminal size
+func getFittingLayouts(width, height int) []string {
+	var fitting []string
+	for layout, req := range layoutReqs {
+		if width >= req.minCols && height >= req.minRows {
+			fitting = append(fitting, layout)
+		}
+	}
+	// Always at least compact should fit if terminal is usable
+	if len(fitting) == 0 {
+		fitting = append(fitting, "compact")
+	}
+	return fitting
+}
+
 // Connection retry constants
 const (
 	connStateConnected    = "connected"
@@ -316,7 +366,10 @@ type Model struct {
 	offlineModeStartedConnected bool // true if --offline had connection on first check
 
 	// Layout mode
-	layoutMode int // LayoutLarge, LayoutMedium, LayoutCompact, LayoutNarrow
+	layoutMode         int    // LayoutLarge, LayoutMedium, LayoutCompact, LayoutNarrow
+	initialLayout      string // user's original choice (config + CLI) for prompt
+	layoutCheckDone    bool   // ensures we only prompt once for terminal size
+	layoutPromptActive bool   // true when waiting for user to choose layout
 
 	// Sleep timer
 	sleepTimerActive    bool          // whether sleep timer is active
@@ -549,6 +602,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 		}
 	}
 	m.layoutMode = layoutMode
+	m.initialLayout = layoutNames[layoutMode] // store user's original choice for prompt
 
 	// Narrow mode forces album art on internally (without it, there'd just be empty space at the top)
 	if layoutMode == LayoutNarrow {
@@ -1305,6 +1359,57 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handleKeyPress handles keyboard input
 func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	// Handle layout selection prompt (when showing terminal size warning)
+	if m.layoutPromptActive && m.width > 0 && m.height > 0 {
+		key := strings.ToLower(msg.String())
+		fittingLayouts := getFittingLayouts(m.width, m.height)
+
+		// Check for quit
+		if key == "q" || key == "ctrl+c" {
+			m.cacheManager.WaitForDownloads(60 * time.Second)
+			if m.mpvBackend != nil {
+				m.mpvBackend.Stop()
+			}
+			if m.themeWatcher != nil {
+				m.themeWatcher.Close()
+			}
+			if m.vis != nil {
+				m.vis.Close()
+			}
+			return m, tea.Quit
+		}
+
+		// Check if key matches initial layout choice
+		if strings.ToLower(m.initialLayout[:1]) == key {
+			// User chose their initial layout - clear prompt flag, let normal init proceed
+			m.layoutPromptActive = false
+			return m, nil
+		}
+
+		// Check if key matches any fitting layout
+		for _, l := range fittingLayouts {
+			if strings.ToLower(l[:1]) == key && l != m.initialLayout {
+				// Switch to that layout
+				switch l {
+				case "large":
+					m.layoutMode = LayoutLarge
+				case "medium":
+					m.layoutMode = LayoutMedium
+				case "compact":
+					m.layoutMode = LayoutCompact
+				case "narrow":
+					m.layoutMode = LayoutNarrow
+				}
+				// Clear prompt flag, let normal init proceed
+				m.layoutPromptActive = false
+				return m, nil
+			}
+		}
+
+		// Invalid key - ignore but don't return quit
+		return m, nil
+	}
+
 	switch msg.String() {
 	case "q", "ctrl+c":
 		// Wait for in-progress favorite downloads
@@ -1909,7 +2014,9 @@ func (m Model) handleOfflineStart() (tea.Model, tea.Cmd) {
 	m.playlistStartIdx = 0
 	m.connectedAt = time.Now()
 	m.isPlaying = true
-	m.initialized = true
+	if !m.layoutPromptActive {
+		m.initialized = true
+	}
 
 	logger.Printf("Offline mode: %d songs loaded from cache '%s'", len(m.offlineSongs), m.offlineCache)
 
@@ -1979,7 +2086,9 @@ func (m Model) switchToOfflineMode(cacheName string) (tea.Model, tea.Cmd) {
 	m.playlistStartIdx = 0
 	m.connectedAt = time.Now()
 	m.isPlaying = true
-	m.initialized = true
+	if !m.layoutPromptActive {
+		m.initialized = true
+	}
 
 	logger.Printf("Switched to offline mode: cache '%s' with %d songs", cacheName, len(songs))
 
@@ -2222,7 +2331,9 @@ func (m Model) startJukeboxPlayback() (tea.Model, tea.Cmd) {
 	m.currentSongIndex = 0
 	m.playlistStartIdx = 0
 	m.isPlaying = true
-	m.initialized = true
+	if !m.layoutPromptActive {
+		m.initialized = true
+	}
 	m.jukeboxPlayed = 1
 
 	logger.Printf("Jukebox: started batch of %d songs, %d remaining", batchSize, len(m.jukeboxQueue))
@@ -2582,7 +2693,9 @@ func (m Model) handleBlockFetched(msg blockFetchedMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.isPlaying = true
-			m.initialized = true
+			if !m.layoutPromptActive {
+				m.initialized = true
+			}
 			m.connectedAt = time.Now()
 		} else {
 			// MPV still running - append to playlist
@@ -2641,7 +2754,9 @@ func (m Model) handleBlockFetched(msg blockFetchedMsg) (tea.Model, tea.Cmd) {
 	m.isPlaying = true
 	m.pollingNextBlock = false
 	m.connectedAt = time.Now()
-	m.initialized = true
+	if !m.layoutPromptActive {
+		m.initialized = true
+	}
 
 	return m, m.songChangedCmds()
 }
@@ -2673,7 +2788,9 @@ func (m Model) handleChan99Fetched(msg chan99FetchedMsg) (tea.Model, tea.Cmd) {
 			return m, setStatus(&m, fmt.Sprintf("Failed to start playback: %v", err), true)
 		}
 		m.isPlaying = true
-		m.initialized = true
+		if !m.layoutPromptActive {
+			m.initialized = true
+		}
 		m.connectedAt = time.Now()
 
 		m.updatePlaylist()
@@ -4335,6 +4452,54 @@ func (m Model) View() tea.View {
 	}
 
 	if !m.initialized {
+		// Check terminal size against initial layout (only once)
+		if !m.layoutCheckDone && m.width > 0 && m.height > 0 {
+			fits, suboptimal, warning, _ := checkTerminalSize(m.width, m.height, m.initialLayout)
+			if !fits || suboptimal {
+				m.layoutCheckDone = true
+				m.layoutPromptActive = true // waiting for user to choose layout
+				fittingLayouts := getFittingLayouts(m.width, m.height)
+
+				// Build prompt with initial choice + warning + fitting options + quit
+				var prompt string
+				if !fits {
+					prompt = fmt.Sprintf("Terminal size: %dx%d (requires %dx%d for %s)\n\n",
+						m.height, m.width,
+						layoutReqs[m.initialLayout].minRows, layoutReqs[m.initialLayout].minCols,
+						m.initialLayout)
+				} else {
+					prompt = fmt.Sprintf("Terminal size: %dx%d (%s recommended %dx%d)\n\n",
+						m.height, m.width, m.initialLayout,
+						layoutReqs[m.initialLayout].minRows, layoutReqs[m.initialLayout].recCols)
+					prompt += warning + "\n\n"
+				}
+
+				// Build option string: initial choice (with warning) + fitting layouts + quit
+				opts := make([]string, 0, len(fittingLayouts)+2)
+
+				// Add initial choice with warning prefix
+				initialWarn := ""
+				if !fits {
+					initialWarn = " (terminal too narrow or too short)"
+				} else if suboptimal {
+					initialWarn = " (may have display issues)"
+				}
+				opts = append(opts, strings.ToUpper(m.initialLayout[:1])+"="+m.initialLayout+initialWarn)
+
+				// Add other fitting layouts
+				for _, l := range fittingLayouts {
+					if l != m.initialLayout {
+						opts = append(opts, strings.ToUpper(l[:1])+"="+l)
+					}
+				}
+				opts = append(opts, "Q=quit")
+
+				prompt += strings.Join(opts, ", ")
+				return m.altView(prompt)
+			}
+			// Fits well, mark as done so we don't check again
+			m.layoutCheckDone = true
+		}
 		return m.altView("Loading...\n\nPress q to quit")
 	}
 

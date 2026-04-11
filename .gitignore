@@ -16,3 +16,11 @@ test_*.go
 
 # Secrets
 discogs.txt
+
+# Notes
+*.txt
+
+# agent/llm files
+AGENTS.md
+grok-readme.md
+session-*.md
