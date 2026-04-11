@@ -367,7 +367,7 @@ listenbrainz_token = "your-token"
 
 Discogs consistently provides more artist images than TheAudioDB.
 However, to download Discogs images, a Discogs "personal access token" is required.
-You may sign up for free at [Discogs](https://www.discogs.com/settings/developers)
+You may sign up for free at [Discogs](https://www.discogs.com/settings/developers).
 Without a Discogs token, the artist image gallery feature will work, but will be limited to 4 images (max returned by TheAudioDB).
 
 
