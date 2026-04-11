@@ -6,7 +6,9 @@
 
 A fast, beautiful Go + Bubble Tea TUI designed for terminal lovers who want more from Radio Paradise than the official web or Android clients.
 
-<br><br><br>
+See upcoming songs, download with a hotkey, rewind, seek, whatever you want.
+
+<br><br><br><br>
 
 ### Why rptui?
 
