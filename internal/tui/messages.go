@@ -121,6 +121,26 @@ type favoriteDownloadMsg struct {
 	success bool
 }
 
+// sleepTimerTickMsg is sent every minute to update sleep timer display
+type sleepTimerTickMsg time.Time
+
+// quitTickMsg is sent every second during quitting countdown
+type quitTickMsg time.Time
+
+// tickSleepTimerCmd returns a command that sends sleepTimerTickMsg every minute
+func tickSleepTimerCmd() tea.Cmd {
+	return tea.Tick(time.Minute, func(t time.Time) tea.Msg {
+		return sleepTimerTickMsg(t)
+	})
+}
+
+// tickQuitCmd returns a command that sends quitTickMsg every second during quitting countdown
+func tickQuitCmd() tea.Cmd {
+	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
+		return quitTickMsg(t)
+	})
+}
+
 // jukeboxStartMsg is sent to trigger jukebox playback initialization
 type jukeboxStartMsg struct{}
 

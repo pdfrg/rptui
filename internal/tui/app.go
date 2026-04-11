@@ -97,6 +97,7 @@ const (
 	ModalStationWarning
 	ModalRating
 	ModalNetworkTransition
+	ModalSleepTimer
 )
 
 // Network transition variants
@@ -238,6 +239,7 @@ type Model struct {
 	stationWarningModal    *modals.StationWarning
 	ratingModal            *modals.Rating
 	networkTransitionModal *modals.NetworkTransition
+	sleepTimerModal        *modals.SleepTimer
 
 	// UI dimensions
 	width  int
@@ -315,10 +317,22 @@ type Model struct {
 
 	// Layout mode
 	layoutMode int // LayoutLarge, LayoutMedium, LayoutCompact, LayoutNarrow
+
+	// Sleep timer
+	sleepTimerActive    bool          // whether sleep timer is active
+	sleepTimerDuration  time.Duration // how long until sleep
+	sleepTimerExpiresAt time.Time     // when the timer expires
+	sleepTimerTicker    *time.Ticker  // ticker for countdown updates
+	sleepTimerQuitChan  chan struct{} // channel to stop timer
+
+	// Quitting state (after sleep timer fires)
+	quittingActive    bool         // whether we're in the 60s countdown to quit
+	quittingStartedAt time.Time    // when the 60s countdown started
+	quittingTicker    *time.Ticker // ticker for countdown updates
 }
 
 // NewModel creates a new TUI model
-func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, layoutOverride string) *Model {
+func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, layoutOverride string, sleepTimerDuration time.Duration) *Model {
 	styles := config.NewThemeStyles(theme)
 
 	themeWatcher := config.NewThemeWatcher(cfg.ColorsFile)
@@ -541,6 +555,16 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 		m.config.ShowAlbumArt = true
 	}
 
+	// Initialize sleep timer from CLI flag
+	if sleepTimerDuration > 0 {
+		m.sleepTimerActive = true
+		m.sleepTimerDuration = sleepTimerDuration
+		m.sleepTimerExpiresAt = time.Now().Add(sleepTimerDuration)
+		m.sleepTimerQuitChan = make(chan struct{})
+		m.sleepTimerTicker = time.NewTicker(time.Minute)
+		logger.Printf("Sleep timer started: %v", sleepTimerDuration)
+	}
+
 	return m
 }
 
@@ -727,6 +751,11 @@ func (m Model) Init() tea.Cmd {
 		cmds = append(cmds, m.fetchBlockCmd)
 	}
 
+	// Start sleep timer ticker if active
+	if m.sleepTimerActive {
+		cmds = append(cmds, tickSleepTimerCmd())
+	}
+
 	// Station validation runs in background (non-blocking, 3s timeout)
 	// Skip in offline mode - no network calls needed
 	if !m.offlineMode {
@@ -853,6 +882,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case ModalRating:
 				if m.ratingModal != nil {
 					cmd = m.ratingModal.Update(msg)
+				}
+			case ModalSleepTimer:
+				if m.sleepTimerModal != nil {
+					cmd = m.sleepTimerModal.Update(msg)
 				}
 			}
 			return handle(m, cmd)
@@ -993,6 +1026,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return handle(m, renderAlbumArtAfterDelay())
 
+	case modals.SleepTimerMsg:
+		m.activeModal = ModalNone
+		if msg.Closed {
+			return handle(m, renderAlbumArtAfterDelay())
+		}
+		if msg.Cancelled {
+			m.stopSleepTimer()
+			return handle(m, setStatus(&m, "Sleep timer cancelled", false))
+		}
+		if msg.Duration > 0 {
+			m.startSleepTimer(msg.Duration)
+			mins := int(msg.Duration.Minutes())
+			// Start the tick
+			return handle(m, tea.Batch(setStatus(&m, fmt.Sprintf("Sleep timer set for %d min", mins), false), tickSleepTimerCmd()))
+		}
+		return handle(m, renderAlbumArtAfterDelay())
+
 	case modals.StationWarningMsg:
 		m.activeModal = ModalNone
 		return handle(m, renderAlbumArtAfterDelay())
@@ -1092,6 +1142,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case pollTickMsg:
 		return handle(m.handlePollTick(msg))
+
+	case sleepTimerTickMsg:
+		return handle(m.handleSleepTimerTick(msg))
+
+	case quitTickMsg:
+		return handle(m.handleQuitTick(msg))
 
 	case connRetryTickMsg:
 		return handle(m.handleConnRetryTick(msg))
@@ -1661,6 +1717,22 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.activeModal = ModalOptions
 		return m, clearKittyImagesCmd()
 
+	case "z":
+		// Sleep timer modal — only in large and medium layouts
+		if m.layoutMode == LayoutCompact || m.layoutMode == LayoutNarrow {
+			return m, setStatus(&m, "Sleep timer unavailable in this layout", false)
+		}
+		if m.visFullscreen {
+			return m, nil
+		}
+		var remaining time.Duration
+		if m.sleepTimerActive {
+			remaining = m.sleepTimerExpiresAt.Sub(time.Now())
+		}
+		m.sleepTimerModal = modals.NewSleepTimer(m.styles, m.sleepTimerActive, remaining)
+		m.activeModal = ModalSleepTimer
+		return m, clearKittyImagesCmd()
+
 	case "m":
 		// Manage favorites modal — only in large and medium layouts
 		if m.layoutMode == LayoutCompact || m.layoutMode == LayoutNarrow {
@@ -2158,6 +2230,36 @@ func (m Model) startJukeboxPlayback() (tea.Model, tea.Cmd) {
 	return m, tea.Batch(clearKittyImagesCmd(), setStatus(&m, fmt.Sprintf("🎶 Jukebox: %d songs", m.jukeboxTotal), false), m.songChangedCmds())
 }
 
+// startSleepTimer starts a sleep timer with the given duration
+func (m *Model) startSleepTimer(duration time.Duration) {
+	m.stopSleepTimer()
+
+	m.sleepTimerActive = true
+	m.sleepTimerDuration = duration
+	m.sleepTimerExpiresAt = time.Now().Add(duration)
+	m.sleepTimerQuitChan = make(chan struct{})
+	m.sleepTimerTicker = time.NewTicker(time.Minute)
+
+	logger.Printf("Sleep timer started: %v", duration)
+}
+
+// stopSleepTimer stops the active sleep timer
+func (m *Model) stopSleepTimer() {
+	if m.sleepTimerTicker != nil {
+		m.sleepTimerTicker.Stop()
+		m.sleepTimerTicker = nil
+	}
+	if m.sleepTimerQuitChan != nil {
+		close(m.sleepTimerQuitChan)
+		m.sleepTimerQuitChan = nil
+	}
+	m.sleepTimerActive = false
+	m.sleepTimerDuration = 0
+	m.sleepTimerExpiresAt = time.Time{}
+
+	logger.Println("Sleep timer stopped")
+}
+
 // refillJukeboxBatch appends the next batch of songs to the MPV playlist
 // and prunes old songs from the front to keep the playlist manageable
 func (m *Model) refillJukeboxBatch() {
@@ -2596,6 +2698,68 @@ func (m Model) handleChan99Fetched(msg chan99FetchedMsg) (tea.Model, tea.Cmd) {
 	m.updatePlaylist()
 
 	return m, setStatus(&m, "My Paradise", false)
+}
+
+// handleQuitTick handles the 60-second countdown to quit
+func (m *Model) handleQuitTick(msg quitTickMsg) (tea.Model, tea.Cmd) {
+	if !m.quittingActive {
+		return m, nil
+	}
+
+	now := time.Now()
+	elapsed := now.Sub(m.quittingStartedAt)
+	remaining := 60 - int(elapsed.Seconds())
+
+	if remaining <= 0 {
+		if m.mpvBackend != nil {
+			m.mpvBackend.Stop()
+		}
+		logger.Println("Quitting app after sleep timer")
+		return m, tea.Quit
+	}
+
+	m.statusMsg = fmt.Sprintf("Sleep timer expired - quitting in %ds...", remaining)
+	m.statusIsError = false
+	m.statusSeq++
+
+	return m, tickQuitCmd()
+}
+
+// handleSleepTimerTick handles sleep timer countdown updates (every minute)
+func (m *Model) handleSleepTimerTick(msg sleepTimerTickMsg) (tea.Model, tea.Cmd) {
+	if !m.sleepTimerActive {
+		return m, nil
+	}
+
+	now := time.Now()
+
+	// Check if timer has expired
+	if now.After(m.sleepTimerExpiresAt) || now.Equal(m.sleepTimerExpiresAt) {
+		m.sleepTimerActive = false
+		if m.sleepTimerTicker != nil {
+			m.sleepTimerTicker.Stop()
+			m.sleepTimerTicker = nil
+		}
+
+		// Pause playback
+		if err := m.mpvBackend.Pause(true); err != nil {
+			logger.Printf("Error pausing for sleep timer: %v", err)
+		}
+		m.isPaused = true
+		m.isPlaying = false
+
+		// Start 60 second countdown to quit
+		m.quittingActive = true
+		m.quittingStartedAt = now
+		m.quittingTicker = time.NewTicker(time.Second)
+
+		logger.Println("Sleep timer expired, starting 60s countdown to quit")
+		// Start the quit tick immediately
+		return m, tea.Batch(setStatus(m, "Sleep timer expired - quitting in 60s...", false), tickQuitCmd())
+	}
+
+	// Re-arm the ticker
+	return m, tickSleepTimerCmd()
 }
 
 // handleProgressTick handles progress updates (every 1 second)
@@ -4203,6 +4367,10 @@ func (m Model) View() tea.View {
 			if m.networkTransitionModal != nil {
 				modalView = m.networkTransitionModal.View()
 			}
+		case ModalSleepTimer:
+			if m.sleepTimerModal != nil {
+				modalView = m.sleepTimerModal.View()
+			}
 		}
 
 		if modalView != "" {
@@ -4284,6 +4452,18 @@ func (m Model) View() tea.View {
 
 	// Determine RP favorites indicator (needed for NowPlaying view)
 	rpFavIndicator := m.getRPFavoriteIndicator()
+
+	// Update sleep timer display on widget
+	if m.sleepTimerActive {
+		remaining := m.sleepTimerExpiresAt.Sub(time.Now())
+		mins := int(remaining.Minutes()) + 1
+		if mins < 0 {
+			mins = 0
+		}
+		m.nowPlayingWidget.SetSleepTimer(true, mins)
+	} else {
+		m.nowPlayingWidget.SetSleepTimer(false, 0)
+	}
 
 	// First render NowPlaying to get actual content width
 	nowPlayingView := m.nowPlayingWidget.View(

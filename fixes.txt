@@ -11,9 +11,29 @@ sometimes on entry to visualizer, gets stuck at loading message
 		saved session as session-ses_294e-vis-debug.md
 			load on next attempt
 
-better offline/online management
-	when connected/online, then detect offline AND offline cache available, offer to switch to offline mode
-	when offline and detect online, show status and/or offer to go to normal mode
-		unless offline mode specifically started when online
-	offer "O" toggle between offline and normal, same way we do with "J" for jukebox mode
+sleep timer/alarm
+	IMPLEMENTED
+	- "z" key opens sleep timer modal
+	- presets: 5/10/15/30/45/60 min
+	- connected line shows "• Sleep in Xm" appended
+	- countdown updates every minute
+	- timer fires: pause + 60s countdown to quit
+	- CLI: --sleep 20m, --sleep 1.5h
+	- CLI alarm: --alarm 7:20am, --alarm 19:20, etc
+	alarm blocks until time, shows spinner countdown
 
+smart terminal size detection
+	important for artist thumbs
+		if too short a window, image renders over footer, messing up display
+		if no room, rather than show image, print message "Increase terminal height and cycle views to view image."
+		should be able to detect per image
+	recommended min size for large/default 32x113 (rows x columns)
+		still not enough height for most artist thumbs, but everything else will work
+		height 37+ advised for artist thumbs (some have very tall aspect ratios)
+	users can check with "stty size"
+	min for medium: 21 113
+	min for compact: 18 36
+	min for narrow: 35 36
+	example hyprland bindings in DOCUMENTATION.md take this into account
+	medium and large will work with more narrow terminal, but some keybindings won't be seen in footer
+	

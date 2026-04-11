@@ -53,6 +53,7 @@ func NewFooter(accentStyle, mutedStyle lipgloss.Style) *Footer {
 			{Key: "b", Icon: "🚫", Label: ""},
 			{Key: "R", Icon: "", Label: "Rate"},
 			{Key: "c", Icon: "", Label: "Copy"},
+			{Key: "z", Icon: "", Label: "Sleep"},
 			{Key: "o", Icon: "", Label: "Opt"},
 			{Key: "m", Icon: "", Label: "Manage"},
 			{Key: "$", Icon: "", Label: "Support"},
