@@ -282,7 +282,7 @@ On first run, a default configuration file is created.
 
 Place in `~/.config/hypr/bindings.conf`.
 Customize command to point to the rptui binary on your system, or just 'rptui' if in PATH.
-Size is in the format (width height). Adjust to your preferences, though sizes below are recommeneded minimums.
+Size is in the format (width height). Adjust to your preferences, though sizes below are recommended minimums.
 For large (default) and medium, more narrow will work, but some keybindings won't be shown in the footer.
 
 ```
@@ -315,11 +315,18 @@ When no user is rating set, displays "--"
 
 3: Songs in playlist after current (available uses of "play next").
 
-Useful for alternate layouts where playlist is not visible.
+Useful for alternate layouts or views where playlist is not visible.
 
 12: Total number of favorites.
 
 2: Minimum number of favorites required to auto-queue favorites when needed and disable skip warning.
+
+**Green checkmark icon is only displayed when number of favorites >= `min_favorites`.**
+
+When present, a random favorite will be enqueued at playlist end while awaiting new songs from RP.
+Process repeats until new songs are received.
+Very useful when you wish to skip ahead.  If you never skip songs, "favorites mode" will not activate (only used on an as-needed basis).
+You may choose to play or enqueue favorites anytime from the `Manage` modal.
 
 <12>: Number of favorites remaining to auto-queue (no repeats).  When all are used (value = 0), favorites will be re-shuffled and re-enabled.
 
@@ -355,3 +362,13 @@ Set via config file:
 ```toml
 listenbrainz_token = "your-token"
 ```
+
+## Artist Image Gallery
+
+Discogs consistently provides more artist images than TheAudioDB.
+However, to download Discogs images, a Discogs "personal access token" is required.
+You may sign up for free at [Discogs](https://www.discogs.com/settings/developers)
+Without a Discogs token, the artist image gallery feature will work, but will be limited to 4 images (max returned by TheAudioDB).
+
+
+
