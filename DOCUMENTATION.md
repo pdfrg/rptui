@@ -279,6 +279,7 @@ On first run, a default configuration file is created.
 ## Hyprland (Omarchy) integration
 
 **Add a Hyprland launcher for each layout.**
+
 Place in `~/.config/hypr/bindings.conf`.
 Customize command to point to the rptui binary on your system, or just 'rptui' if in PATH.
 Size is in the format (width height). Adjust to your preferences, though sizes below are recommeneded minimums.
@@ -317,7 +318,7 @@ When no user rating set, displays "--"
 
 12: Total number of favorites.
 
-2: Minimum number of favorites to auto-queue favorites when needed and disable skip warning.
+2: Minimum number of favorites required to auto-queue favorites when needed and disable skip warning.
 
 <12>: Number of favorites remaining to auto-queue (no repeats).  When all used, will re-shuffle and reset to total favorites.
 
@@ -342,7 +343,7 @@ go build -ldflags "-s -w -X rptui/internal/api.LastFMAPIKey=YOUR_KEY -X rptui/in
 ```
 2. Download binary with API key and shared secret built-in.
 
-For both methods (1) and (2): run rptui --lastfm-auth
+For both methods (1) and (2): run `rptui --lastfm-auth`
 Will open default browser to last.fm login page to authorize app.
 Session key will be automatically added to rptui config file.
 Session key does not expire.
