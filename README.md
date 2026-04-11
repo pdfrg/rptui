@@ -1,6 +1,6 @@
 # RadioParadise TUI
 
-<img src="assets/rptui-icon.png" alt="rptui icon" width="200" align="right" style="margin-left: 20px; margin-top: -20px; margin-bottom: 20px;">
+<img src="assets/rptui-icon.png" alt="rptui icon" width="200" align="left" style="margin-right: 20px; margin-top: -20px; margin-bottom: 20px;">
 
 ### The ultimate (terminal) client for Radio Paradise
 

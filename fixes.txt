@@ -26,3 +26,6 @@ smart terminal size detection
 	example hyprland bindings in DOCUMENTATION.md take this into account
 	medium and large will work with more narrow terminal, but some keybindings won't be seen in footer
 	
+add a bunch of files to .gitignore
+	will these automatically be removed/not shown on github, even though they are there now?
+	
