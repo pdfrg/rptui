@@ -1,7 +1,6 @@
-<div style="display: flex; align-items: center; gap: 20px;">
-  <h1 style="margin: 0;">RadioParadise TUI</h1>
-  <img src="assets/rptui-icon.png" alt="rptui icon" width="128">
-</div>
+# RadioParadise TUI
+
+<img src="assets/rptui-icon.png" alt="rptui icon" width="200" align="right" style="margin-left: 20px; margin-top: -10px;">
 
 **The ultimate (terminal) client for Radio Paradise.**
 
