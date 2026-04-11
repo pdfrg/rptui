@@ -50,6 +50,10 @@ type NowPlaying struct {
 	width           int
 	maxWidth        int // when > 0, truncate title/artist/album with ellipsis
 
+	// Sleep timer display
+	sleepTimerActive bool
+	sleepTimerMins   int // remaining minutes
+
 	// Bubbles progress bar
 	progress progress.Model
 }
@@ -116,6 +120,12 @@ func (n *NowPlaying) Update(msg tea.Msg) tea.Cmd {
 	var cmd tea.Cmd
 	n.progress, cmd = n.progress.Update(msg)
 	return cmd
+}
+
+// SetSleepTimer sets the sleep timer display state
+func (n *NowPlaying) SetSleepTimer(active bool, mins int) {
+	n.sleepTimerActive = active
+	n.sleepTimerMins = mins
 }
 
 // View renders the now playing info as a string
@@ -330,6 +340,11 @@ func (n NowPlaying) View(
 		} else {
 			connectedLine = n.mutedStyle.Render(fmt.Sprintf("Connected • %s", connectedTime.Format("15:04:05")))
 		}
+	}
+
+	// Append sleep timer info if active
+	if n.sleepTimerActive {
+		connectedLine = fmt.Sprintf("%s %s %s", connectedLine, n.mutedStyle.Render("•"), n.accentStyle.Render(fmt.Sprintf("Sleep in %dm", n.sleepTimerMins)))
 	}
 
 	return fmt.Sprintf(" %s\n %s\n %s\n\n %s\n %s\n\n %s\n\n %s\n\n %s\n\n %s\n\n",

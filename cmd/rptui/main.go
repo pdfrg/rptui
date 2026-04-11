@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"runtime/debug"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/adrg/xdg"
@@ -33,6 +35,8 @@ func main() {
 	listCaches := false
 	deleteCacheName := ""
 	layoutOverride := ""
+	sleepTimerDuration := time.Duration(0)
+	alarmTime := time.Time{}
 
 	args := os.Args[1:]
 
@@ -88,6 +92,33 @@ func main() {
 		case "--create-colors-file":
 			handleCreateColorsFile()
 			return
+		case "--sleep":
+			if i+1 < len(args) {
+				d, err := time.ParseDuration(args[i+1])
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error: --sleep requires a duration (e.g., 20m, 1.5h)\n")
+					os.Exit(1)
+				}
+				sleepTimerDuration = d
+				i++
+			} else {
+				fmt.Fprintf(os.Stderr, "Error: --sleep requires a duration argument (e.g., 20m, 1.5h)\n")
+				os.Exit(1)
+			}
+		case "--alarm":
+			if i+1 < len(args) {
+				alarm, err := parseAlarmTime(args[i+1])
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+					fmt.Fprintf(os.Stderr, "Valid formats: 7:20am, 7:20a.m., 19:20, 7:20 a\n")
+					os.Exit(1)
+				}
+				alarmTime = alarm
+				i++
+			} else {
+				fmt.Fprintf(os.Stderr, "Error: --alarm requires a time argument (e.g., 7:20am, 19:20)\n")
+				os.Exit(1)
+			}
 		}
 	}
 
@@ -127,7 +158,13 @@ func main() {
 		theme = config.DefaultTheme()
 	}
 
-	m := tui.NewModel(cfg, theme, jukeboxMode, layoutOverride)
+	// Handle alarm mode: block until alarm time, then start app
+	if !alarmTime.IsZero() {
+		handleAlarmMode(alarmTime)
+		// After alarm fires, proceed to normal TUI
+	}
+
+	m := tui.NewModel(cfg, theme, jukeboxMode, layoutOverride, sleepTimerDuration)
 
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
@@ -675,6 +712,12 @@ OFFLINE CACHE:
 
     --delete-cache <NAME>   Delete a named offline cache (prompts for confirmation)
 
+SLEEP TIMER / ALARM:
+    --sleep <DURATION>       Start sleep timer (e.g., 20m, 1.5h)
+                            App pauses and quits after timer expires
+    --alarm <TIME>           Schedule alarm (e.g., 7:20am, 7:20 a.m., 19:20)
+                            App starts at specified time
+
 ACTIONS:
     --lastfm-auth           Run Last.fm OAuth authentication flow and save session key
     --rp-auth               Authenticate with Radio Paradise account
@@ -688,6 +731,8 @@ EXAMPLES:
     rptui --cache 4h        Record 4 hours of current station/bitrate
     rptui --offline         Play back a previously recorded cache
     rptui --list-caches     See what caches are available
+    rptui --sleep 30m       Auto-quit after 30 minutes
+    rptui --alarm 7:20am    Start app at 7:20am tomorrow
 
 STATIONS:
     0 - The Main Mix  1 - Mellow Mix    2 - RockIt!
@@ -719,6 +764,124 @@ func printVersion() {
 	}
 
 	fmt.Printf("rptui %s (%s, %s)\n", version, goVersion, osArch)
+}
+
+// parseAlarmTime parses an alarm time string and returns the target time.
+// Supported formats: 7:20am, 7:20a.m., 7:20 a, 7:20, 19:20, 7:20AM, etc.
+func parseAlarmTime(s string) (time.Time, error) {
+	s = strings.ToLower(strings.TrimSpace(s))
+
+	// Regex patterns for various formats
+	patterns := []struct {
+		regex    *regexp.Regexp
+		is24Hour bool
+	}{
+		// 12-hour: 7:20am, 7:20 a, 7:20am, 7:20 a.m.
+		{regexp.MustCompile(`^(\d{1,2}):(\d{2})\s*(a\.?m\.?|p\.?m\.?)$`), false},
+		// 24-hour: 19:20, 07:20
+		{regexp.MustCompile(`^(\d{1,2}):(\d{2})$`), true},
+	}
+
+	now := time.Now()
+	var hour, minute int
+	var isPM bool
+
+	for _, p := range patterns {
+		match := p.regex.FindStringSubmatch(s)
+		if len(match) >= 3 {
+			fmt.Sscanf(match[1], "%d", &hour)
+			fmt.Sscanf(match[2], "%d", &minute)
+
+			// Check for AM/PM
+			if len(match) >= 4 && match[3] != "" {
+				ampm := match[3]
+				// Remove dots and spaces
+				ampm = strings.ReplaceAll(ampm, ".", "")
+				ampm = strings.ReplaceAll(ampm, " ", "")
+				isPM = strings.HasPrefix(ampm, "p")
+			}
+
+			// Validate
+			if hour > 23 || hour < 0 || minute > 59 || minute < 0 {
+				continue
+			}
+
+			// Convert 12-hour to 24-hour
+			if !p.is24Hour {
+				if isPM && hour != 12 {
+					hour += 12
+				} else if !isPM && hour == 12 {
+					hour = 0
+				}
+			}
+
+			// Build target time (today or tomorrow)
+			target := time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, now.Location())
+
+			// If time has passed today, set to tomorrow
+			if !target.After(now) {
+				target = target.Add(24 * time.Hour)
+			}
+
+			return target, nil
+		}
+	}
+
+	return time.Time{}, fmt.Errorf("invalid alarm time: %q (valid formats: 7:20am, 7:20 a.m., 19:20)", s)
+}
+
+// handleAlarmMode blocks until the alarm time, then returns
+func handleAlarmMode(alarmTime time.Time) {
+	now := time.Now()
+	duration := alarmTime.Sub(now)
+
+	if duration <= 0 {
+		return
+	}
+
+	// Print info message
+	fmt.Fprintf(os.Stderr, "Alarm scheduled for %s. Sleeping until then...\n", alarmTime.Format("Mon 3:04 PM"))
+
+	// Spinner characters for animation
+	spinners := []rune{'⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'}
+	spinnerIdx := 0
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	lastPrint := time.Now().Add(-1 * time.Second)
+
+	for {
+		select {
+		case <-ticker.C:
+			now := time.Now()
+
+			// Check if alarm time reached
+			if now.After(alarmTime) || now.Equal(alarmTime) {
+				fmt.Fprintln(os.Stderr, "\rAlarm time reached! Starting Radio Paradise...")
+				return
+			}
+
+			// Print spinner every second
+			if now.Sub(lastPrint) >= time.Second {
+				remaining := alarmTime.Sub(now)
+				hrs := int(remaining.Hours())
+				mins := int(remaining.Minutes()) % 60
+				secs := int(remaining.Seconds()) % 60
+
+				var timeStr string
+				if hrs > 0 {
+					timeStr = fmt.Sprintf("%d:%02d:%02d", hrs, mins, secs)
+				} else {
+					timeStr = fmt.Sprintf("%d:%02d", mins, secs)
+				}
+
+				fmt.Fprintf(os.Stderr, "\r%c %s remaining  ", spinners[spinnerIdx%len(spinners)], timeStr)
+
+				spinnerIdx++
+				lastPrint = now
+			}
+		}
+	}
 }
 
 // handleCreateColorsFile outputs a color template file to stdout
