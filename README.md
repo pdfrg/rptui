@@ -6,7 +6,7 @@
 
 A fast, beautiful Go + Bubble Tea TUI designed for terminal lovers who want more from Radio Paradise than the official web or Android clients.
 
-Enjoy high-res album art, a rich visualizer, deep RP integration, strong offline support, and smooth theming — all in a lightweight single binary.
+Enjoy high-res album art, multiple visualizers, deep RP integration, strong offline support, and smooth theming — all in a lightweight single binary.
 
 ![rptui in default layout](assets/rptui-default-playlist-view.png)
 
