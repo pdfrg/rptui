@@ -1,8 +1,6 @@
-# RadioParadise TUI
+# RadioParadise TUI <img src="assets/rptui-icon.png" alt="rptui icon" width="80" height="80" align="right" style="margin-left: 15px;">
 
 **The ultimate (terminal) client for Radio Paradise.**
-
-![](assets/rptui-icon.png)
 
 A fast, beautiful Go + Bubble Tea TUI designed for terminal lovers who want more from Radio Paradise than the official web or Android clients.
 
