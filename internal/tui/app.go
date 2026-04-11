@@ -4601,12 +4601,19 @@ func (m Model) View() tea.View {
 			viewportContent := m.viewport.View()
 			// Offset viewport to the right when artist image is beside it
 			if m.bottomViewMode == ViewArtist && m.artistArtLoaded && m.artistArtStr != "" {
-				leftPad := strings.Repeat(" ", m.artistArtWidth+5)
-				vpLines := strings.Split(viewportContent, "\n")
-				for i, line := range vpLines {
-					vpLines[i] = leftPad + line
+				// Check if space was sufficient for thumbnail rendering
+				availableSpace := m.height - 20 - 3
+				if availableSpace >= m.artistArtHeight {
+					leftPad := strings.Repeat(" ", m.artistArtWidth+5)
+					vpLines := strings.Split(viewportContent, "\n")
+					for i, line := range vpLines {
+						vpLines[i] = leftPad + line
+					}
+					viewportContent = strings.Join(vpLines, "\n")
+				} else {
+					// Not enough space - show fallback message instead
+					viewportContent = "Increase terminal height to view artist info and image."
 				}
-				viewportContent = strings.Join(vpLines, "\n")
 			}
 			bottomSection = viewportContent
 		}
@@ -4674,8 +4681,12 @@ func (m Model) renderImagesCmd() tea.Cmd {
 	}
 
 	if hasArtistArt {
-		// Bottom section starts after: header(1) + gap(2) + nowPlaying(15 lines) + gap(2) = row 20
-		raw += fmt.Sprintf("\x1b[s\x1b[%d;%dH%s\x1b[u", 20, 2, m.artistArtStr)
+		// Check if there's enough space: available = height - start_row(20) - footer_estimate(3)
+		availableSpace := m.height - 20 - 3
+		if availableSpace >= m.artistArtHeight {
+			// Bottom section starts after: header(1) + gap(2) + nowPlaying(15 lines) + gap(2) = row 20
+			raw += fmt.Sprintf("\x1b[s\x1b[%d;%dH%s\x1b[u", 20, 2, m.artistArtStr)
+		}
 	}
 
 	return tea.Raw(raw)
