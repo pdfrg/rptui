@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -187,6 +188,8 @@ func getFittingLayouts(width, height int) []string {
 	if len(fitting) == 0 {
 		fitting = append(fitting, "compact")
 	}
+	// Sort for consistent display order
+	sort.Strings(fitting)
 	return fitting
 }
 
@@ -1403,7 +1406,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			// User chose their initial layout - clear prompt flag, let normal init proceed
 			layoutPromptActive = false
 			m.initialized = true
-			return m, nil
+			return m, tea.Batch(m.songChangedCmds())
 		}
 
 		// Check if key matches any fitting layout
@@ -1423,7 +1426,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				// Clear prompt flag, let normal init proceed
 				layoutPromptActive = false
 				m.initialized = true
-				return m, nil
+				return m, tea.Batch(m.songChangedCmds())
 			}
 		}
 
@@ -4488,16 +4491,20 @@ func (m Model) View() tea.View {
 
 				// Build prompt with initial choice + warning + fitting options + quit
 				var prompt string
-				if !fits {
+				if warning == "terminal too narrow or too short" {
 					prompt = fmt.Sprintf("Terminal size: %dx%d (requires %dx%d for %s)\n\n",
 						m.height, m.width,
 						layoutReqs[m.initialLayout].minRows, layoutReqs[m.initialLayout].minCols,
 						m.initialLayout)
-				} else {
+				} else if warning != "" {
 					prompt = fmt.Sprintf("Terminal size: %dx%d (%s recommended %dx%d)\n\n",
 						m.height, m.width, m.initialLayout,
 						layoutReqs[m.initialLayout].minRows, layoutReqs[m.initialLayout].recCols)
 					prompt += warning + "\n\n"
+				} else {
+					prompt = fmt.Sprintf("Terminal size: %dx%d (%s recommended %dx%d)\n\n",
+						m.height, m.width, m.initialLayout,
+						layoutReqs[m.initialLayout].minRows, layoutReqs[m.initialLayout].recCols)
 				}
 
 				// Build option string: initial choice (with warning) + fitting layouts + quit
@@ -4505,21 +4512,26 @@ func (m Model) View() tea.View {
 
 				// Add initial choice with warning prefix
 				initialWarn := ""
-				if !fits {
-					initialWarn = " (terminal too narrow or too short)"
-				} else if suboptimal {
+				if warning == "terminal too narrow or too short" {
+					initialWarn = " (display problems expected)"
+				} else if warning != "" {
 					initialWarn = " (may have display issues)"
 				}
-				opts = append(opts, strings.ToUpper(m.initialLayout[:1])+"="+m.initialLayout+initialWarn)
+				initialOpt := m.styles.AccentStyle.Render(strings.ToLower(m.initialLayout[:1])) + " " +
+					m.styles.MutedStyle.Render(m.initialLayout) + initialWarn
+				opts = append(opts, initialOpt)
 
 				// Add other fitting layouts
 				for _, l := range fittingLayouts {
 					if l != m.initialLayout {
-						opts = append(opts, strings.ToUpper(l[:1])+"="+l)
+						opt := m.styles.AccentStyle.Render(strings.ToLower(l[:1])) + " " +
+							m.styles.MutedStyle.Render(l)
+						opts = append(opts, opt)
 					}
 				}
-				opts = append(opts, "Q=quit")
+				opts = append(opts, m.styles.AccentStyle.Render("q")+" "+m.styles.MutedStyle.Render("quit"))
 
+				prompt += m.styles.MutedStyle.Render("Press a key to select") + "\n\n"
 				prompt += strings.Join(opts, ", ")
 				return m.altView(prompt)
 			}
@@ -4530,20 +4542,24 @@ func (m Model) View() tea.View {
 		// If we're waiting for user to choose layout, show prompt
 		if layoutPromptActive && m.width > 0 && m.height > 0 {
 			fittingLayouts := getFittingLayouts(m.width, m.height)
-			fits, suboptimal, warning, _ := checkTerminalSize(m.width, m.height, m.initialLayout)
+			_, _, warning, _ := checkTerminalSize(m.width, m.height, m.initialLayout)
 
 			// Build prompt with initial choice + warning + fitting options + quit
 			var prompt string
-			if !fits {
+			if warning == "terminal too narrow or too short" {
 				prompt = fmt.Sprintf("Terminal size: %dx%d (requires %dx%d for %s)\n\n",
 					m.height, m.width,
 					layoutReqs[m.initialLayout].minRows, layoutReqs[m.initialLayout].minCols,
 					m.initialLayout)
-			} else {
+			} else if warning != "" {
 				prompt = fmt.Sprintf("Terminal size: %dx%d (%s recommended %dx%d)\n\n",
 					m.height, m.width, m.initialLayout,
 					layoutReqs[m.initialLayout].minRows, layoutReqs[m.initialLayout].recCols)
 				prompt += warning + "\n\n"
+			} else {
+				prompt = fmt.Sprintf("Terminal size: %dx%d (%s recommended %dx%d)\n\n",
+					m.height, m.width, m.initialLayout,
+					layoutReqs[m.initialLayout].minRows, layoutReqs[m.initialLayout].recCols)
 			}
 
 			// Build option string: initial choice (with warning) + fitting layouts + quit
@@ -4551,21 +4567,26 @@ func (m Model) View() tea.View {
 
 			// Add initial choice with warning prefix
 			initialWarn := ""
-			if !fits {
-				initialWarn = " (terminal too narrow or too short)"
-			} else if suboptimal {
+			if warning == "terminal too narrow or too short" {
+				initialWarn = " (display problems expected)"
+			} else if warning != "" {
 				initialWarn = " (may have display issues)"
 			}
-			opts = append(opts, strings.ToUpper(m.initialLayout[:1])+"="+m.initialLayout+initialWarn)
+			initialOpt := m.styles.AccentStyle.Render(strings.ToLower(m.initialLayout[:1])) + " " +
+				m.styles.MutedStyle.Render(m.initialLayout) + initialWarn
+			opts = append(opts, initialOpt)
 
 			// Add other fitting layouts
 			for _, l := range fittingLayouts {
 				if l != m.initialLayout {
-					opts = append(opts, strings.ToUpper(l[:1])+"="+l)
+					opt := m.styles.AccentStyle.Render(strings.ToLower(l[:1])) + " " +
+						m.styles.MutedStyle.Render(l)
+					opts = append(opts, opt)
 				}
 			}
-			opts = append(opts, "Q=quit")
+			opts = append(opts, m.styles.AccentStyle.Render("q")+" "+m.styles.MutedStyle.Render("quit"))
 
+			prompt += m.styles.MutedStyle.Render("Press a key to select") + "\n\n"
 			prompt += strings.Join(opts, ", ")
 			return m.altView(prompt)
 		}
