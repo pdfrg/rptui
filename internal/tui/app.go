@@ -4726,8 +4726,8 @@ func (m Model) View() tea.View {
 		m.theme.Cursor,
 	)
 
-	// For compact layout, center header over NowPlaying widget's actual width
-	if isCompact {
+	// For compact/narrow layouts, center header over NowPlaying widget's actual width
+	if isCompact || isNarrow {
 		nowPlayingLines := strings.Split(nowPlayingView, "\n")
 		actualWidth := 0
 		for _, line := range nowPlayingLines {
@@ -4777,9 +4777,9 @@ func (m Model) View() tea.View {
 	m.footerWidget.SetOfflineMode(m.offlineMode, m.offlineCache)
 	m.footerWidget.SetMiniMode(isCompact || isNarrow)
 	m.footerWidget.SetConnectionState(m.connState)
-	// For compact layout, center footer over NowPlaying widget's actual width
-	// For large/medium, use full width; narrow keeps width from WindowSizeMsg
-	if isCompact {
+	// For compact/narrow layouts, center footer over NowPlaying widget's actual width
+	// For large/medium, use full width
+	if isCompact || isNarrow {
 		// Calculate actual width from rendered NowPlaying content
 		nowPlayingLines := strings.Split(nowPlayingView, "\n")
 		actualWidth := 0
@@ -4790,7 +4790,7 @@ func (m Model) View() tea.View {
 			}
 		}
 		m.footerWidget.SetWidth(actualWidth)
-	} else if !isNarrow {
+	} else {
 		m.footerWidget.SetWidth(m.width)
 	}
 	footer := m.footerWidget.View()
