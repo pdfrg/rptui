@@ -8,9 +8,9 @@ A fast, beautiful Go + Bubble Tea TUI designed for terminal lovers who want more
 
 See all upcoming songs, download with a hotkey, rewind, seek, whatever you want.
 
-If you love RP and know your way around a keyboard, it's what you've been waiting for.
+If you love RP and know your way around a keyboard, it's what you've been waiting for. Give it a try!
 
-<br><br><br>
+<br>
 
 ## Why rptui?
 
