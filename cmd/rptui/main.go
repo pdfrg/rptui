@@ -702,7 +702,7 @@ OFFLINE CACHE:
                             DURATION: recording length (e.g., 2h, 3.5h)
                             STATION: station name or number (default: from config)
                             BITRATE: bitrate name or number (default: from config)
-                            Example: rptui --cache 2h "Rock Mix" FLAC
+                            Example: rptui --cache 2h Rock FLAC (station substrings accepted)
 
     --offline [CACHE_NAME]  Launch TUI in offline playback mode
                             If CACHE_NAME omitted, prompts for selection
