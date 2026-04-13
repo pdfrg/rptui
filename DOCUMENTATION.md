@@ -300,7 +300,10 @@ windowrule = match:class rptui.large, size 1060 850, float on, center on
 
 **Desktop integration (available from launchers and menus)**
 
-```nano ~/.local/share/applications/rptui.desktop```
+```
+# Use your preferred editor
+nano ~/.local/share/applications/rptui.desktop
+```
 
 Copy / paste / edit paths as needed:
 
