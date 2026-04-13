@@ -13,6 +13,7 @@ test_*.go
 
 # Secrets
 discogs.txt
+.build-secrets
 
 # Notes
 *.txt
@@ -21,3 +22,6 @@ discogs.txt
 AGENTS.md
 grok-readme.md
 session-*.md
+
+# Documentation
+docs/

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"rptui-bubbletea/internal/api"
+	"github.com/pdfrg/rptui/internal/api"
 )
 
 const userAgent = "rptui-test/1.0"

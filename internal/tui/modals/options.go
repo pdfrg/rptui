@@ -9,8 +9,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/adrg/xdg"
-	"rptui-bubbletea/internal/config"
-	"rptui-bubbletea/internal/tui/visualizer"
+	"github.com/pdfrg/rptui/internal/config"
+	"github.com/pdfrg/rptui/internal/tui/visualizer"
 )
 
 // OptionsMsg is sent when user applies options or closes the modal

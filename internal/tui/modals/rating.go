@@ -7,7 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"rptui-bubbletea/internal/config"
+	"github.com/pdfrg/rptui/internal/config"
 )
 
 // RatingMsg is sent when user submits or cancels a rating

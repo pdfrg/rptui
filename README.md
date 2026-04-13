@@ -86,9 +86,9 @@ cd rptui
 go build -o rptui ./cmd/rptui
 ```
 
-Both go install and go build require a last.fm API account for scrobbling, see [DOCUMENTATION.md](DOCUMENTATION.md)
+Both `go install` and `go build` work for basic usage. See [DOCUMENTATION.md](DOCUMENTATION.md) for optional scrobbling setup.
 
-A pre-built binary for Linux/x86 with last.fm support baked-in is downloadable from releases.  Only a last.fm user account is required.  See DOCUMENTATION.md / Scrobbling for details.
+A pre-built binary for Linux/x86 with last.fm support baked-in is downloadable from releases. Only a last.fm user account is required. See DOCUMENTATION.md / Scrobbling for details.
 
 ## Attribution
 

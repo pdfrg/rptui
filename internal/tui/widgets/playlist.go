@@ -5,7 +5,7 @@ import (
 	"charm.land/bubbles/v2/table"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"rptui-bubbletea/internal/config"
+	"github.com/pdfrg/rptui/internal/config"
 )
 
 // Playlist represents the playlist table widget

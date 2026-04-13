@@ -6,7 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"rptui-bubbletea/internal/config"
+	"github.com/pdfrg/rptui/internal/config"
 )
 
 // SkipWarningMsg is sent when user confirms or cancels skip

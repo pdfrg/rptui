@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"rptui-bubbletea/internal/api"
+	"github.com/pdfrg/rptui/internal/api"
 )
 
 var (

@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"rptui-bubbletea/internal/loginit"
+	"github.com/pdfrg/rptui/internal/loginit"
 )
 
 // Logger for MPV

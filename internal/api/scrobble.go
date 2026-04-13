@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"rptui-bubbletea/internal/config"
-	"rptui-bubbletea/internal/loginit"
-	"rptui-bubbletea/internal/models"
+	"github.com/pdfrg/rptui/internal/config"
+	"github.com/pdfrg/rptui/internal/loginit"
+	"github.com/pdfrg/rptui/internal/models"
 )
 
 var scrobbleLogger *log.Logger

@@ -7,8 +7,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"rptui-bubbletea/internal/cache"
-	"rptui-bubbletea/internal/config"
+	"github.com/pdfrg/rptui/internal/cache"
+	"github.com/pdfrg/rptui/internal/config"
 )
 
 // Network transition variants

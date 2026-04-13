@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"rptui-bubbletea/internal/config"
-	"rptui-bubbletea/internal/loginit"
-	"rptui-bubbletea/internal/models"
+	"github.com/pdfrg/rptui/internal/config"
+	"github.com/pdfrg/rptui/internal/loginit"
+	"github.com/pdfrg/rptui/internal/models"
 )
 
 var notifyLogger *log.Logger
