@@ -1,4 +1,4 @@
-module rptui-bubbletea
+module github.com/pdfrg/rptui
 
 go 1.26
 

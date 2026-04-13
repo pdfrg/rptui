@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	"rptui-bubbletea/internal/config"
+	"github.com/pdfrg/rptui/internal/config"
 )
 
 // CacheEntry represents a completed offline cache

@@ -572,18 +572,23 @@ func (d *DiscogsClient) hasReleaseWithAlbum(ctx context.Context, artistID int, a
 		masterReq.Header.Set("User-Agent", "rptui/1.0")
 		d.setAuth(masterReq)
 
-		masterResp, _ := d.httpClient.Do(masterReq)
-		if masterResp == nil || masterResp.StatusCode != http.StatusOK {
+		masterResp, err := d.httpClient.Do(masterReq)
+		if err != nil || masterResp == nil || masterResp.StatusCode != http.StatusOK {
+			if masterResp != nil {
+				masterResp.Body.Close()
+			}
 			continue
 		}
-		defer masterResp.Body.Close()
 
 		var master struct {
 			Artists []struct {
 				ID int `json:"id"`
 			} `json:"artists"`
 		}
-		if json.NewDecoder(masterResp.Body).Decode(&master); err == nil && len(master.Artists) > 0 {
+		decodeErr := json.NewDecoder(masterResp.Body).Decode(&master)
+		masterResp.Body.Close()
+
+		if decodeErr == nil && len(master.Artists) > 0 {
 			if master.Artists[0].ID == artistID {
 				return true
 			}

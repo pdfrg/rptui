@@ -15,7 +15,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	termimg "github.com/blacktop/go-termimg"
-	"rptui-bubbletea/internal/config"
+	"github.com/pdfrg/rptui/internal/config"
 )
 
 // Modal layout constants — must match View() layout exactly.

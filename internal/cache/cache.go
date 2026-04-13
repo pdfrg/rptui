@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"rptui-bubbletea/internal/loginit"
-	"rptui-bubbletea/internal/models"
+	"github.com/pdfrg/rptui/internal/loginit"
+	"github.com/pdfrg/rptui/internal/models"
 )
 
 // Logger for cache package

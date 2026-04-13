@@ -9,10 +9,10 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"rptui-bubbletea/internal/api"
-	"rptui-bubbletea/internal/cache"
-	"rptui-bubbletea/internal/config"
-	"rptui-bubbletea/internal/models"
+	"github.com/pdfrg/rptui/internal/api"
+	"github.com/pdfrg/rptui/internal/cache"
+	"github.com/pdfrg/rptui/internal/config"
+	"github.com/pdfrg/rptui/internal/models"
 )
 
 // Custom message types for bubbletea

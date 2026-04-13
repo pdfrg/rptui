@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"rptui-bubbletea/internal/models"
+	"github.com/pdfrg/rptui/internal/models"
 )
 
 // ConnErrorType classifies connection errors for display

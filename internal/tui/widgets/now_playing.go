@@ -9,7 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"rptui-bubbletea/internal/models"
+	"github.com/pdfrg/rptui/internal/models"
 )
 
 // darkenColor reduces the brightness of a hex color by the given factor (0.0-1.0)

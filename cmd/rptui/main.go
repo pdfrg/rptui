@@ -13,12 +13,14 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/adrg/xdg"
-	"rptui-bubbletea/internal/api"
-	"rptui-bubbletea/internal/cache"
-	"rptui-bubbletea/internal/config"
-	_ "rptui-bubbletea/internal/loginit"
-	"rptui-bubbletea/internal/tui"
+	"github.com/pdfrg/rptui/internal/api"
+	"github.com/pdfrg/rptui/internal/cache"
+	"github.com/pdfrg/rptui/internal/config"
+	_ "github.com/pdfrg/rptui/internal/loginit"
+	"github.com/pdfrg/rptui/internal/tui"
 )
+
+var Version = "dev"
 
 // CacheRequest holds parameters for a cache recording request
 type CacheRequest struct {
@@ -753,13 +755,15 @@ CONFIGURATION:
 
 // printVersion displays version information and exits
 func printVersion() {
-	version := "dev"
 	goVersion := runtime.Version()
 	osArch := fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)
 
-	if info, ok := debug.ReadBuildInfo(); ok {
-		if info.Main.Version != "" && info.Main.Version != "(devel)" {
-			version = info.Main.Version
+	version := Version
+	if version == "dev" {
+		if info, ok := debug.ReadBuildInfo(); ok {
+			if info.Main.Version != "" && info.Main.Version != "(devel)" {
+				version = info.Main.Version
+			}
 		}
 	}
 

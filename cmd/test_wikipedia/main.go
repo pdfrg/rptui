@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"rptui-bubbletea/internal/api"
+	"github.com/pdfrg/rptui/internal/api"
 )
 
 const userAgent = "rptui-test/1.0 (https://github.com/user/rptui; test@example.com)"
