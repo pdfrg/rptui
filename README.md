@@ -41,6 +41,7 @@ While Radio Paradise offers the absolute best internet radio stations, human-cur
 - **Network Status Handling**: Smart prompts offer to change modes when network change detected, so that music keeps playing. 
 - **Desktop Integration**: MPRIS metadata, media key support, desktop notifications with optional album art, save album art to file for desktop widget use.
 - **Four Smart Layouts**: `large` (default, full dashboard with multiple bottom views available), `medium`, `compact`, and `narrow` (perfect vertical sidebar).
+- **Terminal Size Detection**: Warns if current terminal is too small for layout chosen, gives recommended size and alternate layouts(s) which fit in current terminal, allows to force fit if desired. User is always in control.
 - **Keyboard Navigation**: Hotkeys and RP stations shown in footer. Change stations with a single keypress.
 - **Sleep Timer / Alarm**: Fall asleep or wake up to the sounds of RP.
 
