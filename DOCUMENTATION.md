@@ -231,7 +231,6 @@ color15 = "#a6adc8"    # bright white
 | `f` | Toggle favorite |
 | `b` | Toggle blocklist |
 | `R` | Open rating modal (requires RP account) |
-| `1-9, 0` | Rate current song 1-10 |
 
 ### Modals
 
@@ -286,18 +285,42 @@ Size is in the format (width height). Adjust to your preferences, though sizes b
 For large (default) and medium, more narrow will work, but some keybindings won't be shown in the footer.
 
 ```
-bindd = SUPER SHIFT, R, rptui medium, exec, ghostty --class=rptui.medium --command="/path/to/rptui --layout medium"
+bindd = SUPER SHIFT, R, rptui, exec, xdg-terminal-exec --app-id=rptui.medium -e /home/mds/Projects/rptui-bubbletea/rptui --layout medium
 windowrule = match:class rptui.medium, size 1060 460, float on, center on
 
-bindd = SUPER ALT SHIFT, R, rptui compact, exec, ghostty --class=rptui.compact --command="/path/to/rptui --layout compact"
+bindd = SUPER ALT SHIFT, R, rptui, exec, xdg-terminal-exec --app-id=rptui.compact -e /home/mds/Projects/rptui-bubbletea/rptui --layout compact
 windowrule = match:class rptui.compact, size 370 400, float on, center on
 
-bindd = SUPER CTRL SHIFT, R, rptui narrow, exec, ghostty --class=rptui.narrow --command="/path/to/rptui --layout narrow"
+bindd = SUPER CTRL SHIFT, R, rptui, exec, xdg-terminal-exec --app-id=rptui.narrow -e /home/mds/Projects/rptui-bubbletea/rptui --layout narrow
 windowrule = match:class rptui.narrow, size 370 750, float on, center on
 
-bindd = SUPER, R, rptui, exec, ghostty --class=rptui.large --command="/path/to/rptui --layout large"
+bindd = SUPER, R, rptui, exec, xdg-terminal-exec --app-id=rptui.large -e /home/mds/Projects/rptui-bubbletea/rptui --layout large
 windowrule = match:class rptui.large, size 1060 850, float on, center on
 ```
+
+**Desktop integration (available from launchers and menus)**
+
+`nano ~/.local/share/applications/rptui.desktop`
+
+Copy / paste / edit paths as needed:
+
+```
+[Desktop Entry]
+Version=1.0
+Name=rptui
+Comment=RadioParadise TUI
+Exec=xdg-terminal-exec --app-id=rptui.large -e /path/to/rptui/rptui --layout large
+Terminal=false
+Type=Application
+Icon=/path/to/rptui/assets/rptui-icon.png
+StartupNotify=true
+```
+
+You can add additional desktop entries for each preferred layout.
+
+Be sure to name each `.desktop` file with a different name, e.g. `rptui-narrow.desktop`.
+Then change the `Exec` line so that the layout matches in  `--app-id=rptui.<layout>` matches `--layout <layout>`.
+
 
 ## TUI Elements Explained
 
