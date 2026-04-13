@@ -277,7 +277,7 @@ On first run, a default configuration file is created.
 
 ## Hyprland (Omarchy) integration
 
-**Add a Hyprland launcher for each layout.**
+**Add a Hyprland launcher for each layout**
 
 Place in `~/.config/hypr/bindings.conf`.
 Customize command to point to the rptui binary on your system, or just 'rptui' if in PATH.
@@ -285,22 +285,22 @@ Size is in the format (width height). Adjust to your preferences, though sizes b
 For large (default) and medium, more narrow will work, but some keybindings won't be shown in the footer.
 
 ```
-bindd = SUPER SHIFT, R, rptui, exec, xdg-terminal-exec --app-id=rptui.medium -e /home/mds/Projects/rptui-bubbletea/rptui --layout medium
+bindd = SUPER SHIFT, R, rptui, exec, xdg-terminal-exec --app-id=rptui.medium -e /path/to/rptui/rptui --layout medium
 windowrule = match:class rptui.medium, size 1060 460, float on, center on
 
-bindd = SUPER ALT SHIFT, R, rptui, exec, xdg-terminal-exec --app-id=rptui.compact -e /home/mds/Projects/rptui-bubbletea/rptui --layout compact
+bindd = SUPER ALT SHIFT, R, rptui, exec, xdg-terminal-exec --app-id=rptui.compact -e /path/to/rptui/rptui --layout compact
 windowrule = match:class rptui.compact, size 370 400, float on, center on
 
-bindd = SUPER CTRL SHIFT, R, rptui, exec, xdg-terminal-exec --app-id=rptui.narrow -e /home/mds/Projects/rptui-bubbletea/rptui --layout narrow
+bindd = SUPER CTRL SHIFT, R, rptui, exec, xdg-terminal-exec --app-id=rptui.narrow -e /path/to/rptui/rptui --layout narrow
 windowrule = match:class rptui.narrow, size 370 750, float on, center on
 
-bindd = SUPER, R, rptui, exec, xdg-terminal-exec --app-id=rptui.large -e /home/mds/Projects/rptui-bubbletea/rptui --layout large
+bindd = SUPER, R, rptui, exec, xdg-terminal-exec --app-id=rptui.large -e /path/to/rptui/rptui --layout large
 windowrule = match:class rptui.large, size 1060 850, float on, center on
 ```
 
 **Desktop integration (available from launchers and menus)**
 
-`nano ~/.local/share/applications/rptui.desktop`
+```nano ~/.local/share/applications/rptui.desktop```
 
 Copy / paste / edit paths as needed:
 
@@ -319,7 +319,7 @@ StartupNotify=true
 You can add additional desktop entries for each preferred layout.
 
 Be sure to name each `.desktop` file with a different name, e.g. `rptui-narrow.desktop`.
-Then change the `Exec` line so that the layout matches in  `--app-id=rptui.<layout>` matches `--layout <layout>`.
+Then change the `Exec` line so that the layout matches in  `--app-id=rptui.<layout>` and `--layout <layout>`.
 
 
 ## TUI Elements Explained
