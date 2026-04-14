@@ -77,7 +77,7 @@ See [SCREENSHOTS.md](SCREENSHOTS.md) for the full gallery, including all built-i
 
 ```bash
 # Recommended: install via Go
-go install github.com/pdfrg/rptui@latest
+go install github.com/pdfrg/rptui/cmd/rptui@latest
 ```
 ### Build from Source
 
