@@ -163,7 +163,10 @@ func NewConfig() (*Config, error) {
 		if !os.IsNotExist(err) {
 			return nil, err
 		}
-		// Config file doesn't exist yet, use defaults
+		// Config file doesn't exist yet, create it with defaults
+		if err := cfg.Save(); err != nil {
+			return nil, fmt.Errorf("failed to save default config: %w", err)
+		}
 	}
 
 	return cfg, nil
