@@ -198,6 +198,11 @@ func (c *Config) Load() error {
 
 // Save saves config to file
 func (c *Config) Save() error {
+	// Ensure config directory exists
+	if err := os.MkdirAll(filepath.Dir(c.path), 0755); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+
 	// Ensure favorites directory parent exists
 	favoritesDir := filepath.Dir(c.FavoritesDir)
 	if err := os.MkdirAll(favoritesDir, 0755); err != nil {
@@ -330,6 +335,10 @@ func CheckStationIssues(rpChannels map[int]string) []StationIssue {
 
 	// Check for missing or renamed stations
 	for localID, localName := range StationNames {
+		// Skip channel 99 (My Paradise) - it's authenticated-only, not in downloadable channels list
+		if localID == 99 {
+			continue
+		}
 		if rpName, ok := rpChannels[localID]; !ok {
 			// Station ID no longer exists on RP — could be missing or renamed
 			issues = append(issues, StationIssue{
