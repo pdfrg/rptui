@@ -1672,6 +1672,15 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 
 		m.updateBottomView()
+
+		// Re-render images after view change to fix any slicing caused by
+		// bubbletea's \x1b[K (clear to end of line) during the view transition.
+		// This is especially important for non-Kitty protocols and terminals
+		// with incomplete Kitty support (like WezTerm).
+		if m.config.ShowAlbumArt && m.albumArtLoaded && m.layoutMode != LayoutCompact {
+			cmds = append(cmds, renderAlbumArtAfterDelay())
+		}
+
 		return m, tea.Batch(cmds...)
 
 	case "l":
@@ -4772,15 +4781,11 @@ func (m Model) View() tea.View {
 				// Leave 2 char margin before album art
 				contentWidth := artCol - 2
 				m.nowPlayingWidget.SetContentWidth(contentWidth)
-				logger.Printf("DEBUG: SetContentWidth called: layoutMode=%d, width=%d, artWidth=%d, artCol=%d, contentWidth=%d, cellRatio=%.2f",
-					m.layoutMode, m.width, artWidth, artCol, contentWidth, m.cellRatio)
 			} else {
 				m.nowPlayingWidget.SetContentWidth(0)
-				logger.Printf("DEBUG: SetContentWidth=0 (artCol too small): artCol=%d", artCol)
 			}
 		} else {
 			m.nowPlayingWidget.SetContentWidth(0)
-			logger.Printf("DEBUG: SetContentWidth=0 (ShowAlbumArt=false)")
 		}
 	}
 
