@@ -4954,6 +4954,20 @@ func (m Model) View() tea.View {
 	return m.altView(b.String())
 }
 
+// positionMultiLineImage positions a multi-line image string at the specified row and column.
+// This is needed for protocols like halfblocks that output multiple lines with \n separators.
+// Each \n in the output resets the cursor to column 1, so we must position each line individually.
+func positionMultiLineImage(imgStr string, startRow, startCol int) string {
+	lines := strings.Split(imgStr, "\n")
+	var b strings.Builder
+	for i, line := range lines {
+		if line != "" {
+			b.WriteString(fmt.Sprintf("\x1b[%d;%dH%s", startRow+i, startCol, line))
+		}
+	}
+	return b.String()
+}
+
 // renderImagesCmd returns a tea.Cmd that sends all terminal images (album art
 // and artist thumbnail) via tea.Raw. All protocols use tea.Raw to bypass
 // bubbletea's StyledString which doesn't support cursor positioning escapes.
@@ -5003,7 +5017,13 @@ func (m Model) renderImagesCmd() tea.Cmd {
 				artCol = 1
 			}
 		}
-		raw += fmt.Sprintf("\x1b[s\x1b[3;%dH%s\x1b[u", artCol, m.albumArtStr)
+		// For Kitty: single escape sequence, position directly
+		// For other protocols (halfblocks/sixel/iterm2): may contain newlines, position each line
+		if m.imageProtocol == termimg.Kitty {
+			raw += fmt.Sprintf("\x1b[s\x1b[3;%dH%s\x1b[u", artCol, m.albumArtStr)
+		} else {
+			raw += "\x1b[s" + positionMultiLineImage(m.albumArtStr, 3, artCol) + "\x1b[u"
+		}
 	}
 
 	if hasArtistArt {
@@ -5011,7 +5031,11 @@ func (m Model) renderImagesCmd() tea.Cmd {
 		availableSpace := m.height - 20 - 3
 		if availableSpace >= m.artistArtHeight {
 			// Bottom section starts after: header(1) + gap(2) + nowPlaying(15 lines) + gap(2) = row 20
-			raw += fmt.Sprintf("\x1b[s\x1b[%d;%dH%s\x1b[u", 20, 2, m.artistArtStr)
+			if m.imageProtocol == termimg.Kitty {
+				raw += fmt.Sprintf("\x1b[s\x1b[%d;%dH%s\x1b[u", 20, 2, m.artistArtStr)
+			} else {
+				raw += "\x1b[s" + positionMultiLineImage(m.artistArtStr, 20, 2) + "\x1b[u"
+			}
 		}
 	}
 
