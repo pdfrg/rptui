@@ -3,6 +3,7 @@ package widgets
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/progress"
@@ -49,6 +50,7 @@ type NowPlaying struct {
 	mutedStyle      lipgloss.Style
 	width           int
 	maxWidth        int // when > 0, truncate title/artist/album with ellipsis
+	contentWidth    int // when > 0, pad all lines to this exact width to prevent "clear to end of line"
 
 	// Sleep timer display
 	sleepTimerActive bool
@@ -94,6 +96,14 @@ func (n *NowPlaying) GetWidth() int {
 // When > 0, text is truncated with ellipsis to prevent wrapping.
 func (n *NowPlaying) SetMaxWidth(maxWidth int) {
 	n.maxWidth = maxWidth
+}
+
+// SetContentWidth sets the exact width for all output lines.
+// This prevents the renderer's "clear to end of line" from extending
+// past this width, which would slice through album art rendered via tea.Raw().
+// Only used for Large/Medium layouts where album art is on the right side.
+func (n *NowPlaying) SetContentWidth(width int) {
+	n.contentWidth = width
 }
 
 // UpdateStyles updates the widget styles with new theme colors
@@ -347,8 +357,30 @@ func (n NowPlaying) View(
 		connectedLine = fmt.Sprintf("%s %s %s", connectedLine, n.mutedStyle.Render("•"), n.accentStyle.Render(fmt.Sprintf("Sleep in %dm", n.sleepTimerMins)))
 	}
 
-	return fmt.Sprintf(" %s\n %s\n %s\n\n %s\n %s\n\n %s\n\n %s\n\n %s\n\n %s\n\n",
+	// Build output
+	output := fmt.Sprintf(" %s\n %s\n %s\n\n %s\n %s\n\n %s\n\n %s\n\n %s\n\n %s\n\n",
 		title, artist, album, progView, timeStr, ratingStr, navLine, statusLine, connectedLine)
+
+	// Apply width limit if set - this prevents the renderer's "clear to end of line"
+	// from extending past this width and slicing through album art rendered via tea.Raw()
+	if n.contentWidth > 0 {
+		lines := strings.Split(output, "\n")
+		for i, line := range lines {
+			lineWidth := lipgloss.Width(line)
+			if lineWidth > n.contentWidth {
+				// Truncate with ellipsis if too long
+				line = ansi.Truncate(line, n.contentWidth-3, "...")
+			}
+			// Pad to exact width (lipgloss.Width adds trailing spaces)
+			if lipgloss.Width(line) < n.contentWidth {
+				line = lipgloss.NewStyle().Width(n.contentWidth).Render(line)
+			}
+			lines[i] = line
+		}
+		output = strings.Join(lines, "\n")
+	}
+
+	return output
 }
 
 // formatDuration formats seconds as MM:SS or HH:MM:SS
