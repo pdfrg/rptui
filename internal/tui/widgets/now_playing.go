@@ -3,6 +3,7 @@ package widgets
 
 import (
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -10,8 +11,15 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/pdfrg/rptui/internal/loginit"
 	"github.com/pdfrg/rptui/internal/models"
 )
+
+var widgetLogger *log.Logger
+
+func init() {
+	widgetLogger = loginit.InitLogger("[NowPlaying] ")
+}
 
 // darkenColor reduces the brightness of a hex color by the given factor (0.0-1.0)
 func darkenColor(hex string, factor float64) string {
@@ -364,10 +372,12 @@ func (n NowPlaying) View(
 	// Apply width limit if set - this prevents the renderer's "clear to end of line"
 	// from extending past this width and slicing through album art rendered via tea.Raw()
 	if n.contentWidth > 0 {
+		widgetLogger.Printf("DEBUG: contentWidth=%d, applying width limit", n.contentWidth)
 		lines := strings.Split(output, "\n")
+		widgetLogger.Printf("DEBUG: total lines=%d", len(lines))
 		for i, line := range lines {
-			lineWidth := lipgloss.Width(line)
-			if lineWidth > n.contentWidth {
+			originalWidth := lipgloss.Width(line)
+			if originalWidth > n.contentWidth {
 				// Truncate with ellipsis if too long
 				line = ansi.Truncate(line, n.contentWidth-3, "...")
 			}
@@ -375,9 +385,15 @@ func (n NowPlaying) View(
 			if lipgloss.Width(line) < n.contentWidth {
 				line = lipgloss.NewStyle().Width(n.contentWidth).Render(line)
 			}
+			newWidth := lipgloss.Width(line)
+			if i < 5 || i >= len(lines)-3 {
+				widgetLogger.Printf("DEBUG: line[%d] originalWidth=%d, newWidth=%d", i, originalWidth, newWidth)
+			}
 			lines[i] = line
 		}
 		output = strings.Join(lines, "\n")
+	} else {
+		widgetLogger.Printf("DEBUG: contentWidth=%d, NOT applying width limit", n.contentWidth)
 	}
 
 	return output

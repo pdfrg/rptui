@@ -4770,12 +4770,17 @@ func (m Model) View() tea.View {
 			artCol := m.width - artWidth - 2
 			if artCol > 10 {
 				// Leave 2 char margin before album art
-				m.nowPlayingWidget.SetContentWidth(artCol - 2)
+				contentWidth := artCol - 2
+				m.nowPlayingWidget.SetContentWidth(contentWidth)
+				logger.Printf("DEBUG: SetContentWidth called: layoutMode=%d, width=%d, artWidth=%d, artCol=%d, contentWidth=%d, cellRatio=%.2f",
+					m.layoutMode, m.width, artWidth, artCol, contentWidth, m.cellRatio)
 			} else {
 				m.nowPlayingWidget.SetContentWidth(0)
+				logger.Printf("DEBUG: SetContentWidth=0 (artCol too small): artCol=%d", artCol)
 			}
 		} else {
 			m.nowPlayingWidget.SetContentWidth(0)
+			logger.Printf("DEBUG: SetContentWidth=0 (ShowAlbumArt=false)")
 		}
 	}
 

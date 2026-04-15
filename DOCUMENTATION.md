@@ -228,8 +228,8 @@ color15 = "#a6adc8"    # bright white
 
 | Key | Action |
 |-----|--------|
-| `f` | Toggle favorite |
-| `b` | Toggle blocklist |
+| `f` | Toggle favorite. Hourglass icon appears in playlist while download active.  Star when download complete. |
+| `b` | Toggle blocklist. Block icon appears in playlist. |
 | `R` | Open rating modal (requires RP account) |
 
 ### Modals
