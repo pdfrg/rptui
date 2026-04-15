@@ -4530,9 +4530,6 @@ func positionImage(imgStr string, row, col int) string {
 	lines := strings.Split(imgStr, "\n")
 	var b strings.Builder
 	for i, line := range lines {
-		if i > 0 {
-			b.WriteString("\n")
-		}
 		if line != "" {
 			b.WriteString(fmt.Sprintf("\x1b[%d;%dH%s", row+i, col, line))
 		}
