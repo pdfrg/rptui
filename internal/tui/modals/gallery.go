@@ -28,6 +28,23 @@ const (
 	galleryLinesBelow  = 4 // blank + source + blank + help
 )
 
+// positionImage positions a multi-line image string at the specified row and column.
+// For protocols like halfblocks that output multi-line content, each newline resets
+// to column 1, so we need to prepend a cursor position escape before each line.
+func positionImage(imgStr string, row, col int) string {
+	lines := strings.Split(imgStr, "\n")
+	var b strings.Builder
+	for i, line := range lines {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		if line != "" {
+			b.WriteString(fmt.Sprintf("\x1b[%d;%dH%s", row+i, col, line))
+		}
+	}
+	return b.String()
+}
+
 // GalleryMsg is sent when the gallery modal closes
 type GalleryMsg struct {
 	Closed bool
@@ -398,9 +415,10 @@ func (g Gallery) View() string {
 
 	// Fixed image area — shows status text on first line, or embedded image for non-Kitty
 	if g.imageProtocol != termimg.Kitty && g.renderedStr != "" && !g.renderFailed {
-		// Non-Kitty: embed image inline at cursor position
+		// Non-Kitty: embed image inline at computed position
+		// Use positionImage to handle multi-line output correctly
 		row, col := g.ImageScreenPosition()
-		b.WriteString(fmt.Sprintf("\x1b[%d;%dH%s", row, col, g.renderedStr))
+		b.WriteString(positionImage(g.renderedStr, row, col))
 	} else if g.loading[g.currentIdx] {
 		b.WriteString(centerStyled(mutedStyle.Render("Loading image..."), contentWidth))
 	} else if g.renderFailed {

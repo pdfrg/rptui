@@ -283,8 +283,10 @@ type Model struct {
 	pendingArtistArtHeight int
 
 	// Bubbles components
-	viewport    viewport.Model
-	albumArtStr string // cached rendered escape sequence
+	viewport       viewport.Model
+	albumArtStr    string // cached rendered escape sequence
+	albumArtWidth  int    // width in terminal columns
+	albumArtHeight int    // height in terminal rows
 
 	// Cached album art render string (only re-render when image changes)
 	albumArtLoaded bool
@@ -3211,10 +3213,22 @@ func (m Model) handleImageLoaded(msg imageLoadedMsg) (tea.Model, tea.Cmd) {
 	// and above the playlist (~starts at row 11). Available: ~8-9 rows.
 	// Use 16 rows to fit (with 2 row gap above playlist), width based on cell ratio.
 	// cellRatio = cellHeight / cellWidth (typical ~2.0, e.g., 7x14)
+	//
+	// For halfblocks protocol: the renderer internally assumes 1:2 cell ratio,
+	// so we pass dimensions without applying cellRatio to avoid double-adjustment.
+	// For other protocols (sixel, iterm2), we apply cellRatio normally.
 	height := 16
-	width := int(float64(height) * m.cellRatio)
+	var width int
+	if m.imageProtocol == termimg.Halfblocks {
+		// Halfblocks: each character cell represents 2 "pixels" vertically
+		// The mosaic renderer handles the aspect ratio internally.
+		// Pass width = height * 2 for square-ish display.
+		width = height * 2
+	} else {
+		width = int(float64(height) * m.cellRatio)
+	}
 	if width < 10 {
-		width = 10 // minimum width
+		width = 10
 	}
 
 	tiImg := termimg.New(img).
@@ -3232,9 +3246,11 @@ func (m Model) handleImageLoaded(msg imageLoadedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	logger.Printf("Album art loaded for: %s (len=%d)", m.currentSong.Title, len(rendered))
+	logger.Printf("Album art loaded for: %s (len=%d, w=%d, h=%d)", m.currentSong.Title, len(rendered), width, height)
 	m.albumArtStr = rendered
 	m.albumArtLoaded = true
+	m.albumArtWidth = width
+	m.albumArtHeight = height
 
 	// Send desktop notification with album art
 	var cmds []tea.Cmd
@@ -4481,6 +4497,23 @@ func (m Model) altView(s string) tea.View {
 	return v
 }
 
+// positionImage positions a multi-line image string at the specified row and column.
+// For protocols like halfblocks that output multi-line content, each newline resets
+// to column 1, so we need to prepend a cursor position escape before each line.
+func positionImage(imgStr string, row, col int) string {
+	lines := strings.Split(imgStr, "\n")
+	var b strings.Builder
+	for i, line := range lines {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		if line != "" {
+			b.WriteString(fmt.Sprintf("\x1b[%d;%dH%s", row+i, col, line))
+		}
+	}
+	return b.String()
+}
+
 // View renders the TUI
 func (m Model) View() tea.View {
 	if m.err != nil {
@@ -4786,13 +4819,13 @@ func (m Model) View() tea.View {
 	if isNarrow {
 		if m.imageProtocol != termimg.Kitty && m.config.ShowAlbumArt && m.albumArtLoaded && m.albumArtStr != "" {
 			// Non-Kitty: embed image inline at top-left position (row 3, col 2)
-			artCol := 2
-			b.WriteString(fmt.Sprintf("\x1b[3;%dH%s", artCol, m.albumArtStr))
+			// Use positionImage to handle multi-line output correctly
+			b.WriteString(positionImage(m.albumArtStr, 3, 2))
 		} else {
 			// Kitty: reserve blank space (image overlays via tea.Raw)
 			artHeight := 16
 			for i := 0; i < artHeight+1; i++ {
-				b.WriteString("\n")
+				b.WriteString("\\n")
 			}
 		}
 	}
@@ -4813,8 +4846,7 @@ func (m Model) View() tea.View {
 
 	// Non-Kitty: embed album art at right side for Large/Medium layouts
 	if m.imageProtocol != termimg.Kitty && m.config.ShowAlbumArt && m.albumArtLoaded && m.albumArtStr != "" && !isCompact && !isNarrow {
-		artHeight := 16
-		artWidth := int(float64(artHeight) * m.cellRatio)
+		artWidth := m.albumArtWidth
 		if artWidth < 10 {
 			artWidth = 10
 		}
@@ -4823,7 +4855,8 @@ func (m Model) View() tea.View {
 			artCol = 1
 		}
 		// Position at row 3 (after header), column artCol
-		b.WriteString(fmt.Sprintf("\x1b[3;%dH%s", artCol, m.albumArtStr))
+		// Use positionImage to handle multi-line output correctly
+		b.WriteString(positionImage(m.albumArtStr, 3, artCol))
 	}
 
 	// Footer rendering
