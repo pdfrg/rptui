@@ -203,7 +203,7 @@ func renderArtistArtAfterDelay() tea.Cmd {
 // This should only be called for Kitty protocol - for other protocols, use
 // clearKittyImagesCmdIf which checks the protocol first.
 func clearKittyImagesCmd() tea.Cmd {
-	return tea.Raw("\\x1b_Ga=d,d=A\\x1b\\\\")
+	return tea.Raw("\x1b_Ga=d,d=A\x1b\\")
 }
 
 // clearKittyImagesCmdIf returns a clear command only if the protocol is Kitty.

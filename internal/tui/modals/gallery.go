@@ -292,8 +292,17 @@ func (g *Gallery) renderCurrentImage() {
 		}
 	}
 
+	// Calculate render dimensions (in pixels for halfblocks, cells for others)
+	renderWidth := displayWidth
+	renderHeight := displayHeight
+	if g.imageProtocol == termimg.Halfblocks {
+		// Mosaic uses pixels (2 per cell dimension), so double
+		renderWidth = displayWidth * 2
+		renderHeight = displayHeight * 2
+	}
+
 	tiImg := termimg.New(img).
-		Size(displayWidth, displayHeight).
+		Size(renderWidth, renderHeight).
 		Scale(termimg.ScaleFit).
 		Protocol(termimg.Auto)
 
@@ -303,8 +312,8 @@ func (g *Gallery) renderCurrentImage() {
 		return
 	}
 	g.renderedStr = rendered
-	g.renderedW = displayWidth
-	g.renderedH = displayHeight
+	g.renderedW = displayWidth  // store in cells
+	g.renderedH = displayHeight // store in cells
 }
 
 // maxImageSize returns max width and height in character cells for the image

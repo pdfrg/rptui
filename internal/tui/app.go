@@ -431,6 +431,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 
 	// Detect image protocol (Kitty, Sixel, ITerm2, or Halfblocks)
 	imageProtocol := termimg.DetectProtocol()
+	logger.Printf("Detected image protocol: %s", imageProtocol)
 
 	// Initialize API clients
 	rpAPI := api.NewRadioParadiseAPI(cfg.Channel, cfg.Bitrate)
@@ -671,6 +672,7 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 
 	// Detect image protocol (Kitty, Sixel, ITerm2, or Halfblocks)
 	imageProtocol := termimg.DetectProtocol()
+	logger.Printf("Detected image protocol: %s", imageProtocol)
 
 	// Initialize API clients (lyrics, artist info still available for lookups)
 	rpAPI := api.NewRadioParadiseAPI(cfg.Channel, cfg.Bitrate)
@@ -3214,21 +3216,27 @@ func (m Model) handleImageLoaded(msg imageLoadedMsg) (tea.Model, tea.Cmd) {
 	// Use 16 rows to fit (with 2 row gap above playlist), width based on cell ratio.
 	// cellRatio = cellHeight / cellWidth (typical ~2.0, e.g., 7x14)
 	//
-	// For halfblocks protocol: the renderer internally assumes 1:2 cell ratio,
-	// so we pass dimensions without applying cellRatio to avoid double-adjustment.
+	// For halfblocks protocol: the mosaic library used by go-termimg takes dimensions
+	// in PIXELS (not cells). Each character cell is 2x2 pixels, so we must double
+	// the target cell dimensions to get the correct pixel dimensions.
 	// For other protocols (sixel, iterm2), we apply cellRatio normally.
-	height := 16
-	var width int
+	const targetHeight = 16
+	var width, height int
 	if m.imageProtocol == termimg.Halfblocks {
-		// Halfblocks: each character cell represents 2 "pixels" vertically
-		// The mosaic renderer handles the aspect ratio internally.
-		// Pass width = height * 2 for square-ish display.
-		width = height * 2
+		// Halfblocks: mosaic uses pixels (2 per cell dimension)
+		// Double both dimensions: width = target_cols * 2, height = target_rows * 2
+		targetWidth := int(float64(targetHeight) * m.cellRatio)
+		if targetWidth < 10 {
+			targetWidth = 10
+		}
+		width = targetWidth * 2   // pixels
+		height = targetHeight * 2 // pixels
 	} else {
+		height = targetHeight
 		width = int(float64(height) * m.cellRatio)
-	}
-	if width < 10 {
-		width = 10
+		if width < 10 {
+			width = 10
+		}
 	}
 
 	tiImg := termimg.New(img).
@@ -3249,8 +3257,14 @@ func (m Model) handleImageLoaded(msg imageLoadedMsg) (tea.Model, tea.Cmd) {
 	logger.Printf("Album art loaded for: %s (len=%d, w=%d, h=%d)", m.currentSong.Title, len(rendered), width, height)
 	m.albumArtStr = rendered
 	m.albumArtLoaded = true
-	m.albumArtWidth = width
-	m.albumArtHeight = height
+	// Store dimensions in cells for positioning
+	if m.imageProtocol == termimg.Halfblocks {
+		m.albumArtWidth = width / 2
+		m.albumArtHeight = height / 2
+	} else {
+		m.albumArtWidth = width
+		m.albumArtHeight = height
+	}
 
 	// Send desktop notification with album art
 	var cmds []tea.Cmd
@@ -4412,6 +4426,7 @@ func (m Model) handleArtistImageLoaded(msg artistImageLoadedMsg) (tea.Model, tea
 
 	// Set display width in columns, calculate height from source aspect ratio
 	// accounting for terminal cell ratio (cellRatio = cellHeight/cellWidth, ~2.0)
+	// For halfblocks: mosaic uses pixels (2 per cell), so double dimensions.
 	const displayWidth = 30
 	imgBounds := img.Bounds()
 	imgW := float64(imgBounds.Dx())
@@ -4425,11 +4440,22 @@ func (m Model) handleArtistImageLoaded(msg artistImageLoadedMsg) (tea.Model, tea
 		displayHeight = 20
 	}
 
-	logger.Printf("Artist thumbnail sizing: src=%dx%d, display=%dx%d cells, cellRatio=%.2f",
-		imgBounds.Dx(), imgBounds.Dy(), displayWidth, displayHeight, m.cellRatio)
+	// Calculate pixel dimensions for the renderer
+	var renderWidth, renderHeight int
+	if m.imageProtocol == termimg.Halfblocks {
+		// Mosaic uses pixels (2 per cell dimension), so double
+		renderWidth = displayWidth * 2
+		renderHeight = displayHeight * 2
+	} else {
+		renderWidth = displayWidth
+		renderHeight = displayHeight
+	}
+
+	logger.Printf("Artist thumbnail sizing: src=%dx%d, display=%dx%d cells, render=%dx%d, cellRatio=%.2f",
+		imgBounds.Dx(), imgBounds.Dy(), displayWidth, displayHeight, renderWidth, renderHeight, m.cellRatio)
 
 	tiImg := termimg.New(img).
-		Size(displayWidth, displayHeight).
+		Size(renderWidth, renderHeight).
 		Scale(termimg.ScaleFit).
 		Protocol(termimg.Auto).
 		ZIndex(1)
@@ -4449,8 +4475,8 @@ func (m Model) handleArtistImageLoaded(msg artistImageLoadedMsg) (tea.Model, tea
 		}
 		m.artistArtCache[strings.ToLower(m.currentSong.Artist)] = artistArtCacheEntry{
 			rendered: rendered,
-			width:    displayWidth,
-			height:   displayHeight,
+			width:    displayWidth,  // store in cells
+			height:   displayHeight, // store in cells
 		}
 	}
 
@@ -4825,7 +4851,7 @@ func (m Model) View() tea.View {
 			// Kitty: reserve blank space (image overlays via tea.Raw)
 			artHeight := 16
 			for i := 0; i < artHeight+1; i++ {
-				b.WriteString("\\n")
+				b.WriteString("\n")
 			}
 		}
 	}
