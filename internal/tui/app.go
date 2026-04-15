@@ -4523,20 +4523,6 @@ func (m Model) altView(s string) tea.View {
 	return v
 }
 
-// positionImage positions a multi-line image string at the specified row and column.
-// For protocols like halfblocks that output multi-line content, each newline resets
-// to column 1, so we need to prepend a cursor position escape before each line.
-func positionImage(imgStr string, row, col int) string {
-	lines := strings.Split(imgStr, "\n")
-	var b strings.Builder
-	for i, line := range lines {
-		if line != "" {
-			b.WriteString(fmt.Sprintf("\x1b[%d;%dH%s", row+i, col, line))
-		}
-	}
-	return b.String()
-}
-
 // View renders the TUI
 func (m Model) View() tea.View {
 	if m.err != nil {
@@ -4839,17 +4825,11 @@ func (m Model) View() tea.View {
 
 	// For narrow layout: reserve space for album art at top-left
 	// by prepending blank lines before NowPlaying
+	// All protocols use tea.Raw for image rendering, so we just reserve space here
 	if isNarrow {
-		if m.imageProtocol != termimg.Kitty && m.config.ShowAlbumArt && m.albumArtLoaded && m.albumArtStr != "" {
-			// Non-Kitty: embed image inline at top-left position (row 3, col 2)
-			// Use positionImage to handle multi-line output correctly
-			b.WriteString(positionImage(m.albumArtStr, 3, 2))
-		} else {
-			// Kitty: reserve blank space (image overlays via tea.Raw)
-			artHeight := 16
-			for i := 0; i < artHeight+1; i++ {
-				b.WriteString("\n")
-			}
+		artHeight := 16
+		for i := 0; i < artHeight+1; i++ {
+			b.WriteString("\n")
 		}
 	}
 
@@ -4865,21 +4845,6 @@ func (m Model) View() tea.View {
 	// Only show when truly at end of content, not while still playing and polling for next block
 	if m.pollingNextBlock && !m.mpvBackend.IsRunning() && !m.jukeboxMode && !m.offlineMode {
 		b.WriteString(m.styles.MutedStyle.Render("Ahead of livestream. Awaiting new songs"+m.spinner.View()+" ") + "\n")
-	}
-
-	// Non-Kitty: embed album art at right side for Large/Medium layouts
-	if m.imageProtocol != termimg.Kitty && m.config.ShowAlbumArt && m.albumArtLoaded && m.albumArtStr != "" && !isCompact && !isNarrow {
-		artWidth := m.albumArtWidth
-		if artWidth < 10 {
-			artWidth = 10
-		}
-		artCol := m.width - artWidth - 2
-		if artCol < 1 {
-			artCol = 1
-		}
-		// Position at row 3 (after header), column artCol
-		// Use positionImage to handle multi-line output correctly
-		b.WriteString(positionImage(m.albumArtStr, 3, artCol))
 	}
 
 	// Footer rendering
@@ -4990,10 +4955,8 @@ func (m Model) View() tea.View {
 }
 
 // renderImagesCmd returns a tea.Cmd that sends all terminal images (album art
-// and artist thumbnail) via tea.Raw. Both images must be drawn in one call
-// because ClearAll removes all kitty placements.
-// For non-Kitty protocols (Sixel, ITerm2, Halfblocks), images are embedded
-// directly in View() output, so this function returns nil for those protocols.
+// and artist thumbnail) via tea.Raw. All protocols use tea.Raw to bypass
+// bubbletea's StyledString which doesn't support cursor positioning escapes.
 func (m Model) renderImagesCmd() tea.Cmd {
 	// Suppress all images when layout prompt is active
 	if layoutPromptActive {
@@ -5009,11 +4972,6 @@ func (m Model) renderImagesCmd() tea.Cmd {
 		return nil
 	}
 
-	// Non-Kitty protocols: images are embedded in View() output
-	if m.imageProtocol != termimg.Kitty {
-		return nil
-	}
-
 	hasAlbumArt := m.config.ShowAlbumArt && m.albumArtLoaded && m.albumArtStr != "" && m.layoutMode != LayoutCompact
 	hasArtistArt := m.artistArtLoaded && m.artistArtStr != "" && m.bottomViewMode == ViewArtist
 
@@ -5021,8 +4979,14 @@ func (m Model) renderImagesCmd() tea.Cmd {
 		return nil
 	}
 
-	clearStr := termimg.ClearAllString()
-	raw := clearStr
+	var raw string
+
+	// Kitty needs ClearAll to remove previous placements
+	if m.imageProtocol == termimg.Kitty {
+		raw = termimg.ClearAllString()
+	} else {
+		raw = ""
+	}
 
 	if hasAlbumArt {
 		artHeight := 16
