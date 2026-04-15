@@ -48,13 +48,14 @@ type GalleryRenderImageMsg struct {
 
 // Gallery modal for viewing artist images
 type Gallery struct {
-	styles     *config.ThemeStyles
-	urls       []string
-	source     string
-	currentIdx int
-	termWidth  int
-	termHeight int
-	cellRatio  float64
+	styles        *config.ThemeStyles
+	urls          []string
+	source        string
+	currentIdx    int
+	termWidth     int
+	termHeight    int
+	cellRatio     float64
+	imageProtocol termimg.Protocol
 
 	// Image state
 	images  []image.Image // decoded images (nil until loaded)
@@ -86,6 +87,11 @@ func NewGallery(styles *config.ThemeStyles, urls []string, source string, termWi
 		loaded:     make(map[int]bool),
 	}
 	return g
+}
+
+// SetProtocol sets the image protocol for rendering
+func (g *Gallery) SetProtocol(p termimg.Protocol) {
+	g.imageProtocol = p
 }
 
 // PrefetchImages returns commands to load the current and adjacent images
@@ -353,8 +359,13 @@ func (g *Gallery) imageAreaHeight() int {
 
 // RenderImageCmd returns a tea.Cmd that draws the current image at its
 // computed screen position via tea.Raw(), after a short delay.
+// For non-Kitty protocols, images are embedded in View() output.
 func (g *Gallery) RenderImageCmd() tea.Cmd {
 	if g.renderedStr == "" {
+		return nil
+	}
+	// Non-Kitty: images embedded in View() output
+	if g.imageProtocol != termimg.Kitty {
 		return nil
 	}
 	row, col := g.ImageScreenPosition()
@@ -366,8 +377,9 @@ func (g *Gallery) RenderImageCmd() tea.Cmd {
 	})
 }
 
-// View renders the text-only modal content. Images are drawn separately
-// via tea.Raw() at absolute screen coordinates (see RenderImageCmd).
+// View renders the text-only modal content. For Kitty, images are drawn
+// separately via tea.Raw() at absolute screen coordinates (see RenderImageCmd).
+// For non-Kitty protocols, images are embedded directly in the view output.
 func (g Gallery) View() string {
 	modalWidth := g.modalWidth()
 	contentWidth := modalWidth - galleryModalBorder*2 - galleryModalPadH
@@ -384,17 +396,23 @@ func (g Gallery) View() string {
 	b.WriteString(centerStyled(titleLine, contentWidth))
 	b.WriteString("\n\n")
 
-	// Fixed image area — shows status text on first line, actual image drawn via tea.Raw()
-	if g.loading[g.currentIdx] {
+	// Fixed image area — shows status text on first line, or embedded image for non-Kitty
+	if g.imageProtocol != termimg.Kitty && g.renderedStr != "" && !g.renderFailed {
+		// Non-Kitty: embed image inline at cursor position
+		row, col := g.ImageScreenPosition()
+		b.WriteString(fmt.Sprintf("\x1b[%d;%dH%s", row, col, g.renderedStr))
+	} else if g.loading[g.currentIdx] {
 		b.WriteString(centerStyled(mutedStyle.Render("Loading image..."), contentWidth))
 	} else if g.renderFailed {
 		b.WriteString(centerStyled(mutedStyle.Render("Failed to render image"), contentWidth))
 	} else if g.renderedStr == "" {
 		b.WriteString(centerStyled(mutedStyle.Render("Loading image..."), contentWidth))
 	}
-	// Pad remaining image area lines
-	for i := 1; i < imageAreaH; i++ {
-		b.WriteString("\n")
+	// Pad remaining image area lines (for Kitty, or when loading/failed)
+	if g.imageProtocol == termimg.Kitty || g.renderedStr == "" || g.renderFailed || g.loading[g.currentIdx] {
+		for i := 1; i < imageAreaH; i++ {
+			b.WriteString("\n")
+		}
 	}
 
 	// Blank line before source
@@ -408,7 +426,7 @@ func (g Gallery) View() string {
 	b.WriteString("\n")
 
 	// Help text
-	helpText := accentStyle.Render("←/→") + mutedStyle.Render(" navigate  ") +
+	helpText := accentStyle.Render("←/→") + mutedStyle.Render(" navigate ") +
 		accentStyle.Render("esc") + mutedStyle.Render(" close")
 	b.WriteString(centerStyled(helpText, contentWidth))
 

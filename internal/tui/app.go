@@ -361,6 +361,9 @@ type Model struct {
 	// Terminal cell ratio for album art aspect ratio correction
 	cellRatio float64
 
+	// Detected image protocol (Kitty, Sixel, ITerm2, or Halfblocks)
+	imageProtocol termimg.Protocol
+
 	// Notification tracking
 	notifSentForSong bool // true once desktop notification fired for current song
 
@@ -423,6 +426,9 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 	if cellRatio <= 0 {
 		cellRatio = 2.0 // fallback (typical terminal: ~2x taller than wide)
 	}
+
+	// Detect image protocol (Kitty, Sixel, ITerm2, or Halfblocks)
+	imageProtocol := termimg.DetectProtocol()
 
 	// Initialize API clients
 	rpAPI := api.NewRadioParadiseAPI(cfg.Channel, cfg.Bitrate)
@@ -592,6 +598,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 		help:                   help,
 		spinner:                sp,
 		cellRatio:              cellRatio,
+		imageProtocol:          imageProtocol,
 		downloadResults:        make(chan favoriteDownloadMsg, 1),
 		jukeboxMode:            startJukebox,
 		jukeboxBatchSize:       10,
@@ -659,6 +666,9 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 	if cellRatio <= 0 {
 		cellRatio = 2.0
 	}
+
+	// Detect image protocol (Kitty, Sixel, ITerm2, or Halfblocks)
+	imageProtocol := termimg.DetectProtocol()
 
 	// Initialize API clients (lyrics, artist info still available for lookups)
 	rpAPI := api.NewRadioParadiseAPI(cfg.Channel, cfg.Bitrate)
@@ -759,6 +769,7 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 		help:                        help,
 		spinner:                     sp,
 		cellRatio:                   cellRatio,
+		imageProtocol:               imageProtocol,
 		downloadResults:             make(chan favoriteDownloadMsg, 1),
 		offlineMode:                 true,
 		offlineCache:                cacheName,
@@ -1465,7 +1476,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.config.ShowSkipWarning && !m.skipWarningShown && favCount < m.config.MinFavorites {
 			m.skipWarningShown = true
 			m.activeModal = ModalSkipWarning
-			return m, clearKittyImagesCmd()
+			return m, clearKittyImagesCmdIf(m.imageProtocol)
 		}
 		if m.currentSongIndex < len(m.songs)-1 {
 			if err := m.mpvBackend.SkipNext(); err == nil {
@@ -1543,7 +1554,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		m.ratingModal = modals.NewRating(m.styles, m.currentSong.Title, m.currentSong.Artist, m.currentSong.Album, m.currentSong.Year, userRating)
 		m.activeModal = ModalRating
-		return m, clearKittyImagesCmd()
+		return m, clearKittyImagesCmdIf(m.imageProtocol)
 
 	case "left", "right":
 		// Seek: left=-10s, right=+10s
@@ -1607,7 +1618,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 		// Clear artist image when leaving artist view
 		if prevMode == ViewArtist && m.bottomViewMode != ViewArtist {
-			cmds = append(cmds, clearKittyImagesCmd(), renderAlbumArtAfterDelay())
+			cmds = append(cmds, clearKittyImagesCmdIf(m.imageProtocol), renderAlbumArtAfterDelay())
 		}
 
 		// Initialize visualizer when entering the view
@@ -1844,7 +1855,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		m.optionsModal = modals.NewOptions(m.styles, m.config.Channel, m.config.Bitrate, m.config.ShowAlbumArt, m.config.ShowSkipWarning, m.config.CopyAlbumArt, m.config.NotificationsEnabled, m.config.NotificationsShowArt, m.config.Visualizer.Mode, m.config.ColorsFile, m.config.Theme)
 		m.activeModal = ModalOptions
-		return m, clearKittyImagesCmd()
+		return m, clearKittyImagesCmdIf(m.imageProtocol)
 
 	case "z":
 		// Sleep timer modal — only in large and medium layouts
@@ -1860,7 +1871,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		m.sleepTimerModal = modals.NewSleepTimer(m.styles, m.sleepTimerActive, remaining)
 		m.activeModal = ModalSleepTimer
-		return m, clearKittyImagesCmd()
+		return m, clearKittyImagesCmdIf(m.imageProtocol)
 
 	case "m":
 		// Manage favorites modal — only in large and medium layouts
@@ -1872,7 +1883,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		m.favoritesModal = modals.NewFavorites(m.styles, m.cacheManager, m.width, m.height)
 		m.activeModal = ModalFavorites
-		return m, clearKittyImagesCmd()
+		return m, clearKittyImagesCmdIf(m.imageProtocol)
 
 	case "i":
 		// Gallery modal — only in large layout
@@ -1887,9 +1898,10 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				m.width, m.height,
 				m.cellRatio,
 			)
+			m.galleryModal.SetProtocol(m.imageProtocol)
 			m.activeModal = ModalGallery
 			return m, tea.Batch(
-				clearKittyImagesCmd(),
+				clearKittyImagesCmdIf(m.imageProtocol),
 				m.galleryModal.PrefetchImages(),
 			)
 		}
@@ -1905,13 +1917,13 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if m.visFullscreen {
 				return m, tea.Batch(
 					setStatus(&m, "Visualizer: fullscreen", false),
-					clearKittyImagesCmd(),
+					clearKittyImagesCmdIf(m.imageProtocol),
 				)
 			}
 			// Exiting fullscreen: restore album art
 			return m, tea.Batch(
 				setStatus(&m, "Visualizer: windowed", false),
-				clearKittyImagesCmd(),
+				clearKittyImagesCmdIf(m.imageProtocol),
 				renderAlbumArtAfterDelay(),
 			)
 		}
@@ -2315,7 +2327,7 @@ func (m Model) exitJukeboxMode() (tea.Model, tea.Cmd) {
 
 	return m, tea.Batch(
 		tickProgressCmd(),
-		clearKittyImagesCmd(),
+		clearKittyImagesCmdIf(m.imageProtocol),
 		setStatus(&m, "Jukebox mode off", false),
 		m.fetchBlockCmd,
 	)
@@ -2362,7 +2374,7 @@ func (m Model) startJukeboxPlayback() (tea.Model, tea.Cmd) {
 
 	logger.Printf("Jukebox: started batch of %d songs, %d remaining", batchSize, len(m.jukeboxQueue))
 
-	return m, tea.Batch(clearKittyImagesCmd(), setStatus(&m, fmt.Sprintf("🎶 Jukebox: %d songs", m.jukeboxTotal), false), m.songChangedCmds())
+	return m, tea.Batch(clearKittyImagesCmdIf(m.imageProtocol), setStatus(&m, fmt.Sprintf("🎶 Jukebox: %d songs", m.jukeboxTotal), false), m.songChangedCmds())
 }
 
 // startSleepTimer starts a sleep timer with the given duration
@@ -4772,9 +4784,16 @@ func (m Model) View() tea.View {
 	// For narrow layout: reserve space for album art at top-left
 	// by prepending blank lines before NowPlaying
 	if isNarrow {
-		artHeight := 16
-		for i := 0; i < artHeight+1; i++ {
-			b.WriteString("\n")
+		if m.imageProtocol != termimg.Kitty && m.config.ShowAlbumArt && m.albumArtLoaded && m.albumArtStr != "" {
+			// Non-Kitty: embed image inline at top-left position (row 3, col 2)
+			artCol := 2
+			b.WriteString(fmt.Sprintf("\x1b[3;%dH%s", artCol, m.albumArtStr))
+		} else {
+			// Kitty: reserve blank space (image overlays via tea.Raw)
+			artHeight := 16
+			for i := 0; i < artHeight+1; i++ {
+				b.WriteString("\n")
+			}
 		}
 	}
 
@@ -4790,6 +4809,21 @@ func (m Model) View() tea.View {
 	// Only show when truly at end of content, not while still playing and polling for next block
 	if m.pollingNextBlock && !m.mpvBackend.IsRunning() && !m.jukeboxMode && !m.offlineMode {
 		b.WriteString(m.styles.MutedStyle.Render("Ahead of livestream. Awaiting new songs"+m.spinner.View()+" ") + "\n")
+	}
+
+	// Non-Kitty: embed album art at right side for Large/Medium layouts
+	if m.imageProtocol != termimg.Kitty && m.config.ShowAlbumArt && m.albumArtLoaded && m.albumArtStr != "" && !isCompact && !isNarrow {
+		artHeight := 16
+		artWidth := int(float64(artHeight) * m.cellRatio)
+		if artWidth < 10 {
+			artWidth = 10
+		}
+		artCol := m.width - artWidth - 2
+		if artCol < 1 {
+			artCol = 1
+		}
+		// Position at row 3 (after header), column artCol
+		b.WriteString(fmt.Sprintf("\x1b[3;%dH%s", artCol, m.albumArtStr))
 	}
 
 	// Footer rendering
@@ -4860,6 +4894,10 @@ func (m Model) View() tea.View {
 				// Check if space was sufficient for thumbnail rendering
 				availableSpace := m.height - 20 - 3
 				if availableSpace >= m.artistArtHeight {
+					// Non-Kitty: embed artist thumbnail at row 20, column 2
+					if m.imageProtocol != termimg.Kitty {
+						b.WriteString(fmt.Sprintf("\x1b[20;2H%s", m.artistArtStr))
+					}
 					leftPad := strings.Repeat(" ", m.artistArtWidth+5)
 					vpLines := strings.Split(viewportContent, "\n")
 					for i, line := range vpLines {
@@ -4898,6 +4936,8 @@ func (m Model) View() tea.View {
 // renderImagesCmd returns a tea.Cmd that sends all terminal images (album art
 // and artist thumbnail) via tea.Raw. Both images must be drawn in one call
 // because ClearAll removes all kitty placements.
+// For non-Kitty protocols (Sixel, ITerm2, Halfblocks), images are embedded
+// directly in View() output, so this function returns nil for those protocols.
 func (m Model) renderImagesCmd() tea.Cmd {
 	// Suppress all images when layout prompt is active
 	if layoutPromptActive {
@@ -4910,6 +4950,11 @@ func (m Model) renderImagesCmd() tea.Cmd {
 
 	// Suppress all images when in fullscreen visualizer
 	if m.visFullscreen && m.bottomViewMode == ViewVisualizer {
+		return nil
+	}
+
+	// Non-Kitty protocols: images are embedded in View() output
+	if m.imageProtocol != termimg.Kitty {
 		return nil
 	}
 
