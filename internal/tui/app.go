@@ -4750,14 +4750,33 @@ func (m Model) View() tea.View {
 		}
 		m.nowPlayingWidget.SetWidth(min(m.width-4, artWidth))
 		m.nowPlayingWidget.SetMaxWidth(artWidth)
+		m.nowPlayingWidget.SetContentWidth(0) // No limit - album art is above content
 	} else if isCompact {
 		// Compact: no album art, full width but truncate long text
 		m.nowPlayingWidget.SetWidth(m.width - 4)
 		m.nowPlayingWidget.SetMaxWidth(m.width - 6)
+		m.nowPlayingWidget.SetContentWidth(0) // No album art, no limit needed
 	} else {
 		// Large and medium: full width, no truncation
 		m.nowPlayingWidget.SetWidth(m.width - 4)
 		m.nowPlayingWidget.SetMaxWidth(0)
+		// Set content width to prevent "clear to end of line" from slicing album art
+		if m.config.ShowAlbumArt {
+			artHeight := 16
+			artWidth := int(float64(artHeight) * m.cellRatio)
+			if artWidth < 10 {
+				artWidth = 10
+			}
+			artCol := m.width - artWidth - 2
+			if artCol > 10 {
+				// Leave 2 char margin before album art
+				m.nowPlayingWidget.SetContentWidth(artCol - 2)
+			} else {
+				m.nowPlayingWidget.SetContentWidth(0)
+			}
+		} else {
+			m.nowPlayingWidget.SetContentWidth(0)
+		}
 	}
 
 	// Determine RP favorites indicator (needed for NowPlaying view)
@@ -4915,10 +4934,8 @@ func (m Model) View() tea.View {
 				// Check if space was sufficient for thumbnail rendering
 				availableSpace := m.height - 20 - 3
 				if availableSpace >= m.artistArtHeight {
-					// Non-Kitty: embed artist thumbnail at row 20, column 2
-					if m.imageProtocol != termimg.Kitty {
-						b.WriteString(fmt.Sprintf("\x1b[20;2H%s", m.artistArtStr))
-					}
+					// Artist thumbnail is rendered via tea.Raw() in renderImagesCmd()
+					// Just pad viewport content to the right of the image
 					leftPad := strings.Repeat(" ", m.artistArtWidth+5)
 					vpLines := strings.Split(viewportContent, "\n")
 					for i, line := range vpLines {
