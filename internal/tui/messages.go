@@ -9,6 +9,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	termimg "github.com/blacktop/go-termimg"
 	"github.com/pdfrg/rptui/internal/api"
 	"github.com/pdfrg/rptui/internal/cache"
 	"github.com/pdfrg/rptui/internal/config"
@@ -199,8 +200,19 @@ func renderArtistArtAfterDelay() tea.Cmd {
 // to the terminal via tea.Raw, bypassing the cell-based renderer. This is
 // needed because APC sequences embedded in View() content get consumed by the
 // cell buffer and don't reliably reach the terminal.
+// This should only be called for Kitty protocol - for other protocols, use
+// clearKittyImagesCmdIf which checks the protocol first.
 func clearKittyImagesCmd() tea.Cmd {
-	return tea.Raw("\x1b_Ga=d,d=A\x1b\\")
+	return tea.Raw("\\x1b_Ga=d,d=A\\x1b\\\\")
+}
+
+// clearKittyImagesCmdIf returns a clear command only if the protocol is Kitty.
+// For non-Kitty protocols, returns nil (images are embedded in View() output).
+func clearKittyImagesCmdIf(protocol termimg.Protocol) tea.Cmd {
+	if protocol != termimg.Kitty {
+		return nil
+	}
+	return clearKittyImagesCmd()
 }
 
 // tickProgressCmd returns a command that sends progressTickMsg every second
