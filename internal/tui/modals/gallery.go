@@ -86,6 +86,9 @@ type Gallery struct {
 	renderedW    int // display width in columns
 	renderedH    int // display height in rows
 	renderFailed bool
+
+	// Track if first image has been displayed (for clearing strategy)
+	firstImageDisplayed bool
 }
 
 // NewGallery creates a new Gallery modal
@@ -307,7 +310,7 @@ func (g *Gallery) renderCurrentImage() {
 	tiImg := termimg.New(img).
 		Size(renderWidth, renderHeight).
 		Scale(termimg.ScaleFit).
-		Protocol(termimg.Auto)
+		Protocol(g.imageProtocol)
 
 	g.logger.Printf("DEBUG Gallery: protocol=%s, cellRatio=%.2f, maxW=%d, maxH=%d, displayW=%d, displayH=%d, imgSrc=%dx%d, renderW=%d, renderH=%d",
 		g.imageProtocol, g.cellRatio, maxW, maxH, displayWidth, displayHeight, imgBounds.Dx(), imgBounds.Dy(), renderWidth, renderHeight)
@@ -392,29 +395,40 @@ func (g *Gallery) imageAreaHeight() int {
 
 // RenderImageCmd returns a tea.Cmd that draws the current image at its
 // computed screen position via tea.Raw(), after a short delay.
+// For first image: just render (modal text visible underneath)
+// For subsequent navigations: tea.ClearScreen() first (clears old image), then render
 func (g *Gallery) RenderImageCmd() tea.Cmd {
 	if g.renderedStr == "" {
 		return nil
 	}
+
+	// Set flag synchronously here - will be true for all subsequent navigations
+	g.firstImageDisplayed = true
+
 	row, col := g.ImageScreenPosition()
 	imgStr := g.renderedStr
 
-	var clearStr string
-	if g.imageProtocol == termimg.Kitty {
-		clearStr = termimg.ClearAllString()
-	}
-
-	return tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
+	// Build the image render command
+	renderCmd := tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
+		// Just render the image - no clear sequence
+		// For Kitty: ClearAllString clears previous images
+		// For other protocols: just render on top
 		var raw string
-		// For Kitty: single escape sequence, position directly
-		// For other protocols (halfblocks/sixel/iterm2): may contain newlines, position each line
 		if g.imageProtocol == termimg.Kitty {
-			raw = clearStr + fmt.Sprintf("\x1b[s\x1b[%d;%dH%s\x1b[u", row, col, imgStr)
+			raw = termimg.ClearAllString() + fmt.Sprintf("\x1b[s\x1b[%d;%dH%s\x1b[u", row, col, imgStr)
 		} else {
-			raw = clearStr + "\x1b[s" + positionImage(imgStr, row, col) + "\x1b[u"
+			raw = "\x1b[s" + positionImage(imgStr, row, col) + "\x1b[u"
 		}
 		return GalleryRenderImageMsg{ImageStr: raw}
 	})
+
+	// For subsequent navigations: clear screen first, then render
+	// This clears the old image before the new one appears
+	clearCmd := tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
+		return tea.ClearScreen()
+	})
+
+	return tea.Batch(clearCmd, renderCmd)
 }
 
 // View renders the text-only modal content. Images are drawn separately
