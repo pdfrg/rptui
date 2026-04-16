@@ -281,7 +281,8 @@ On first run, a default configuration file is created.
 
 Place in `~/.config/hypr/bindings.conf`.
 Customize command to point to the rptui binary on your system, or just 'rptui' if in PATH.
-Size is in the format (width height). Adjust to your preferences, though sizes below are recommended minimums.
+Size is in the format (width height). Adjust to your preferences.
+Sizes below are recommended minimums, based on use of 11pt font in the terminal.
 For large (default) and medium, more narrow will work, but some keybindings won't be shown in the footer.
 
 ```

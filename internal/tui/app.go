@@ -28,6 +28,7 @@ import (
 	"github.com/adrg/xdg"
 	"github.com/blacktop/go-termimg"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/nfnt/resize"
 	"github.com/pdfrg/rptui/internal/api"
 	"github.com/pdfrg/rptui/internal/cache"
 	"github.com/pdfrg/rptui/internal/config"
@@ -3250,12 +3251,35 @@ func (m Model) handleImageLoaded(msg imageLoadedMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	tiImg := termimg.New(img).
-		Size(width, height).
-		Scale(termimg.ScaleFit).
-		Protocol(termimg.Auto)
-
-	logger.Printf("DEBUG AlbumArt: cellRatio=%.2f, protocol=%s, targetW=%d, targetH=%d", m.cellRatio, m.imageProtocol, width, height)
+	// Sixel workaround: pre-scale image to exact pixel dimensions to match raster attributes.
+	// Without this, ScaleFit preserves aspect ratio (e.g., 500x500 -> 204x204) but the SixelRenderer
+	// declares raster attributes as 204x208 (from cell dimensions), causing xterm to misrender.
+	var tiImg *termimg.Image
+	if m.imageProtocol == termimg.Sixel {
+		features := termimg.QueryTerminalFeatures()
+		fontW, fontH := features.FontWidth, features.FontHeight
+		if fontW <= 0 {
+			fontW = 8
+		}
+		if fontH <= 0 {
+			fontH = 16
+		}
+		pixelW := width * fontW
+		pixelH := height * fontH
+		scaledImg := resize.Resize(uint(pixelW), uint(pixelH), img, resize.MitchellNetravali)
+		tiImg = termimg.New(scaledImg).
+			Size(pixelW, pixelH).
+			Scale(termimg.ScaleNone).
+			Protocol(termimg.Auto)
+		logger.Printf("DEBUG AlbumArt: cellRatio=%.2f, protocol=Sixel, targetW=%d, targetH=%d, font=%dx%d, pixelW=%d, pixelH=%d",
+			m.cellRatio, width, height, fontW, fontH, pixelW, pixelH)
+	} else {
+		tiImg = termimg.New(img).
+			Size(width, height).
+			Scale(termimg.ScaleFit).
+			Protocol(termimg.Auto)
+		logger.Printf("DEBUG AlbumArt: cellRatio=%.2f, protocol=%s, targetW=%d, targetH=%d", m.cellRatio, m.imageProtocol, width, height)
+	}
 
 	rendered, err := tiImg.Render()
 	if err != nil {
@@ -4464,14 +4488,38 @@ func (m Model) handleArtistImageLoaded(msg artistImageLoadedMsg) (tea.Model, tea
 		renderHeight = displayHeight
 	}
 
-	logger.Printf("Artist thumbnail sizing: src=%dx%d, display=%dx%d cells, render=%dx%d, cellRatio=%.2f",
-		imgBounds.Dx(), imgBounds.Dy(), displayWidth, displayHeight, renderWidth, renderHeight, m.cellRatio)
-
-	tiImg := termimg.New(img).
-		Size(renderWidth, renderHeight).
-		Scale(termimg.ScaleFit).
-		Protocol(termimg.Auto).
-		ZIndex(1)
+	// Sixel workaround: pre-scale image to exact pixel dimensions to match raster attributes.
+	// Without this, ScaleFit preserves aspect ratio but the SixelRenderer declares raster attributes
+	// based on cell dimensions, causing xterm to misrender the image.
+	var tiImg *termimg.Image
+	if m.imageProtocol == termimg.Sixel {
+		features := termimg.QueryTerminalFeatures()
+		fontW, fontH := features.FontWidth, features.FontHeight
+		if fontW <= 0 {
+			fontW = 8
+		}
+		if fontH <= 0 {
+			fontH = 16
+		}
+		pixelW := renderWidth * fontW
+		pixelH := renderHeight * fontH
+		scaledImg := resize.Resize(uint(pixelW), uint(pixelH), img, resize.MitchellNetravali)
+		tiImg = termimg.New(scaledImg).
+			Size(pixelW, pixelH).
+			Scale(termimg.ScaleNone).
+			Protocol(termimg.Auto).
+			ZIndex(1)
+		logger.Printf("Artist thumbnail sizing: src=%dx%d, display=%dx%d cells, render=%dx%d, cellRatio=%.2f, sixel pixelW=%d, pixelH=%d",
+			imgBounds.Dx(), imgBounds.Dy(), displayWidth, displayHeight, renderWidth, renderHeight, m.cellRatio, pixelW, pixelH)
+	} else {
+		tiImg = termimg.New(img).
+			Size(renderWidth, renderHeight).
+			Scale(termimg.ScaleFit).
+			Protocol(termimg.Auto).
+			ZIndex(1)
+		logger.Printf("Artist thumbnail sizing: src=%dx%d, display=%dx%d cells, render=%dx%d, cellRatio=%.2f",
+			imgBounds.Dx(), imgBounds.Dy(), displayWidth, displayHeight, renderWidth, renderHeight, m.cellRatio)
+	}
 
 	rendered, err := tiImg.Render()
 	if err != nil {
