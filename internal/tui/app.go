@@ -428,6 +428,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 	if cellRatio <= 0 {
 		cellRatio = 2.0 // fallback (typical terminal: ~2x taller than wide)
 	}
+	logger.Printf("DEBUG: FontWidth=%d, FontHeight=%d, cellRatio=%.2f", features.FontWidth, features.FontHeight, cellRatio)
 
 	// Detect image protocol (Kitty, Sixel, ITerm2, or Halfblocks)
 	imageProtocol := termimg.DetectProtocol()
@@ -1910,6 +1911,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				m.artistInfo.GallerySource,
 				m.width, m.height,
 				m.cellRatio,
+				logger,
 			)
 			m.galleryModal.SetProtocol(m.imageProtocol)
 			m.activeModal = ModalGallery
@@ -3250,8 +3252,10 @@ func (m Model) handleImageLoaded(msg imageLoadedMsg) (tea.Model, tea.Cmd) {
 
 	tiImg := termimg.New(img).
 		Size(width, height).
-		Scale(termimg.ScaleFill).
+		Scale(termimg.ScaleFit).
 		Protocol(termimg.Auto)
+
+	logger.Printf("DEBUG AlbumArt: cellRatio=%.2f, protocol=%s, targetW=%d, targetH=%d", m.cellRatio, m.imageProtocol, width, height)
 
 	rendered, err := tiImg.Render()
 	if err != nil {
@@ -4465,7 +4469,7 @@ func (m Model) handleArtistImageLoaded(msg artistImageLoadedMsg) (tea.Model, tea
 
 	tiImg := termimg.New(img).
 		Size(renderWidth, renderHeight).
-		Scale(termimg.ScaleFill).
+		Scale(termimg.ScaleFit).
 		Protocol(termimg.Auto).
 		ZIndex(1)
 
