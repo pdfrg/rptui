@@ -8,6 +8,7 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -73,6 +74,7 @@ type Gallery struct {
 	termHeight    int
 	cellRatio     float64
 	imageProtocol termimg.Protocol
+	logger        *log.Logger
 
 	// Image state
 	images  []image.Image // decoded images (nil until loaded)
@@ -87,7 +89,7 @@ type Gallery struct {
 }
 
 // NewGallery creates a new Gallery modal
-func NewGallery(styles *config.ThemeStyles, urls []string, source string, termWidth, termHeight int, cellRatio float64) *Gallery {
+func NewGallery(styles *config.ThemeStyles, urls []string, source string, termWidth, termHeight int, cellRatio float64, logger *log.Logger) *Gallery {
 	if cellRatio < 1.0 {
 		cellRatio = 2.0
 	}
@@ -99,6 +101,7 @@ func NewGallery(styles *config.ThemeStyles, urls []string, source string, termWi
 		termWidth:  termWidth,
 		termHeight: termHeight,
 		cellRatio:  cellRatio,
+		logger:     logger,
 		images:     make([]image.Image, len(urls)),
 		loading:    make(map[int]bool),
 		loaded:     make(map[int]bool),
@@ -303,8 +306,11 @@ func (g *Gallery) renderCurrentImage() {
 
 	tiImg := termimg.New(img).
 		Size(renderWidth, renderHeight).
-		Scale(termimg.ScaleFill).
+		Scale(termimg.ScaleFit).
 		Protocol(termimg.Auto)
+
+	g.logger.Printf("DEBUG Gallery: protocol=%s, cellRatio=%.2f, maxW=%d, maxH=%d, displayW=%d, displayH=%d, imgSrc=%dx%d, renderW=%d, renderH=%d",
+		g.imageProtocol, g.cellRatio, maxW, maxH, displayWidth, displayHeight, imgBounds.Dx(), imgBounds.Dy(), renderWidth, renderHeight)
 
 	rendered, err := tiImg.Render()
 	if err != nil {
@@ -312,6 +318,7 @@ func (g *Gallery) renderCurrentImage() {
 		return
 	}
 	g.renderedStr = rendered
+	g.logger.Printf("DEBUG Gallery: rendered len=%d", len(rendered))
 	g.renderedW = displayWidth  // store in cells
 	g.renderedH = displayHeight // store in cells
 }
@@ -385,27 +392,34 @@ func (g *Gallery) imageAreaHeight() int {
 
 // RenderImageCmd returns a tea.Cmd that draws the current image at its
 // computed screen position via tea.Raw(), after a short delay.
-// For non-Kitty protocols, images are embedded in View() output.
 func (g *Gallery) RenderImageCmd() tea.Cmd {
 	if g.renderedStr == "" {
 		return nil
 	}
-	// Non-Kitty: images embedded in View() output
-	if g.imageProtocol != termimg.Kitty {
-		return nil
-	}
 	row, col := g.ImageScreenPosition()
 	imgStr := g.renderedStr
+
+	var clearStr string
+	if g.imageProtocol == termimg.Kitty {
+		clearStr = termimg.ClearAllString()
+	}
+
 	return tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
-		clearStr := termimg.ClearAllString()
-		raw := clearStr + fmt.Sprintf("\x1b[s\x1b[%d;%dH%s\x1b[u", row, col, imgStr)
+		var raw string
+		// For Kitty: single escape sequence, position directly
+		// For other protocols (halfblocks/sixel/iterm2): may contain newlines, position each line
+		if g.imageProtocol == termimg.Kitty {
+			raw = clearStr + fmt.Sprintf("\x1b[s\x1b[%d;%dH%s\x1b[u", row, col, imgStr)
+		} else {
+			raw = clearStr + "\x1b[s" + positionImage(imgStr, row, col) + "\x1b[u"
+		}
 		return GalleryRenderImageMsg{ImageStr: raw}
 	})
 }
 
-// View renders the text-only modal content. For Kitty, images are drawn
-// separately via tea.Raw() at absolute screen coordinates (see RenderImageCmd).
-// For non-Kitty protocols, images are embedded directly in the view output.
+// View renders the text-only modal content. Images are drawn separately
+// via tea.Raw() at absolute screen coordinates (see RenderImageCmd).
+// This ensures escape sequences aren't processed by bubbletea's styling.
 func (g Gallery) View() string {
 	modalWidth := g.modalWidth()
 	contentWidth := modalWidth - galleryModalBorder*2 - galleryModalPadH
@@ -422,24 +436,18 @@ func (g Gallery) View() string {
 	b.WriteString(centerStyled(titleLine, contentWidth))
 	b.WriteString("\n\n")
 
-	// Fixed image area — shows status text on first line, or embedded image for non-Kitty
-	if g.imageProtocol != termimg.Kitty && g.renderedStr != "" && !g.renderFailed {
-		// Non-Kitty: embed image inline at computed position
-		// Use positionImage to handle multi-line output correctly
-		row, col := g.ImageScreenPosition()
-		b.WriteString(positionImage(g.renderedStr, row, col))
-	} else if g.loading[g.currentIdx] {
+	// Fixed image area — shows status text when loading/failed, or blank when image is rendered
+	// (images are drawn separately via tea.Raw() in RenderImageCmd)
+	if g.loading[g.currentIdx] {
 		b.WriteString(centerStyled(mutedStyle.Render("Loading image..."), contentWidth))
 	} else if g.renderFailed {
 		b.WriteString(centerStyled(mutedStyle.Render("Failed to render image"), contentWidth))
 	} else if g.renderedStr == "" {
 		b.WriteString(centerStyled(mutedStyle.Render("Loading image..."), contentWidth))
 	}
-	// Pad remaining image area lines (for Kitty, or when loading/failed)
-	if g.imageProtocol == termimg.Kitty || g.renderedStr == "" || g.renderFailed || g.loading[g.currentIdx] {
-		for i := 1; i < imageAreaH; i++ {
-			b.WriteString("\n")
-		}
+	// Pad remaining image area lines (when image is rendered, View() just pads; image sent via tea.Raw())
+	for i := 1; i < imageAreaH; i++ {
+		b.WriteString("\n")
 	}
 
 	// Blank line before source
