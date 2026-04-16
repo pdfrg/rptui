@@ -3250,7 +3250,7 @@ func (m Model) handleImageLoaded(msg imageLoadedMsg) (tea.Model, tea.Cmd) {
 
 	tiImg := termimg.New(img).
 		Size(width, height).
-		Scale(termimg.ScaleFit).
+		Scale(termimg.ScaleFill).
 		Protocol(termimg.Auto)
 
 	rendered, err := tiImg.Render()
@@ -4465,7 +4465,7 @@ func (m Model) handleArtistImageLoaded(msg artistImageLoadedMsg) (tea.Model, tea
 
 	tiImg := termimg.New(img).
 		Size(renderWidth, renderHeight).
-		Scale(termimg.ScaleFit).
+		Scale(termimg.ScaleFill).
 		Protocol(termimg.Auto).
 		ZIndex(1)
 

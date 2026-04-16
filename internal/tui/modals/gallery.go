@@ -303,7 +303,7 @@ func (g *Gallery) renderCurrentImage() {
 
 	tiImg := termimg.New(img).
 		Size(renderWidth, renderHeight).
-		Scale(termimg.ScaleFit).
+		Scale(termimg.ScaleFill).
 		Protocol(termimg.Auto)
 
 	rendered, err := tiImg.Render()
