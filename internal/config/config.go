@@ -75,6 +75,9 @@ type Config struct {
 	// Layout mode
 	Layout string `toml:"layout" comment:"UI layout mode\nlarge: full layout with all elements (default)\nmedium: no bottom view (no playlist/lyrics/visualizer)\ncompact: no album art, no bottom view, mini footer\nnarrow: album art top-left, now playing below, mini footer (default: large)"`
 
+	// Image protocol override (optional)
+	ForceProtocol string `toml:"force_protocol" comment:"force a specific image protocol instead of auto-detecting\nuseful for testing or for terminals that don't support kitty\noptions: kitty, sixel, halfblocks, iterm2, or empty for auto-detect (default: '')"`
+
 	// Jukebox mode
 	Jukebox JukeboxConfig `toml:"jukebox" comment:"favorites jukebox mode\nplay your favorites in random order\nmin_faves: minimum favorites required (default: 20)\nrepeat: reshuffle and repeat after playing all (default: false)\ncrossfade_duration: seconds for volume crossfade between songs, 0=disabled (default: 3.0)"`
 }
@@ -141,7 +144,8 @@ func DefaultConfig() *Config {
 			Repeat:            false,
 			CrossfadeDuration: 3.0,
 		},
-		Layout: "large",
+		Layout:        "large",
+		ForceProtocol: "",
 	}
 }
 
@@ -289,6 +293,14 @@ func (c *Config) applyDefaults() {
 	validLayouts := map[string]bool{"large": true, "medium": true, "compact": true, "narrow": true}
 	if c.Layout == "" || !validLayouts[c.Layout] {
 		c.Layout = defaults.Layout
+	}
+
+	// Validate force_protocol
+	if c.ForceProtocol != "" {
+		validProtocols := map[string]bool{"kitty": true, "sixel": true, "halfblocks": true, "iterm2": true}
+		if !validProtocols[c.ForceProtocol] {
+			c.ForceProtocol = ""
+		}
 	}
 }
 
