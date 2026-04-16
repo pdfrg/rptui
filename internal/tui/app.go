@@ -3268,7 +3268,7 @@ func (m Model) handleImageLoaded(msg imageLoadedMsg) (tea.Model, tea.Cmd) {
 		pixelH := height * fontH
 		scaledImg := resize.Resize(uint(pixelW), uint(pixelH), img, resize.MitchellNetravali)
 		tiImg = termimg.New(scaledImg).
-			Size(pixelW, pixelH).
+			SizePixels(pixelW, pixelH).
 			Scale(termimg.ScaleNone).
 			Protocol(termimg.Auto)
 		logger.Printf("DEBUG AlbumArt: cellRatio=%.2f, protocol=Sixel, targetW=%d, targetH=%d, font=%dx%d, pixelW=%d, pixelH=%d",
@@ -4505,7 +4505,7 @@ func (m Model) handleArtistImageLoaded(msg artistImageLoadedMsg) (tea.Model, tea
 		pixelH := renderHeight * fontH
 		scaledImg := resize.Resize(uint(pixelW), uint(pixelH), img, resize.MitchellNetravali)
 		tiImg = termimg.New(scaledImg).
-			Size(pixelW, pixelH).
+			SizePixels(pixelW, pixelH).
 			Scale(termimg.ScaleNone).
 			Protocol(termimg.Auto).
 			ZIndex(1)
