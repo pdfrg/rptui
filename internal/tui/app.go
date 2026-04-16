@@ -294,10 +294,15 @@ type Model struct {
 	// Artist thumbnail image (rendered beside artist info viewport)
 	artistArtStr     string // cached rendered escape sequence
 	artistArtLoaded  bool
-	artistArtEventID int64                          // eventID of the song that triggered this image
-	artistArtWidth   int                            // width in terminal columns
-	artistArtHeight  int                            // height in terminal rows
-	artistArtCache   map[string]artistArtCacheEntry // keyed by lowercase artist name
+	artistArtEventID int64 // eventID of the song that triggered this image
+	artistArtWidth   int   // width in terminal columns
+	artistArtHeight  int   // height in terminal rows
+
+	artistArtCache map[string]artistArtCacheEntry // keyed by lowercase artist name
+
+	// Track first image display for clearing strategy (sixel/iterm2)
+	albumArtFirstDisplayed    bool
+	artistThumbFirstDisplayed bool
 
 	// Custom Widgets
 	headerWidget     *widgets.Header
@@ -594,39 +599,41 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Accent))
 
 	m := &Model{
-		config:                 cfg,
-		theme:                  theme,
-		styles:                 styles,
-		themeWatcher:           themeWatcher,
-		rpAPI:                  rpAPI,
-		authClient:             authClient,
-		commentsClient:         commentsClient,
-		ratingsClient:          ratingsClient,
-		lyricsClient:           lyricsClient,
-		wikipediaClient:        wikipediaClient,
-		discogsClient:          discogsClient,
-		musicbrainzClient:      musicbrainzClient,
-		theaudiodbClient:       theaudiodbClient,
-		mpvBackend:             mpvBackend,
-		cacheManager:           cacheManager,
-		scrobbler:              scrobbler,
-		bottomViewMode:         ViewPlaylist,
-		headerWidget:           headerWidget,
-		footerWidget:           footerWidget,
-		nowPlayingWidget:       nowPlayingWidget,
-		playlistWidget:         playlistWidget,
-		optionsModal:           optionsModal,
-		skipWarningModal:       skipWarningModal,
-		viewport:               viewport,
-		help:                   help,
-		spinner:                sp,
-		cellRatio:              cellRatio,
-		imageProtocol:          imageProtocol,
-		downloadResults:        make(chan favoriteDownloadMsg, 1),
-		jukeboxMode:            startJukebox,
-		jukeboxBatchSize:       10,
-		commentsPerPage:        20,
-		networkTransitionModal: nil,
+		config:                    cfg,
+		theme:                     theme,
+		styles:                    styles,
+		themeWatcher:              themeWatcher,
+		rpAPI:                     rpAPI,
+		authClient:                authClient,
+		commentsClient:            commentsClient,
+		ratingsClient:             ratingsClient,
+		lyricsClient:              lyricsClient,
+		wikipediaClient:           wikipediaClient,
+		discogsClient:             discogsClient,
+		musicbrainzClient:         musicbrainzClient,
+		theaudiodbClient:          theaudiodbClient,
+		mpvBackend:                mpvBackend,
+		cacheManager:              cacheManager,
+		scrobbler:                 scrobbler,
+		bottomViewMode:            ViewPlaylist,
+		headerWidget:              headerWidget,
+		footerWidget:              footerWidget,
+		nowPlayingWidget:          nowPlayingWidget,
+		playlistWidget:            playlistWidget,
+		optionsModal:              optionsModal,
+		skipWarningModal:          skipWarningModal,
+		viewport:                  viewport,
+		help:                      help,
+		spinner:                   sp,
+		cellRatio:                 cellRatio,
+		imageProtocol:             imageProtocol,
+		albumArtFirstDisplayed:    false,
+		artistThumbFirstDisplayed: false,
+		downloadResults:           make(chan favoriteDownloadMsg, 1),
+		jukeboxMode:               startJukebox,
+		jukeboxBatchSize:          10,
+		commentsPerPage:           20,
+		networkTransitionModal:    nil,
 	}
 
 	// Determine layout mode
@@ -691,8 +698,26 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 	}
 
 	// Detect image protocol (Kitty, Sixel, ITerm2, or Halfblocks)
-	imageProtocol := termimg.DetectProtocol()
-	logger.Printf("Detected image protocol: %s", imageProtocol)
+	var imageProtocol termimg.Protocol
+	if cfg.ForceProtocol != "" {
+		switch strings.ToLower(cfg.ForceProtocol) {
+		case "kitty":
+			imageProtocol = termimg.Kitty
+		case "sixel":
+			imageProtocol = termimg.Sixel
+		case "halfblocks":
+			imageProtocol = termimg.Halfblocks
+		case "iterm2":
+			imageProtocol = termimg.ITerm2
+		default:
+			logger.Printf("Warning: invalid force_protocol '%s', using auto-detect", cfg.ForceProtocol)
+			imageProtocol = termimg.DetectProtocol()
+		}
+		logger.Printf("Forced image protocol: %s (config: %s)", imageProtocol, cfg.ForceProtocol)
+	} else {
+		imageProtocol = termimg.DetectProtocol()
+		logger.Printf("Detected image protocol: %s", imageProtocol)
+	}
 
 	// Initialize API clients (lyrics, artist info still available for lookups)
 	rpAPI := api.NewRadioParadiseAPI(cfg.Channel, cfg.Bitrate)
@@ -1221,7 +1246,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case modals.GalleryMsg:
 		m.activeModal = ModalNone
 		m.galleryModal = nil
-		return handle(m, renderAlbumArtAfterDelay())
+		return handle(m, tea.Batch(clearKittyImagesCmdIf(m.imageProtocol), renderAlbumArtAfterDelay()))
 
 	case modals.GalleryImageLoadedMsg:
 		if m.galleryModal != nil && m.activeModal == ModalGallery {
@@ -3272,7 +3297,7 @@ func (m Model) handleImageLoaded(msg imageLoadedMsg) (tea.Model, tea.Cmd) {
 	tiImg := termimg.New(img).
 		Size(width, height).
 		Scale(termimg.ScaleFit).
-		Protocol(termimg.Auto)
+		Protocol(m.imageProtocol)
 
 	logger.Printf("DEBUG AlbumArt: cellRatio=%.2f, protocol=%s, targetW=%d, targetH=%d", m.cellRatio, m.imageProtocol, width, height)
 
@@ -3287,6 +3312,7 @@ func (m Model) handleImageLoaded(msg imageLoadedMsg) (tea.Model, tea.Cmd) {
 	}
 
 	logger.Printf("Album art loaded for: %s (len=%d, w=%d, h=%d)", m.currentSong.Title, len(rendered), width, height)
+
 	m.albumArtStr = rendered
 	m.albumArtLoaded = true
 	// Store dimensions in cells for positioning
@@ -3941,6 +3967,14 @@ func (m *Model) songChangedCmds() tea.Cmd {
 
 	var cmds []tea.Cmd
 
+	// Clear old album art from terminal for sixel/iterm2 when song changes
+	if m.imageProtocol == termimg.Sixel || m.imageProtocol == termimg.ITerm2 {
+		clearCmd := tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
+			return tea.ClearScreen()
+		})
+		cmds = append(cmds, clearCmd)
+	}
+
 	// Scrobble previous song if eligible
 	if scrobblePrev {
 		cmds = append(cmds, scrobbleCmd(m.scrobbler, *prevSong, scrobbleStartTime))
@@ -4489,7 +4523,7 @@ func (m Model) handleArtistImageLoaded(msg artistImageLoadedMsg) (tea.Model, tea
 	tiImg := termimg.New(img).
 		Size(renderWidth, renderHeight).
 		Scale(termimg.ScaleFit).
-		Protocol(termimg.Auto).
+		Protocol(m.imageProtocol).
 		ZIndex(1)
 
 	rendered, err := tiImg.Render()
@@ -5021,6 +5055,7 @@ func positionMultiLineImage(imgStr string, startRow, startCol int) string {
 // renderImagesCmd returns a tea.Cmd that sends all terminal images (album art
 // and artist thumbnail) via tea.Raw. All protocols use tea.Raw to bypass
 // bubbletea's StyledString which doesn't support cursor positioning escapes.
+// For Sixel/iTerm2: first image has no clear, subsequent images use tea.ClearScreen() first
 func (m Model) renderImagesCmd() tea.Cmd {
 	// Suppress all images when layout prompt is active
 	if layoutPromptActive {
@@ -5043,13 +5078,19 @@ func (m Model) renderImagesCmd() tea.Cmd {
 		return nil
 	}
 
-	var raw string
+	// Set flags synchronously at start (for subsequent calls)
+	if hasAlbumArt {
+		m.albumArtFirstDisplayed = true
+	}
+	if hasArtistArt {
+		m.artistThumbFirstDisplayed = true
+	}
 
-	// Kitty needs ClearAll to remove previous placements
+	// Build image render string
+	// For Kitty: need ClearAllString to remove previous images before rendering
+	var raw string
 	if m.imageProtocol == termimg.Kitty {
 		raw = termimg.ClearAllString()
-	} else {
-		raw = ""
 	}
 
 	if hasAlbumArt {
@@ -5067,8 +5108,10 @@ func (m Model) renderImagesCmd() tea.Cmd {
 				artCol = 1
 			}
 		}
+
+		// All protocols: render at position
 		// For Kitty: single escape sequence, position directly
-		// For other protocols (halfblocks/sixel/iterm2): may contain newlines, position each line
+		// For other protocols (halfblocks/sixel/iterm2): use positionMultiLineImage to handle multi-line correctly
 		if m.imageProtocol == termimg.Kitty {
 			raw += fmt.Sprintf("\x1b[s\x1b[3;%dH%s\x1b[u", artCol, m.albumArtStr)
 		} else {
@@ -5089,7 +5132,16 @@ func (m Model) renderImagesCmd() tea.Cmd {
 		}
 	}
 
-	return tea.Raw(raw)
+	// Build render command
+	// For all protocols: return immediately (synchronous)
+	// tea.ClearScreen() below handles clearing for sixel/iterm2 on subsequent displays
+	if m.imageProtocol == termimg.Kitty || m.imageProtocol == termimg.Halfblocks ||
+		m.imageProtocol == termimg.Sixel || m.imageProtocol == termimg.ITerm2 {
+		return tea.Raw(raw)
+	}
+
+	// This should never be reached since we handle all protocols above
+	return nil
 }
 
 // renderAlbumArtCmd is kept as an alias for renderImagesCmd for backward compatibility
