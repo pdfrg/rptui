@@ -78,6 +78,7 @@ The config file is located at `~/.config/rptui/config.toml`. It is created autom
 | `channel` | int | Default station (0=Main, 1=Mellow, 2=Rock, 3=Globe, 42=Serenity, 5=Beyond, 945=KFAT) |
 | `bitrate` | int | Audio quality (1=64k, 2=128k, 3=320k, 4=FLAC) |
 | `layout` | string | UI layout: `large`, `medium`, `compact`, `narrow` |
+| `force_protocol` | string | Force image protocol: `kitty`, `sixel`, `iterm2`, `halfblocks` (default: auto-detect) |
 | `show_album_art` | bool | Display album art (auto-fallback: kitty > iterm2 > sixel > unicode) |
 | `copy_album_art` | bool | Save album art to file |
 | `album_art_path` | string | Path for copied album art (default: `/tmp/cover.jpg`) |
