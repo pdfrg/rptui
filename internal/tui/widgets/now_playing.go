@@ -23,7 +23,7 @@ func init() {
 
 // darkenColor reduces the brightness of a hex color by the given factor (0.0-1.0)
 func darkenColor(hex string, factor float64) string {
-	if len(hex) != 7 || hex[0] != '#' {
+	if hex == "default" || len(hex) != 7 || hex[0] != '#' {
 		return hex
 	}
 	var r, g, b int
