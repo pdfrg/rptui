@@ -3,6 +3,7 @@ package config
 
 import (
 	"fmt"
+	"image/color"
 	"math"
 	"os"
 	"path/filepath"
@@ -247,7 +248,39 @@ func loadThemeFromFile(path string) (*ColorTheme, error) {
 }
 
 // NewThemeStyles converts ColorTheme to lipgloss styles
-func NewThemeStyles(theme *ColorTheme) *ThemeStyles {
+// NewThemeStyles converts ColorTheme to lipgloss styles
+// If transparentBackground is true, uses terminal's default background
+// If disableTheme is true, uses terminal's default colors for everything
+func NewThemeStyles(theme *ColorTheme, transparentBackground bool, disableTheme bool) *ThemeStyles {
+	var bg color.Color
+	var fg color.Color
+	var accent color.Color
+	var muted color.Color
+	var cursor color.Color
+	
+	if disableTheme {
+		// Use terminal's default colors for everything
+		bg = lipgloss.Color("default")
+		fg = lipgloss.Color("default")
+		accent = lipgloss.Color("default")
+		muted = lipgloss.Color("default")
+		cursor = lipgloss.Color("default")
+	} else if transparentBackground {
+		// Use terminal's default background, but keep theme foreground/accent/etc.
+		bg = lipgloss.Color("default") // Use terminal's default background
+		fg = lipgloss.Color(theme.Foreground)
+		accent = lipgloss.Color(theme.Accent)
+		muted = lipgloss.Color(theme.Muted)
+		cursor = lipgloss.Color(theme.Cursor)
+	} else {
+		// Use theme colors as normal
+		bg = lipgloss.Color(theme.Background)
+		fg = lipgloss.Color(theme.Foreground)
+		accent = lipgloss.Color(theme.Accent)
+		muted = lipgloss.Color(theme.Muted)
+		cursor = lipgloss.Color(theme.Cursor)
+	}
+	
 	return &ThemeStyles{
 		Background: theme.Background,
 		Foreground: theme.Foreground,
@@ -255,26 +288,26 @@ func NewThemeStyles(theme *ColorTheme) *ThemeStyles {
 		Muted:      theme.Muted,
 		Cursor:     theme.Cursor,
 		BackgroundStyle: lipgloss.NewStyle().
-			Background(lipgloss.Color(theme.Background)),
+			Background(bg),
 		ForegroundStyle: lipgloss.NewStyle().
-			Background(lipgloss.Color(theme.Background)).
-			Foreground(lipgloss.Color(theme.Foreground)),
+			Background(bg).
+			Foreground(fg),
 		AccentStyle: lipgloss.NewStyle().
-			Background(lipgloss.Color(theme.Background)).
-			Foreground(lipgloss.Color(theme.Accent)),
+			Background(bg).
+			Foreground(accent),
 		MutedStyle: lipgloss.NewStyle().
-			Background(lipgloss.Color(theme.Background)).
-			Foreground(lipgloss.Color(theme.Muted)),
+			Background(bg).
+			Foreground(muted),
 		CursorStyle: lipgloss.NewStyle().
-			Background(lipgloss.Color(theme.Background)).
-			Foreground(lipgloss.Color(theme.Cursor)),
+			Background(bg).
+			Foreground(cursor),
 		Header: lipgloss.NewStyle().
-			Background(lipgloss.Color(theme.Background)).
-			Foreground(lipgloss.Color(theme.Muted)).
+			Background(bg).
+			Foreground(muted).
 			Bold(true),
 		Footer: lipgloss.NewStyle().
-			Background(lipgloss.Color(theme.Background)).
-			Foreground(lipgloss.Color(theme.Accent)).
+			Background(bg).
+			Foreground(accent).
 			Bold(true),
 	}
 }

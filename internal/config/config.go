@@ -44,6 +44,8 @@ type Config struct {
 	ShowSkipWarning bool   `toml:"show_skip_warning" comment:"warn when skipping ahead of livestream without enough favorites\nset to false to disable (default: true)"`
 	ColorsFile      string `toml:"colors_file" comment:"custom colors.toml file path, takes priority over theme setting\nfallback order: colors_file > theme > omarchy current theme > Catppuccin Mocha (default: '')"`
 	Theme           string `toml:"theme" comment:"built-in theme name\ncatppuccin-mocha, gruvbox-dark, dark-red, osaka-jade, synth, basic (default: '')"`
+	TransparentBackground bool   `toml:"transparent_background" comment:"use terminal's default background color (default: false)"`
+	DisableTheme          bool   `toml:"disable_theme" comment:"disable all theming, use terminal's default colors (default: false)"`
 
 	// Discogs API authentication (optional, enables images + higher rate limits)
 	// Auth priority: discogs_token (personal access) > discogs_key+discogs_secret (developer app) > env vars > unauthenticated
@@ -146,6 +148,8 @@ func DefaultConfig() *Config {
 		},
 		Layout:        "large",
 		ForceProtocol: "",
+		TransparentBackground: false,
+		DisableTheme:          false,
 	}
 }
 
@@ -302,6 +306,8 @@ func (c *Config) applyDefaults() {
 			c.ForceProtocol = ""
 		}
 	}
+
+	// TransparentBackground and DisableTheme don't need validation (bool is always valid)
 }
 
 // GetDisplayInfo returns display string for current station/bitrate
