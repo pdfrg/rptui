@@ -266,11 +266,14 @@ func NewThemeStyles(theme *ColorTheme, transparentBackground bool, disableTheme 
 	var cursorStr string
 	
 	if disableTheme {
-		bg = lipgloss.Color("default")
-		fg = lipgloss.Color("default")
-		accent = lipgloss.Color("default")
-		muted = lipgloss.Color("default")
-		cursor = lipgloss.Color("default")
+		// Use terminal's default colors: NoColor means "use terminal default"
+		// For background: don't draw anything (let terminal show through)
+		// For foreground: use terminal's default text color
+		bg = lipgloss.NoColor{}
+		fg = lipgloss.NoColor{}
+		accent = lipgloss.NoColor{}
+		muted = lipgloss.NoColor{}
+		cursor = lipgloss.NoColor{}
 		
 		bgStr = "default"
 		fgStr = "default"
@@ -278,7 +281,8 @@ func NewThemeStyles(theme *ColorTheme, transparentBackground bool, disableTheme 
 		mutedStr = "default"
 		cursorStr = "default"
 	} else if transparentBackground {
-		bg = lipgloss.Color("default")
+		// Use terminal's default background only (keep theme foreground colors)
+		bg = lipgloss.NoColor{}
 		fg = lipgloss.Color(theme.Foreground)
 		accent = lipgloss.Color(theme.Accent)
 		muted = lipgloss.Color(theme.Muted)
