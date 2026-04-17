@@ -249,20 +249,31 @@ func loadThemeFromFile(path string) (*ColorTheme, error) {
 // NewThemeStyles converts ColorTheme to lipgloss styles
 func NewThemeStyles(theme *ColorTheme) *ThemeStyles {
 	return &ThemeStyles{
-		Background:      theme.Background,
-		Foreground:      theme.Foreground,
-		Accent:          theme.Accent,
-		Muted:           theme.Muted,
-		Cursor:          theme.Cursor,
-		BackgroundStyle: lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Background)),
-		ForegroundStyle: lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Foreground)),
-		AccentStyle:     lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Accent)),
-		MutedStyle:      lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Muted)),
-		CursorStyle:     lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Cursor)),
+		Background: theme.Background,
+		Foreground: theme.Foreground,
+		Accent:     theme.Accent,
+		Muted:      theme.Muted,
+		Cursor:     theme.Cursor,
+		BackgroundStyle: lipgloss.NewStyle().
+			Background(lipgloss.Color(theme.Background)),
+		ForegroundStyle: lipgloss.NewStyle().
+			Background(lipgloss.Color(theme.Background)).
+			Foreground(lipgloss.Color(theme.Foreground)),
+		AccentStyle: lipgloss.NewStyle().
+			Background(lipgloss.Color(theme.Background)).
+			Foreground(lipgloss.Color(theme.Accent)),
+		MutedStyle: lipgloss.NewStyle().
+			Background(lipgloss.Color(theme.Background)).
+			Foreground(lipgloss.Color(theme.Muted)),
+		CursorStyle: lipgloss.NewStyle().
+			Background(lipgloss.Color(theme.Background)).
+			Foreground(lipgloss.Color(theme.Cursor)),
 		Header: lipgloss.NewStyle().
+			Background(lipgloss.Color(theme.Background)).
 			Foreground(lipgloss.Color(theme.Muted)).
 			Bold(true),
 		Footer: lipgloss.NewStyle().
+			Background(lipgloss.Color(theme.Background)).
 			Foreground(lipgloss.Color(theme.Accent)).
 			Bold(true),
 	}
