@@ -1099,6 +1099,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.playlistWidget.UpdateStyles(m.styles)
 				m.headerWidget.UpdateStyles(m.styles.Header)
 				m.footerWidget.UpdateStyles(m.styles.AccentStyle, m.styles.MutedStyle)
+				m.viewport.Style = lipgloss.NewStyle().
+					Background(lipgloss.Color(newTheme.Background)).
+					Foreground(lipgloss.Color(newTheme.Foreground))
+				m.spinner.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(newTheme.Accent))
 			}
 		}
 
