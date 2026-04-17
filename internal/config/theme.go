@@ -258,35 +258,57 @@ func NewThemeStyles(theme *ColorTheme, transparentBackground bool, disableTheme 
 	var muted color.Color
 	var cursor color.Color
 	
+	// Also track raw string values for Background/Foreground/etc fields
+	var bgStr string
+	var fgStr string
+	var accentStr string
+	var mutedStr string
+	var cursorStr string
+	
 	if disableTheme {
-		// Use terminal's default colors for everything
 		bg = lipgloss.Color("default")
 		fg = lipgloss.Color("default")
 		accent = lipgloss.Color("default")
 		muted = lipgloss.Color("default")
 		cursor = lipgloss.Color("default")
+		
+		bgStr = "default"
+		fgStr = "default"
+		accentStr = "default"
+		mutedStr = "default"
+		cursorStr = "default"
 	} else if transparentBackground {
-		// Use terminal's default background, but keep theme foreground/accent/etc.
-		bg = lipgloss.Color("default") // Use terminal's default background
+		bg = lipgloss.Color("default")
 		fg = lipgloss.Color(theme.Foreground)
 		accent = lipgloss.Color(theme.Accent)
 		muted = lipgloss.Color(theme.Muted)
 		cursor = lipgloss.Color(theme.Cursor)
+		
+		bgStr = "default"
+		fgStr = theme.Foreground
+		accentStr = theme.Accent
+		mutedStr = theme.Muted
+		cursorStr = theme.Cursor
 	} else {
-		// Use theme colors as normal
 		bg = lipgloss.Color(theme.Background)
 		fg = lipgloss.Color(theme.Foreground)
 		accent = lipgloss.Color(theme.Accent)
 		muted = lipgloss.Color(theme.Muted)
 		cursor = lipgloss.Color(theme.Cursor)
+		
+		bgStr = theme.Background
+		fgStr = theme.Foreground
+		accentStr = theme.Accent
+		mutedStr = theme.Muted
+		cursorStr = theme.Cursor
 	}
 	
 	return &ThemeStyles{
-		Background: theme.Background,
-		Foreground: theme.Foreground,
-		Accent:     theme.Accent,
-		Muted:      theme.Muted,
-		Cursor:     theme.Cursor,
+		Background: bgStr,
+		Foreground: fgStr,
+		Accent:     accentStr,
+		Muted:      mutedStr,
+		Cursor:     cursorStr,
 		BackgroundStyle: lipgloss.NewStyle().
 			Background(bg),
 		ForegroundStyle: lipgloss.NewStyle().
