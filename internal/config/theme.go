@@ -274,12 +274,6 @@ func NewThemeStyles(theme *ColorTheme, transparentBackground bool, disableTheme 
 		accent = lipgloss.NoColor{}
 		muted = lipgloss.NoColor{}
 		cursor = lipgloss.NoColor{}
-		
-		bgStr = "default"
-		fgStr = "default"
-		accentStr = "default"
-		mutedStr = "default"
-		cursorStr = "default"
 	} else if transparentBackground {
 		// Use terminal's default background only (keep theme foreground colors)
 		bg = lipgloss.NoColor{}
