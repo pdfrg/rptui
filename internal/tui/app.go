@@ -573,7 +573,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 	if rpAPI.IsAuthenticated() {
 		footerWidget.AddChannel99()
 	}
-	nowPlayingWidget := widgets.NewNowPlaying(styles.ForegroundStyle, styles.AccentStyle, styles.MutedStyle, theme.Accent, theme.Cursor, theme.Background)
+	nowPlayingWidget := widgets.NewNowPlaying(styles.ForegroundStyle, styles.AccentStyle, styles.MutedStyle, theme.Accent, theme.Cursor, styles.Background)
 	playlistWidget := widgets.NewPlaylist(styles)
 
 	// Initialize modal widgets
@@ -587,8 +587,8 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 	)
 	viewport.SoftWrap = true
 	viewport.Style = lipgloss.NewStyle().
-		Background(lipgloss.Color(theme.Background)).
-		Foreground(lipgloss.Color(theme.Foreground))
+		Background(lipgloss.Color(styles.Background)).
+		Foreground(lipgloss.Color(styles.Foreground))
 
 	// Initialize help
 	help := help.New()
@@ -596,7 +596,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 	// Initialize spinner
 	sp := spinner.New()
 	sp.Spinner = spinner.Points
-	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Accent))
+	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(styles.Accent))
 
 	m := &Model{
 		config:                    cfg,
@@ -742,7 +742,7 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 	headerWidget := widgets.NewHeader(styles.Header, "rptui - Radio Paradise (Offline)")
 	footerWidget := widgets.NewFooter(styles.AccentStyle, styles.MutedStyle)
 	footerWidget.SetScrobbleServices(scrobbler.ServiceNames())
-	nowPlayingWidget := widgets.NewNowPlaying(styles.ForegroundStyle, styles.AccentStyle, styles.MutedStyle, theme.Accent, theme.Cursor, theme.Background)
+	nowPlayingWidget := widgets.NewNowPlaying(styles.ForegroundStyle, styles.AccentStyle, styles.MutedStyle, theme.Accent, theme.Cursor, styles.Background)
 	playlistWidget := widgets.NewPlaylist(styles)
 
 	// Initialize modal widgets
@@ -756,8 +756,8 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 	)
 	viewport.SoftWrap = true
 	viewport.Style = lipgloss.NewStyle().
-		Background(lipgloss.Color(theme.Background)).
-		Foreground(lipgloss.Color(theme.Foreground))
+		Background(lipgloss.Color(styles.Background)).
+		Foreground(lipgloss.Color(styles.Foreground))
 
 	// Initialize help
 	help := help.New()
@@ -765,7 +765,7 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 	// Initialize spinner
 	sp := spinner.New()
 	sp.Spinner = spinner.Points
-	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Accent))
+	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(styles.Accent))
 
 	// Convert CachedSong to models.Song for playlist display
 	var modelSongs []*models.Song
@@ -1418,22 +1418,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.styles.ForegroundStyle,
 			m.styles.AccentStyle,
 			m.styles.MutedStyle,
-			m.theme.Accent,
-			m.theme.Cursor,
-			m.theme.Background,
+			m.styles.Accent,
+			m.styles.Cursor,
+			m.styles.Background,
 		)
 		m.playlistWidget.UpdateStyles(m.styles)
 		m.headerWidget.UpdateStyles(m.styles.Header)
 		m.footerWidget.UpdateStyles(m.styles.AccentStyle, m.styles.MutedStyle)
 
 		m.viewport.Style = lipgloss.NewStyle().
-			Background(lipgloss.Color(m.theme.Background)).
-			Foreground(lipgloss.Color(m.theme.Foreground))
-		m.spinner.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Accent))
+			Background(lipgloss.Color(m.styles.Background)).
+			Foreground(lipgloss.Color(m.styles.Foreground))
+		m.spinner.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(m.styles.Accent))
 
 		// Update visualizer theme colors
 		if m.vis != nil {
-			m.vis.SetColors(m.theme.Accent, m.theme.Cursor, m.theme.Muted)
+			m.vis.SetColors(m.styles.Accent, m.styles.Cursor, m.styles.Muted)
 		}
 
 		return m, watchThemeCmd(m.themeWatcher)
@@ -1682,11 +1682,11 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 					seed = uint64(m.currentSong.EventID)
 				}
 				m.vis = visualizer.New(seed)
-				m.vis.SetColors(m.theme.Accent, m.theme.Cursor, m.theme.Muted)
+				m.vis.SetColors(m.styles.Accent, m.styles.Cursor, m.styles.Muted)
 				mode := visualizer.ModeFromString(m.config.Visualizer.Mode)
 				m.vis.SetMode(mode)
 			} else {
-				m.vis.SetColors(m.theme.Accent, m.theme.Cursor, m.theme.Muted)
+				m.vis.SetColors(m.styles.Accent, m.styles.Cursor, m.styles.Muted)
 			}
 			// Start audio tap if real audio is enabled
 			source := m.vis.EnableRealAudio(m.config.Visualizer.RealAudio)
@@ -3677,7 +3677,7 @@ func (m *Model) updateBottomView() {
 				endIdx = len(m.syncedLyrics)
 			}
 
-			cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Cursor)).Bold(true)
+			cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.styles.Cursor)).Bold(true)
 			var lines []string
 			for i := startIdx; i < endIdx; i++ {
 				if i == currentLineIdx {
@@ -3800,8 +3800,8 @@ func (m *Model) updateBottomView() {
 				// Format: <time> <username>
 				// <quoted text if any>
 				// <message>
-				timeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Accent))
-				userStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Cursor))
+				timeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.styles.Accent))
+				userStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.styles.Cursor))
 				header := timeStyle.Render(c.PostedTime) + " " + userStyle.Render(c.Username)
 				lines = append(lines, header)
 				if c.QuotedText != "" {
@@ -4588,8 +4588,8 @@ func (m Model) renderArtistArtCmd() tea.Cmd {
 func (m Model) altView(s string) tea.View {
 	v := tea.NewView(s)
 	v.AltScreen = true
-	v.BackgroundColor = lipgloss.Color(m.theme.Background)
-	v.ForegroundColor = lipgloss.Color(m.theme.Foreground)
+	v.BackgroundColor = lipgloss.Color(m.styles.Background)
+	v.ForegroundColor = lipgloss.Color(m.styles.Foreground)
 	return v
 }
 
@@ -4888,7 +4888,7 @@ func (m Model) View() tea.View {
 		offlineCacheInfo,
 		m.getUserRating(),
 		rpFavIndicator,
-		m.theme.Cursor,
+		m.styles.Cursor,
 	)
 
 	// For compact/narrow layouts, center header over NowPlaying widget's actual width
@@ -5214,19 +5214,19 @@ func (m Model) buildVisInfoOverlay() []string {
 
 	// Title
 	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.theme.Foreground)).
+		Foreground(lipgloss.Color(m.styles.Foreground)).
 		Bold(true)
 	lines = append(lines, titleStyle.Render(song.Title))
 
 	// Artist
 	artistStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.theme.Accent))
+		Foreground(lipgloss.Color(m.styles.Accent))
 	lines = append(lines, artistStyle.Render(song.Artist))
 
 	// Album (year)
 	if song.Album != "" {
 		albumStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color(m.theme.Muted))
+			Foreground(lipgloss.Color(m.styles.Muted))
 		album := song.Album
 		if song.Year != "" {
 			album = fmt.Sprintf("%s (%s)", album, song.Year)
@@ -5236,7 +5236,7 @@ func (m Model) buildVisInfoOverlay() []string {
 
 	// Station info
 	stationStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.theme.Cursor))
+		Foreground(lipgloss.Color(m.styles.Cursor))
 	stationName := config.StationNames[m.config.Channel]
 	lines = append(lines, stationStyle.Render(stationName))
 
