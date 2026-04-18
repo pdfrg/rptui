@@ -573,7 +573,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 	if rpAPI.IsAuthenticated() {
 		footerWidget.AddChannel99()
 	}
-	nowPlayingWidget := widgets.NewNowPlaying(styles.ForegroundStyle, styles.AccentStyle, styles.MutedStyle, styles.AccentHex, styles.CursorHex, styles.BackgroundHex)
+	nowPlayingWidget := widgets.NewNowPlaying(styles.ForegroundStyle, styles.AccentStyle, styles.MutedStyle, styles.AccentHex, styles.CursorHex, styles.ProgressBarBackground)
 	playlistWidget := widgets.NewPlaylist(styles)
 
 	// Initialize modal widgets
@@ -741,7 +741,7 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 	headerWidget := widgets.NewHeader(styles.Header, "rptui - Radio Paradise (Offline)")
 	footerWidget := widgets.NewFooter(styles.AccentStyle, styles.MutedStyle)
 	footerWidget.SetScrobbleServices(scrobbler.ServiceNames())
-	nowPlayingWidget := widgets.NewNowPlaying(styles.ForegroundStyle, styles.AccentStyle, styles.MutedStyle, styles.AccentHex, styles.CursorHex, styles.BackgroundHex)
+	nowPlayingWidget := widgets.NewNowPlaying(styles.ForegroundStyle, styles.AccentStyle, styles.MutedStyle, styles.AccentHex, styles.CursorHex, styles.ProgressBarBackground)
 	playlistWidget := widgets.NewPlaylist(styles)
 
 	// Initialize modal widgets
@@ -1092,7 +1092,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.styles.MutedStyle,
 					m.styles.AccentHex,
 					m.styles.CursorHex,
-					m.styles.BackgroundHex,
+					m.styles.ProgressBarBackground,
 				)
 				m.playlistWidget.UpdateStyles(m.styles)
 				m.headerWidget.UpdateStyles(m.styles.Header)
@@ -1417,7 +1417,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.styles.MutedStyle,
 			m.styles.AccentHex,
 			m.styles.CursorHex,
-			m.styles.BackgroundHex,
+			m.styles.ProgressBarBackground,
 		)
 		m.playlistWidget.UpdateStyles(m.styles)
 		m.headerWidget.UpdateStyles(m.styles.Header)
@@ -4584,8 +4584,12 @@ func (m Model) renderArtistArtCmd() tea.Cmd {
 func (m Model) altView(s string) tea.View {
 	v := tea.NewView(s)
 	v.AltScreen = true
-	v.BackgroundColor = m.styles.BackgroundStyle.GetBackground()
-	v.ForegroundColor = m.styles.ForegroundStyle.GetForeground()
+	// ONLY set explicit background colors in solid theme mode
+	// Never set these for terminal default/transparent modes - lipgloss v2 GetBackground() returns black by default
+	if !m.config.TransparentBackground && !m.config.DisableTheme {
+		v.BackgroundColor = m.styles.BackgroundStyle.GetBackground()
+		v.ForegroundColor = m.styles.ForegroundStyle.GetForeground()
+	}
 	return v
 }
 
