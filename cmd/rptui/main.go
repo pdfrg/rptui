@@ -934,24 +934,36 @@ color15 = "#a6adc8"    # bright white
 
 // handleTestTerminalColors queries and displays terminal color information
 func handleTestTerminalColors() {
-	fg, bg, _, fallback, err := config.TestTerminalColors()
+	_ = config.IsTerminalColorAvailable() // Ensure query runs
+	fg, bg, _, success, _ := config.TestTerminalColors()
+	_ = success
 
 	fmt.Println("=== Terminal Color Detection ===")
 	fmt.Println()
 
-	if err != nil {
-		fmt.Printf("Status: FAILED - %v\n", err)
-		if fallback {
-			fmt.Println("Using standard fallback colors")
-		}
+	ok := fg != "" && bg != ""
+	if ok {
+		fmt.Println("Status: DETECTED")
+	} else {
+		fmt.Println("Status: NOT DETECTED")
 		fmt.Println()
+		fmt.Println("Terminal color detection works best in modern terminals like:")
+		fmt.Println("  - Kitty, Ghostty, iTerm2, Windows Terminal, Rio")
+		fmt.Println("  - Does not work inside screen/tmux")
+		fmt.Println("  - Set COLORFGBG environment variable as fallback:")
+		fmt.Println("    export COLORFGBG=7;0   # white foreground, black background")
 	}
+	fmt.Println()
 
 	if fg != "" {
 		fmt.Printf("Default Foreground: %s\n", fg)
+	} else {
+		fmt.Println("Default Foreground: (not detected)")
 	}
 	if bg != "" {
 		fmt.Printf("Default Background: %s\n", bg)
+	} else {
+		fmt.Println("Default Background: (not detected)")
 	}
 	fmt.Println()
 
