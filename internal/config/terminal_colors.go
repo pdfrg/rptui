@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/muesli/termenv"
 )
@@ -105,23 +104,43 @@ func (t *TerminalColors) queryTerminalColors() {
 
 func (t *TerminalColors) queryTermenv() {
 	// Try termenv for default fg/bg (OSC 10/11)
-	// Note: This requires a TTY and may not work in all environments
+	// First try with stdout (works in some terminals)
 	output := termenv.NewOutput(os.Stdout)
-
-	// Give the terminal time to respond
-	time.Sleep(100 * time.Millisecond)
-
-	fgColor := output.ForegroundColor()
-	bgColor := output.BackgroundColor()
-
-	if fgColor != nil {
-		if seq := fgColor.Sequence(false); seq != "" {
-			t.foreground = sequenceToHex(seq)
+	
+	// First try to get TTY explicitly
+	tty := output.TTY()
+	if tty != nil {
+		// Use TTY for queries - this is what works in Kitty!
+		ttyOutput := termenv.NewOutput(tty)
+		ttyFg := ttyOutput.ForegroundColor()
+		ttyBg := ttyOutput.BackgroundColor()
+		
+		if ttyFg != nil {
+			if seq := ttyFg.Sequence(false); seq != "" {
+				t.foreground = sequenceToHex(seq)
+			}
+		}
+		if ttyBg != nil {
+			if seq := ttyBg.Sequence(true); seq != "" {
+				t.background = sequenceToHex(seq)
+			}
 		}
 	}
-	if bgColor != nil {
-		if seq := bgColor.Sequence(true); seq != "" {
-			t.background = sequenceToHex(seq)
+	
+	// Fallback to stdout if TTY didn't work
+	if t.foreground == "" || t.background == "" {
+		fgColor := output.ForegroundColor()
+		bgColor := output.BackgroundColor()
+
+		if fgColor != nil && t.foreground == "" {
+			if seq := fgColor.Sequence(false); seq != "" {
+				t.foreground = sequenceToHex(seq)
+			}
+		}
+		if bgColor != nil && t.background == "" {
+			if seq := bgColor.Sequence(true); seq != "" {
+				t.background = sequenceToHex(seq)
+			}
 		}
 	}
 }
