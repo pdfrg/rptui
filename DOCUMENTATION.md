@@ -42,8 +42,10 @@ SLEEP TIMER / ALARM:
 ACTIONS:
     --lastfm-auth           Run Last.fm OAuth authentication flow and save session key
     --rp-auth               Authenticate with Radio Paradise account
-                            Enables user ratings, comments, favorites sync, and My Paradise channel
-                            (optional — all features work without an RP account)
+                             Enables user ratings, comments, favorites sync, and My Paradise channel
+                             (optional — all features work without an RP account)
+    --create-colors-file    Print color theme template to stdout
+    --test-terminal-colors  Query and display terminal color information
 
 EXAMPLES:
     rptui                   Launch with default settings
@@ -52,6 +54,7 @@ EXAMPLES:
     rptui --offline         Play back a previously recorded cache
     rptui --list-caches     See what caches are available
     rptui --create-colors-file > ~/.config/rptui/colors.toml
+    rptui --test-terminal-colors  Check terminal color support and palette
 
 STATIONS:
     0 - The Main Mix  1 - Mellow Mix    2 - RockIt!
@@ -84,6 +87,11 @@ The config file is located at `~/.config/rptui/config.toml`. It is created autom
 | `album_art_path` | string | Path for copied album art (default: `/tmp/cover.jpg`) |
 | `colors_file` | string | Custom colors.toml file path |
 | `theme` | string | Built-in theme: `catppuccin-mocha`, `gruvbox-dark`, `dark-red`, `osaka-jade`, `synth`, `basic` |
+| `transparent_background` | bool | Use terminal's default background color |
+| `disable_theme` | bool | Disable all theming, use terminal's default colors |
+| `terminal_palette.cursor` | int | Palette index for cursor color (0-15, default: 2) |
+| `terminal_palette.accent` | int | Palette index for accent color (0-15, default: 4) |
+| `terminal_palette.muted` | int | Palette index for muted color (0-15, default: 8) |
 | `notifications_enabled` | bool | Show desktop notifications |
 | `notifications_show_art` | bool | Include album art in notifications |
 
