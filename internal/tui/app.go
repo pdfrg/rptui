@@ -418,7 +418,7 @@ type Model struct {
 
 // NewModel creates a new TUI model
 func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, layoutOverride string, sleepTimerDuration time.Duration) *Model {
-	styles := config.NewThemeStyles(theme, cfg.TransparentBackground, cfg.DisableTheme)
+	styles := config.NewThemeStyles(theme, cfg.TransparentBackground, cfg.DisableTheme, cfg.TerminalPalette)
 
 	themeWatcher := config.NewThemeWatcher(cfg.ColorsFile)
 	if err := themeWatcher.Start(); err != nil {
@@ -682,7 +682,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 
 // NewOfflineModel creates a new TUI model for offline playback
 func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache.CachedSong, cacheName string, layoutOverride string) *Model {
-	styles := config.NewThemeStyles(theme, cfg.TransparentBackground, cfg.DisableTheme)
+	styles := config.NewThemeStyles(theme, cfg.TransparentBackground, cfg.DisableTheme, cfg.TerminalPalette)
 
 	themeWatcher := config.NewThemeWatcher(cfg.ColorsFile)
 	if err := themeWatcher.Start(); err != nil {
@@ -1085,7 +1085,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				log.Printf("Failed to reload theme: %v", err)
 			} else {
 				m.theme = newTheme
-				m.styles = config.NewThemeStyles(newTheme, m.config.TransparentBackground, m.config.DisableTheme)
+				m.styles = config.NewThemeStyles(newTheme, m.config.TransparentBackground, m.config.DisableTheme, m.config.TerminalPalette)
 				m.nowPlayingWidget.UpdateStyles(
 					m.styles.ForegroundStyle,
 					m.styles.AccentStyle,
@@ -1409,7 +1409,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return handle(m, watchThemeCmd(m.themeWatcher))
 		}
 		m.theme = newTheme
-		m.styles = config.NewThemeStyles(newTheme, m.config.TransparentBackground, m.config.DisableTheme)
+		m.styles = config.NewThemeStyles(newTheme, m.config.TransparentBackground, m.config.DisableTheme, m.config.TerminalPalette)
 
 		m.nowPlayingWidget.UpdateStyles(
 			m.styles.ForegroundStyle,

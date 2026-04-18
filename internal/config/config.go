@@ -47,6 +47,9 @@ type Config struct {
 	TransparentBackground bool   `toml:"transparent_background" comment:"use terminal's default background color (default: false)"`
 	DisableTheme          bool   `toml:"disable_theme" comment:"disable all theming, use terminal's default colors (default: false)"`
 
+	// Terminal palette indices (used when disable_theme = true)
+	TerminalPalette TerminalPaletteConfig `toml:"terminal_palette" comment:"palette indices for cursor/accent/muted when disable_theme is true"`
+
 	// Discogs API authentication (optional, enables images + higher rate limits)
 	// Auth priority: discogs_token (personal access) > discogs_key+discogs_secret (developer app) > env vars > unauthenticated
 	DiscogsToken  string `toml:"discogs_token" comment:"Discogs personal access token\nenables artist images + higher API rate limits\nget one at: https://www.discogs.com/settings/developers\nalternative: set discogs_key + discogs_secret, or env vars DISCOGS_TOKEN / DISCOGS_KEY + DISCOGS_SECRET (default: '')"`
@@ -109,6 +112,13 @@ type RPAuthConfig struct {
 	Password string `toml:"password" comment:"RP account password (used to obtain session token)"`
 }
 
+// TerminalPaletteConfig holds palette indices for disable_theme mode
+type TerminalPaletteConfig struct {
+	Cursor int `toml:"cursor" comment:"palette index for cursor color (0-15, default: 2 = green)"`
+	Accent int `toml:"accent" comment:"palette index for accent color (0-15, default: 4 = blue)"`
+	Muted  int `toml:"muted" comment:"palette index for muted color (0-15, default: 8 = gray)"`
+}
+
 // VisualizerConfig holds visualizer settings
 type VisualizerConfig struct {
 	Mode         string `toml:"mode" comment:"default visualizer mode\nBars, Braille, ClassicPeak, Wave, Stars, BrailleBars, Rain, Segmented, Binary (default: Bars)"`
@@ -150,6 +160,11 @@ func DefaultConfig() *Config {
 		ForceProtocol: "",
 		TransparentBackground: false,
 		DisableTheme:          false,
+		TerminalPalette: TerminalPaletteConfig{
+			Cursor: 2, // green
+			Accent: 4,  // blue
+			Muted:  8,  // gray
+		},
 	}
 }
 
