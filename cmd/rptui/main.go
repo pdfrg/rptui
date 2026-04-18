@@ -94,6 +94,9 @@ func main() {
 		case "--create-colors-file":
 			handleCreateColorsFile()
 			return
+		case "--test-terminal-colors":
+			handleTestTerminalColors()
+			return
 		case "--sleep":
 			if i+1 < len(args) {
 				d, err := time.ParseDuration(args[i+1])
@@ -925,6 +928,71 @@ color12 = "#89b4fa"    # bright blue
 color13 = "#f5c2e7"    # bright magenta
 color14 = "#94e2d5"    # bright cyan
 color15 = "#a6adc8"    # bright white
-`
+ `
 	fmt.Print(template)
+}
+
+// handleTestTerminalColors queries and displays terminal color information
+func handleTestTerminalColors() {
+	fg, bg, _, fallback, err := config.TestTerminalColors()
+
+	fmt.Println("=== Terminal Color Detection ===")
+	fmt.Println()
+
+	if err != nil {
+		fmt.Printf("Status: FAILED - %v\n", err)
+		if fallback {
+			fmt.Println("Using standard fallback colors")
+		}
+		fmt.Println()
+	}
+
+	if fg != "" {
+		fmt.Printf("Default Foreground: %s\n", fg)
+	}
+	if bg != "" {
+		fmt.Printf("Default Background: %s\n", bg)
+	}
+	fmt.Println()
+
+	// Get palette indices from config (default values)
+	cfg := config.DefaultConfig()
+	cursorIdx := cfg.TerminalPalette.Cursor
+	accentIdx := cfg.TerminalPalette.Accent
+	mutedIdx := cfg.TerminalPalette.Muted
+
+	// Try to get palette colors from cache
+	_, _, cachedPalette, ok := config.GetCachedTerminalColors()
+
+	fmt.Println("Palette (index: color):")
+	for i := 0; i < 16; i++ {
+		color := ""
+		if ok && cachedPalette != nil {
+			color = cachedPalette[i]
+		}
+		if color == "" {
+			color = "(not detected)"
+		}
+		idxStr := fmt.Sprintf("%d", i)
+		if len(idxStr) == 1 {
+			idxStr = " " + idxStr
+		}
+		highlight := ""
+		if i == cursorIdx {
+			highlight = " <- cursor"
+		}
+		if i == accentIdx {
+			highlight += " <- accent"
+		}
+		if i == mutedIdx {
+			highlight += " <- muted"
+		}
+		fmt.Printf("  %s: %s%s\n", idxStr, color, highlight)
+	}
+	fmt.Println()
+
+	fmt.Println("Indices used for theme (when disable_theme=true):")
+	fmt.Printf("  Cursor: %d\n", cursorIdx)
+	fmt.Printf("  Accent: %d\n", accentIdx)
+	fmt.Printf("  Muted: %d\n", mutedIdx)
 }
