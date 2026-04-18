@@ -4,6 +4,7 @@ package config
 import (
 	"fmt"
 	"image/color"
+	"log"
 	"math"
 	"os"
 	"path/filepath"
@@ -250,7 +251,8 @@ func loadThemeFromFile(path string) (*ColorTheme, error) {
 // NewThemeStyles converts ColorTheme to lipgloss styles.
 // If transparentBackground is true, uses terminal's default background.
 // If disableTheme is true, uses terminal's default colors for everything.
-func NewThemeStyles(theme *ColorTheme, transparentBackground bool, disableTheme bool) *ThemeStyles {
+// terminalPalette provides indices for cursor/accent/muted when disable_theme is true.
+func NewThemeStyles(theme *ColorTheme, transparentBackground bool, disableTheme bool, terminalPalette TerminalPaletteConfig) *ThemeStyles {
 	var bg color.Color
 	var fg color.Color
 	var accent color.Color
@@ -265,23 +267,55 @@ func NewThemeStyles(theme *ColorTheme, transparentBackground bool, disableTheme 
 	var cursorStr string
 	
 	if disableTheme {
-		// Use terminal's default colors: NoColor means "use terminal default"
-		// For background: don't draw anything (let terminal show through)
-		// For foreground: use terminal's default text color
-		bg = lipgloss.NoColor{}
-		fg = lipgloss.NoColor{}
-		accent = lipgloss.NoColor{}
-		muted = lipgloss.NoColor{}
-		cursor = lipgloss.NoColor{}
+		// Get terminal colors - use explicit colors instead of NoColor{}
+		// which would fall back to ANSI black
+		termFG, termBG, palette, err := GetTerminalColors()
+		if err != nil {
+			log.Printf("Warning: %v; using standard fallback", err)
+			// Use standard fallback
+			termBG = "#000000"
+			termFG = "#ffffff"
+		}
+
+		// Map palette indices
+		cursorIdx := terminalPalette.Cursor
+		accentIdx := terminalPalette.Accent
+		mutedIdx := terminalPalette.Muted
+		if cursorIdx < 0 || cursorIdx > 15 {
+			cursorIdx = IdxCursor
+		}
+		if accentIdx < 0 || accentIdx > 15 {
+			accentIdx = IdxAccent
+		}
+		if mutedIdx < 0 || mutedIdx > 15 {
+			mutedIdx = IdxMuted
+		}
+
+		bg = lipgloss.Color(termBG)
+		fg = lipgloss.Color(termFG)
+		cursor = lipgloss.Color(palette[cursorIdx])
+		accent = lipgloss.Color(palette[accentIdx])
+		muted = lipgloss.Color(palette[mutedIdx])
+
+		bgStr = termBG
+		fgStr = termFG
+		cursorStr = palette[cursorIdx]
+		accentStr = palette[accentIdx]
+		mutedStr = palette[mutedIdx]
 	} else if transparentBackground {
 		// Use terminal's default background only (keep theme foreground colors)
-		bg = lipgloss.NoColor{}
+		termBG, _, _, err := GetTerminalColors()
+		if err != nil {
+			log.Printf("Warning: %v; using theme background", err)
+			termBG = theme.Background
+		}
+		bg = lipgloss.Color(termBG)
 		fg = lipgloss.Color(theme.Foreground)
 		accent = lipgloss.Color(theme.Accent)
 		muted = lipgloss.Color(theme.Muted)
 		cursor = lipgloss.Color(theme.Cursor)
-		
-		bgStr = "default"
+
+		bgStr = termBG
 		fgStr = theme.Foreground
 		accentStr = theme.Accent
 		mutedStr = theme.Muted
