@@ -70,7 +70,7 @@ func (r Rating) View() string {
 
 	accentStyle := r.styles.AccentStyle
 	mutedStyle := r.styles.MutedStyle
-	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(r.styles.Cursor))
+	cursorStyle := r.styles.CursorStyle.Copy()
 
 	var lines []string
 
@@ -105,7 +105,7 @@ func (r Rating) View() string {
 
 	modalStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(r.styles.Accent)).
+		BorderForeground(r.styles.AccentStyle.GetForeground()).
 		Padding(1, 2).
 		Width(modalWidth)
 

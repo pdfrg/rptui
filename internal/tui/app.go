@@ -586,9 +586,8 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 		viewport.WithHeight(15),
 	)
 	viewport.SoftWrap = true
-	viewport.Style = lipgloss.NewStyle().
-		Background(lipgloss.Color(styles.Background)).
-		Foreground(lipgloss.Color(styles.Foreground))
+	viewport.Style = styles.ForegroundStyle.Copy().
+		Background(styles.BackgroundStyle.GetBackground())
 
 	// Initialize help
 	help := help.New()
@@ -596,7 +595,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 	// Initialize spinner
 	sp := spinner.New()
 	sp.Spinner = spinner.Points
-	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(styles.Accent))
+	sp.Style = styles.AccentStyle.Copy()
 
 	m := &Model{
 		config:                    cfg,
@@ -755,9 +754,8 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 		viewport.WithHeight(15),
 	)
 	viewport.SoftWrap = true
-	viewport.Style = lipgloss.NewStyle().
-		Background(lipgloss.Color(styles.Background)).
-		Foreground(lipgloss.Color(styles.Foreground))
+	viewport.Style = styles.ForegroundStyle.Copy().
+		Background(styles.BackgroundStyle.GetBackground())
 
 	// Initialize help
 	help := help.New()
@@ -765,7 +763,7 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 	// Initialize spinner
 	sp := spinner.New()
 	sp.Spinner = spinner.Points
-	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(styles.Accent))
+	sp.Style = styles.AccentStyle.Copy()
 
 	// Convert CachedSong to models.Song for playlist display
 	var modelSongs []*models.Song
@@ -1426,10 +1424,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.headerWidget.UpdateStyles(m.styles.Header)
 		m.footerWidget.UpdateStyles(m.styles.AccentStyle, m.styles.MutedStyle)
 
-		m.viewport.Style = lipgloss.NewStyle().
-			Background(lipgloss.Color(m.styles.Background)).
-			Foreground(lipgloss.Color(m.styles.Foreground))
-		m.spinner.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(m.styles.Accent))
+		m.viewport.Style = m.styles.ForegroundStyle.Copy().
+			Background(m.styles.BackgroundStyle.GetBackground())
+		m.spinner.Style = m.styles.AccentStyle.Copy()
 
 		// Update visualizer theme colors
 		if m.vis != nil {
@@ -3677,7 +3674,7 @@ func (m *Model) updateBottomView() {
 				endIdx = len(m.syncedLyrics)
 			}
 
-			cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.styles.Cursor)).Bold(true)
+			cursorStyle := m.styles.CursorStyle.Copy().Bold(true)
 			var lines []string
 			for i := startIdx; i < endIdx; i++ {
 				if i == currentLineIdx {
@@ -3797,11 +3794,11 @@ func (m *Model) updateBottomView() {
 			visibleComments := m.comments[start:end]
 
 			for _, c := range visibleComments {
-				// Format: <time> <username>
-				// <quoted text if any>
-				// <message>
-				timeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.styles.Accent))
-				userStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.styles.Cursor))
+// Format: <time> <username>
+			// <quoted text if any>
+			// <message>
+			timeStyle := m.styles.AccentStyle.Copy()
+			userStyle := m.styles.CursorStyle.Copy()
 				header := timeStyle.Render(c.PostedTime) + " " + userStyle.Render(c.Username)
 				lines = append(lines, header)
 				if c.QuotedText != "" {
@@ -4588,8 +4585,8 @@ func (m Model) renderArtistArtCmd() tea.Cmd {
 func (m Model) altView(s string) tea.View {
 	v := tea.NewView(s)
 	v.AltScreen = true
-	v.BackgroundColor = lipgloss.Color(m.styles.Background)
-	v.ForegroundColor = lipgloss.Color(m.styles.Foreground)
+	v.BackgroundColor = m.styles.BackgroundStyle.GetBackground()
+	v.ForegroundColor = m.styles.ForegroundStyle.GetForeground()
 	return v
 }
 
@@ -5213,20 +5210,16 @@ func (m Model) buildVisInfoOverlay() []string {
 	var lines []string
 
 	// Title
-	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.styles.Foreground)).
-		Bold(true)
+	titleStyle := m.styles.ForegroundStyle.Copy().Bold(true)
 	lines = append(lines, titleStyle.Render(song.Title))
 
 	// Artist
-	artistStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.styles.Accent))
+	artistStyle := m.styles.AccentStyle.Copy()
 	lines = append(lines, artistStyle.Render(song.Artist))
 
 	// Album (year)
 	if song.Album != "" {
-		albumStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color(m.styles.Muted))
+		albumStyle := m.styles.MutedStyle.Copy()
 		album := song.Album
 		if song.Year != "" {
 			album = fmt.Sprintf("%s (%s)", album, song.Year)
@@ -5235,8 +5228,7 @@ func (m Model) buildVisInfoOverlay() []string {
 	}
 
 	// Station info
-	stationStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.styles.Cursor))
+	stationStyle := m.styles.CursorStyle.Copy()
 	stationName := config.StationNames[m.config.Channel]
 	lines = append(lines, stationStyle.Render(stationName))
 

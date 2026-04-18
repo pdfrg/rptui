@@ -448,7 +448,7 @@ func (o Options) View() string {
 		if i == o.cursor {
 			prefix = cursorStyle.Render("▸ ")
 			label = lipgloss.NewStyle().
-				Foreground(lipgloss.Color(o.styles.Foreground)).
+				Foreground(o.styles.ForegroundStyle.GetForeground()).
 				Render(item.label)
 		}
 
@@ -480,7 +480,7 @@ func (o Options) View() string {
 
 	modalStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(o.styles.Accent)).
+		BorderForeground(o.styles.AccentStyle.GetForeground()).
 		Padding(1, 2).
 		Width(modalWidth)
 
