@@ -726,9 +726,10 @@ SLEEP TIMER / ALARM:
 ACTIONS:
     --lastfm-auth           Run Last.fm OAuth authentication flow and save session key
     --rp-auth               Authenticate with Radio Paradise account
-                            Enables user ratings, comments, favorites sync, and My Paradise channel
-                            (optional — all features work without an RP account)
+                             Enables user ratings, comments, favorites sync, and My Paradise channel
+                             (optional — all features work without an RP account)
     --create-colors-file    Print color theme template to stdout
+    --test-terminal-colors  Query and display terminal color information
 
 EXAMPLES:
     rptui                   Launch with default settings
