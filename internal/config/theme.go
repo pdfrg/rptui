@@ -247,10 +247,9 @@ func loadThemeFromFile(path string) (*ColorTheme, error) {
 	return &theme, nil
 }
 
-// NewThemeStyles converts ColorTheme to lipgloss styles
-// NewThemeStyles converts ColorTheme to lipgloss styles
-// If transparentBackground is true, uses terminal's default background
-// If disableTheme is true, uses terminal's default colors for everything
+// NewThemeStyles converts ColorTheme to lipgloss styles.
+// If transparentBackground is true, uses terminal's default background.
+// If disableTheme is true, uses terminal's default colors for everything.
 func NewThemeStyles(theme *ColorTheme, transparentBackground bool, disableTheme bool) *ThemeStyles {
 	var bg color.Color
 	var fg color.Color

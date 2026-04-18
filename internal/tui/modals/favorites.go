@@ -369,7 +369,7 @@ func (f Favorites) View() string {
 
 	// Column headers
 	headerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(f.styles.Muted)).
+		Foreground(f.styles.MutedStyle.GetForeground()).
 		Bold(true)
 
 	if f.activeTab == TabOffline {
@@ -431,8 +431,7 @@ func (f Favorites) View() string {
 
 				if i == f.cursor {
 					prefix := cursorStyle.Render("▸ ")
-					line := lipgloss.NewStyle().
-						Foreground(lipgloss.Color(f.styles.Foreground)).
+					line := f.styles.ForegroundStyle.Copy().
 						Render(row)
 					b.WriteString(prefix + line)
 				} else {
@@ -478,8 +477,7 @@ func (f Favorites) View() string {
 
 			if i == f.cursor {
 				prefix := cursorStyle.Render("▸ ")
-				line := lipgloss.NewStyle().
-					Foreground(lipgloss.Color(f.styles.Foreground)).
+				line := f.styles.ForegroundStyle.Copy().
 					Render(row)
 				b.WriteString(prefix + line)
 			} else {
@@ -526,8 +524,7 @@ func (f Favorites) View() string {
 	b.WriteString(centerStyled(helpText, contentWidth))
 
 	if f.toastMessage != "" {
-		toast := lipgloss.NewStyle().
-			Foreground(lipgloss.Color(f.styles.Cursor)).
+		toast := f.styles.CursorStyle.Copy().
 			Render(f.toastMessage)
 		b.WriteString("\n")
 		b.WriteString(centerStyled(toast, contentWidth))
@@ -535,7 +532,7 @@ func (f Favorites) View() string {
 
 	modalStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(f.styles.Accent)).
+		BorderForeground(f.styles.AccentStyle.GetForeground()).
 		Padding(1, 2).
 		Width(modalWidth)
 

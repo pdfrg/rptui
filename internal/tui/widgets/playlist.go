@@ -38,10 +38,10 @@ func NewPlaylist(styles *config.ThemeStyles) *Playlist {
 	s := table.DefaultStyles()
 	s.Header = s.Header.
 		Bold(false).
-		Foreground(lipgloss.Color(styles.Muted)).
+		Foreground(styles.MutedStyle.GetForeground()).
 		Background(lipgloss.Color(headerBg))
 	s.Selected = s.Selected.
-		Foreground(lipgloss.Color(styles.Cursor)).
+		Foreground(styles.CursorStyle.GetForeground()).
 		Bold(true)
 	t.SetStyles(s)
 
@@ -93,10 +93,10 @@ func (p *Playlist) UpdateStyles(styles *config.ThemeStyles) {
 	s := table.DefaultStyles()
 	s.Header = s.Header.
 		Bold(false).
-		Foreground(lipgloss.Color(styles.Muted)).
+		Foreground(styles.MutedStyle.GetForeground()).
 		Background(lipgloss.Color(headerBg))
 	s.Selected = s.Selected.
-		Foreground(lipgloss.Color(styles.Cursor)).
+		Foreground(styles.CursorStyle.GetForeground()).
 		Bold(true)
 	p.table.SetStyles(s)
 }

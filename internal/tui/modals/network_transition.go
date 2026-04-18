@@ -164,7 +164,7 @@ func (n NetworkTransition) View() string {
 
 	modalStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(n.styles.Accent)).
+		BorderForeground(n.styles.AccentStyle.GetForeground()).
 		Padding(1, 2).
 		Width(modalWidth)
 

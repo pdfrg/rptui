@@ -481,7 +481,7 @@ func (g Gallery) View() string {
 
 	modalStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(g.styles.Accent)).
+		BorderForeground(g.styles.AccentStyle.GetForeground()).
 		Padding(1, 2).
 		Width(modalWidth)
 
