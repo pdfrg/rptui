@@ -57,7 +57,7 @@ type NowPlaying struct {
 	foregroundStyle lipgloss.Style
 	accentStyle     lipgloss.Style
 	mutedStyle      lipgloss.Style
-	cursorStyle    lipgloss.Style
+	cursorStyle     lipgloss.Style
 	width           int
 	maxWidth        int // when > 0, truncate title/artist/album with ellipsis
 	contentWidth    int // when > 0, pad all lines to this exact width to prevent "clear to end of line"
@@ -71,15 +71,20 @@ type NowPlaying struct {
 }
 
 // NewNowPlaying creates a new NowPlaying widget
-func NewNowPlaying(fgStyle, accentStyle, mutedStyle lipgloss.Style, accentColor, cursorColor, bgColor string) *NowPlaying {
+func NewNowPlaying(fgStyle, accentStyle, mutedStyle lipgloss.Style, accentColor, cursorColor, progressBgColor string) *NowPlaying {
 	cursorStyle := fgStyle
 	if cursorColor != "" {
 		cursorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(cursorColor))
 	}
 
 	var emptyColor color.Color
-	if bgColor != "" && len(bgColor) == 7 && bgColor[0] == '#' {
-		emptyColor = lipgloss.Color(darkenColor(bgColor, 0.3))
+	// Progress bar always gets a proper shaded background
+	// This is the ONLY place we ever draw an explicit background in transparent modes
+	if progressBgColor != "" && len(progressBgColor) == 7 && progressBgColor[0] == '#' {
+		emptyColor = lipgloss.Color(darkenColor(progressBgColor, 0.3))
+	} else {
+		// Neutral fallback
+		emptyColor = lipgloss.Color("#1a1a1a")
 	}
 
 	p := progress.New(
@@ -94,7 +99,7 @@ func NewNowPlaying(fgStyle, accentStyle, mutedStyle lipgloss.Style, accentColor,
 		foregroundStyle: fgStyle,
 		accentStyle:     accentStyle,
 		mutedStyle:      mutedStyle,
-		cursorStyle:    cursorStyle,
+		cursorStyle:     cursorStyle,
 		progress:        p,
 	}
 }
