@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/muesli/termenv"
 )
@@ -90,32 +91,38 @@ func (t *TerminalColors) queryTerminalColors() {
 	t.queried = true
 	t.palette = make(map[int]string)
 
-	// Try termenv for default fg/bg (OSC 10/11)
-	output := termenv.NewOutput(os.Stdout)
-	fgColor := output.ForegroundColor()
-	bgColor := output.BackgroundColor()
+	// Try termenv first
+	t.queryTermenv()
 
-	// Use Color.Sequence() to get ANSI codes, then parse
-	if fgColor != nil {
-		seq := fgColor.Sequence(false)
-		if seq != "" {
-			t.foreground = sequenceToHex(seq)
-		}
-	}
-	if bgColor != nil {
-		seq := bgColor.Sequence(true)
-		if seq != "" {
-			t.background = sequenceToHex(seq)
-		}
-	}
-
-	// Try to query palette via OSC 4
-	// Note: termenv doesn't support OSC 4 directly, but we can parse COLORFGBG
+	// Try COLORFGBG as fallback
 	t.queryPaletteFromEnv()
 
 	// Determine success
 	if t.foreground != "" && t.background != "" {
 		t.querySuccess = true
+	}
+}
+
+func (t *TerminalColors) queryTermenv() {
+	// Try termenv for default fg/bg (OSC 10/11)
+	// Note: This requires a TTY and may not work in all environments
+	output := termenv.NewOutput(os.Stdout)
+
+	// Give the terminal time to respond
+	time.Sleep(100 * time.Millisecond)
+
+	fgColor := output.ForegroundColor()
+	bgColor := output.BackgroundColor()
+
+	if fgColor != nil {
+		if seq := fgColor.Sequence(false); seq != "" {
+			t.foreground = sequenceToHex(seq)
+		}
+	}
+	if bgColor != nil {
+		if seq := bgColor.Sequence(true); seq != "" {
+			t.background = sequenceToHex(seq)
+		}
 	}
 }
 
