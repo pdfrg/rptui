@@ -71,6 +71,13 @@ type ThemeStyles struct {
 	Muted      string
 	Cursor     string
 
+	// Resolved hex color values (for widgets that don't support ANSI indices)
+	BackgroundHex string
+	ForegroundHex string
+	AccentHex     string
+	MutedHex      string
+	CursorHex     string
+
 	// Pre-built styles
 	BackgroundStyle lipgloss.Style
 	ForegroundStyle lipgloss.Style
@@ -335,11 +342,16 @@ func NewThemeStyles(theme *ColorTheme, transparentBackground bool, disableTheme 
 	}
 
 	return &ThemeStyles{
-		Background: bgStr,
-		Foreground: fgStr,
-		Accent:     accentStr,
-		Muted:      mutedStr,
-		Cursor:     cursorStr,
+		Background:    bgStr,
+		Foreground:    fgStr,
+		Accent:        accentStr,
+		Muted:         mutedStr,
+		Cursor:        cursorStr,
+		BackgroundHex: normalizeHex(bgStr),
+		ForegroundHex: normalizeHex(fgStr),
+		AccentHex:     normalizeHex(accentStr),
+		MutedHex:      normalizeHex(mutedStr),
+		CursorHex:     normalizeHex(cursorStr),
 		BackgroundStyle: lipgloss.NewStyle().
 			Background(bg),
 		ForegroundStyle: lipgloss.NewStyle().
