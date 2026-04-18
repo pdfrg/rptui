@@ -258,14 +258,14 @@ func NewThemeStyles(theme *ColorTheme, transparentBackground bool, disableTheme 
 	var accent color.Color
 	var muted color.Color
 	var cursor color.Color
-	
+
 	// Also track raw string values for Background/Foreground/etc fields
 	var bgStr string
 	var fgStr string
 	var accentStr string
 	var mutedStr string
 	var cursorStr string
-	
+
 	if disableTheme {
 		// Get terminal colors - use explicit colors instead of NoColor{}
 		// which would fall back to ANSI black
@@ -304,7 +304,7 @@ func NewThemeStyles(theme *ColorTheme, transparentBackground bool, disableTheme 
 		mutedStr = palette[mutedIdx]
 	} else if transparentBackground {
 		// Use terminal's default background only (keep theme foreground colors)
-		termBG, _, _, err := GetTerminalColors()
+		_, termBG, _, err := GetTerminalColors()
 		if err != nil {
 			log.Printf("Warning: %v; using theme background", err)
 			termBG = theme.Background
@@ -326,14 +326,14 @@ func NewThemeStyles(theme *ColorTheme, transparentBackground bool, disableTheme 
 		accent = lipgloss.Color(theme.Accent)
 		muted = lipgloss.Color(theme.Muted)
 		cursor = lipgloss.Color(theme.Cursor)
-		
+
 		bgStr = theme.Background
 		fgStr = theme.Foreground
 		accentStr = theme.Accent
 		mutedStr = theme.Muted
 		cursorStr = theme.Cursor
 	}
-	
+
 	return &ThemeStyles{
 		Background: bgStr,
 		Foreground: fgStr,
