@@ -573,7 +573,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 	if rpAPI.IsAuthenticated() {
 		footerWidget.AddChannel99()
 	}
-	nowPlayingWidget := widgets.NewNowPlaying(styles.ForegroundStyle, styles.AccentStyle, styles.MutedStyle, theme.Accent, theme.Cursor, styles.Background)
+	nowPlayingWidget := widgets.NewNowPlaying(styles.ForegroundStyle, styles.AccentStyle, styles.MutedStyle, styles.AccentHex, styles.CursorHex, styles.BackgroundHex)
 	playlistWidget := widgets.NewPlaylist(styles)
 
 	// Initialize modal widgets
@@ -741,7 +741,7 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 	headerWidget := widgets.NewHeader(styles.Header, "rptui - Radio Paradise (Offline)")
 	footerWidget := widgets.NewFooter(styles.AccentStyle, styles.MutedStyle)
 	footerWidget.SetScrobbleServices(scrobbler.ServiceNames())
-	nowPlayingWidget := widgets.NewNowPlaying(styles.ForegroundStyle, styles.AccentStyle, styles.MutedStyle, theme.Accent, theme.Cursor, styles.Background)
+	nowPlayingWidget := widgets.NewNowPlaying(styles.ForegroundStyle, styles.AccentStyle, styles.MutedStyle, styles.AccentHex, styles.CursorHex, styles.BackgroundHex)
 	playlistWidget := widgets.NewPlaylist(styles)
 
 	// Initialize modal widgets
@@ -1090,9 +1090,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.styles.ForegroundStyle,
 					m.styles.AccentStyle,
 					m.styles.MutedStyle,
-					newTheme.Accent,
-					newTheme.Cursor,
-					newTheme.Background,
+					m.styles.AccentHex,
+					m.styles.CursorHex,
+					m.styles.BackgroundHex,
 				)
 				m.playlistWidget.UpdateStyles(m.styles)
 				m.headerWidget.UpdateStyles(m.styles.Header)
@@ -1415,9 +1415,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.styles.ForegroundStyle,
 			m.styles.AccentStyle,
 			m.styles.MutedStyle,
-			m.styles.Accent,
-			m.styles.Cursor,
-			m.styles.Background,
+			m.styles.AccentHex,
+			m.styles.CursorHex,
+			m.styles.BackgroundHex,
 		)
 		m.playlistWidget.UpdateStyles(m.styles)
 		m.headerWidget.UpdateStyles(m.styles.Header)
@@ -3793,11 +3793,11 @@ func (m *Model) updateBottomView() {
 			visibleComments := m.comments[start:end]
 
 			for _, c := range visibleComments {
-// Format: <time> <username>
-			// <quoted text if any>
-			// <message>
-			timeStyle := m.styles.AccentStyle.Copy()
-			userStyle := m.styles.CursorStyle.Copy()
+				// Format: <time> <username>
+				// <quoted text if any>
+				// <message>
+				timeStyle := m.styles.AccentStyle.Copy()
+				userStyle := m.styles.CursorStyle.Copy()
 				header := timeStyle.Render(c.PostedTime) + " " + userStyle.Render(c.Username)
 				lines = append(lines, header)
 				if c.QuotedText != "" {
