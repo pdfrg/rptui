@@ -3,6 +3,7 @@ package widgets
 
 import (
 	"fmt"
+	"image/color"
 	"log"
 	"strings"
 	"time"
@@ -56,6 +57,7 @@ type NowPlaying struct {
 	foregroundStyle lipgloss.Style
 	accentStyle     lipgloss.Style
 	mutedStyle      lipgloss.Style
+	cursorStyle    lipgloss.Style
 	width           int
 	maxWidth        int // when > 0, truncate title/artist/album with ellipsis
 	contentWidth    int // when > 0, pad all lines to this exact width to prevent "clear to end of line"
@@ -70,18 +72,29 @@ type NowPlaying struct {
 
 // NewNowPlaying creates a new NowPlaying widget
 func NewNowPlaying(fgStyle, accentStyle, mutedStyle lipgloss.Style, accentColor, cursorColor, bgColor string) *NowPlaying {
+	cursorStyle := fgStyle
+	if cursorColor != "" {
+		cursorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(cursorColor))
+	}
+
+	var emptyColor color.Color
+	if bgColor != "" && len(bgColor) == 7 && bgColor[0] == '#' {
+		emptyColor = lipgloss.Color(darkenColor(bgColor, 0.3))
+	}
+
 	p := progress.New(
 		progress.WithWidth(40),
-		progress.WithColors(lipgloss.Color(cursorColor), lipgloss.Color(accentColor)), // gradient fill
+		progress.WithColors(lipgloss.Color(cursorColor), lipgloss.Color(accentColor)),
 		progress.WithoutPercentage(),
 		progress.WithFillCharacters('', ''),
 	)
-	p.EmptyColor = lipgloss.Color(darkenColor(bgColor, 0.3)) // unfilled = background darkened 30%
+	p.EmptyColor = emptyColor
 
 	return &NowPlaying{
 		foregroundStyle: fgStyle,
 		accentStyle:     accentStyle,
 		mutedStyle:      mutedStyle,
+		cursorStyle:    cursorStyle,
 		progress:        p,
 	}
 }
@@ -119,13 +132,24 @@ func (n *NowPlaying) UpdateStyles(fgStyle, accentStyle, mutedStyle lipgloss.Styl
 	n.foregroundStyle = fgStyle
 	n.accentStyle = accentStyle
 	n.mutedStyle = mutedStyle
+
+	n.cursorStyle = fgStyle
+	if cursorColor != "" {
+		n.cursorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(cursorColor))
+	}
+
+	var emptyColor color.Color
+	if bgColor != "" && len(bgColor) == 7 && bgColor[0] == '#' {
+		emptyColor = lipgloss.Color(darkenColor(bgColor, 0.3))
+	}
+
 	n.progress = progress.New(
 		progress.WithWidth(40),
 		progress.WithColors(lipgloss.Color(cursorColor), lipgloss.Color(accentColor)),
 		progress.WithoutPercentage(),
 		progress.WithFillCharacters('', ''),
 	)
-	n.progress.EmptyColor = lipgloss.Color(darkenColor(bgColor, 0.3))
+	n.progress.EmptyColor = emptyColor
 }
 
 // UpdateProgress updates the progress bar percent (0.0 to 1.0)
@@ -215,12 +239,12 @@ func (n NowPlaying) View(
 	var ratingLine string
 	if userRating != "" {
 		keyStyle := n.mutedStyle.Render("│")
-		keyEmoji := lipgloss.NewStyle().Foreground(lipgloss.Color(cursorColor)).Render("🔑")
+		keyEmoji := n.cursorStyle.Copy().Render("🔑")
 		displayRating := userRating
 		if userRating == "0" {
 			displayRating = "--"
 		}
-		userRatingStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(cursorColor)).Render(displayRating)
+		userRatingStyle := n.cursorStyle.Copy().Render(displayRating)
 		ratingLine = fmt.Sprintf("%s  %s  %s %s", n.accentStyle.Render(rating), keyStyle, keyEmoji, userRatingStyle)
 	} else {
 		ratingLine = n.accentStyle.Render(rating)
