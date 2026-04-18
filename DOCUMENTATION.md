@@ -89,9 +89,9 @@ The config file is located at `~/.config/rptui/config.toml`. It is created autom
 | `theme` | string | Built-in theme: `catppuccin-mocha`, `gruvbox-dark`, `dark-red`, `osaka-jade`, `synth`, `basic` |
 | `transparent_background` | bool | Use terminal's default background color |
 | `disable_theme` | bool | Disable all theming, use terminal's default colors |
-| `terminal_palette.cursor` | int | Palette index for cursor color (0-15, default: 2) |
-| `terminal_palette.accent` | int | Palette index for accent color (0-15, default: 4) |
-| `terminal_palette.muted` | int | Palette index for muted color (0-15, default: 8) |
+| `terminal_palette.cursor` | int | Palette index for cursor color (0-15, default: 2, green) |
+| `terminal_palette.accent` | int | Palette index for accent color (0-15, default: 4, blue) |
+| `terminal_palette.muted` | int | Palette index for muted color (0-15, default: 8, gray) |
 | `notifications_enabled` | bool | Show desktop notifications |
 | `notifications_show_art` | bool | Include album art in notifications |
 
