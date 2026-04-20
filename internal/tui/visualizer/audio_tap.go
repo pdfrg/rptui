@@ -447,9 +447,9 @@ func ActiveBackend() string {
 func (t *AudioTap) readLoop() {
 	defer close(t.done)
 
-	maxSamples := 480
-	byteBuf := make([]byte, maxSamples*4)
-	floatBuf := make([]float32, maxSamples)
+	accumSamples := 480  // accumulate this many before writing to ring buffer
+	byteBuf := make([]byte, accumSamples*4)
+	floatBuf := make([]float32, accumSamples)
 
 	// Select reader: stderr for parecord -v, stdout otherwise
 	reader := t.stdout
@@ -457,33 +457,40 @@ func (t *AudioTap) readLoop() {
 		reader = t.stderr
 	}
 
+	sampleSize := t.sampleSize
+	if sampleSize == 0 {
+		sampleSize = 4 // default to float32
+	}
+
 	for {
-		var n int
-		var err error
+		// Read audio into accumulation buffer
+		for collected := 0; collected < accumSamples; {
+			var n int
+			var err error
 
-		// pw-record (stdout): use io.ReadFull for exact buffer
-		// parecord -v (stderr): use Read() for variable chunks
-		if t.useStderr {
-			n, err = reader.Read(byteBuf)
-		} else {
-			n, err = io.ReadFull(reader, byteBuf)
+			// pw-record (stdout): use io.ReadFull for exact buffer
+			// parecord -v (stderr): accumulate via Read() for variable chunks
+			if t.useStderr {
+				n, err = reader.Read(byteBuf[collected*sampleSize:])
+			} else {
+				// For pw-record: use fixed buffer size
+				localBuf := byteBuf[collected*4 : ]
+				n, err = io.ReadFull(reader, localBuf)
+			}
+
+			if err != nil {
+				return
+			}
+
+			sampleCount := n / sampleSize
+			if sampleCount == 0 {
+				continue
+			}
+			collected += sampleCount
 		}
 
-		if err != nil {
-			return
-		}
-
-		sampleSize := t.sampleSize
-		if sampleSize == 0 {
-			sampleSize = 4 // default to float32
-		}
-
-		sampleCount := n / sampleSize
-		if sampleCount > maxSamples {
-			sampleCount = maxSamples
-		}
-
-		for i := 0; i < sampleCount; i++ {
+		// Convert accumulated samples to float32
+		for i := 0; i < accumSamples; i++ {
 			if sampleSize == 2 {
 				// s16le to float32: divide by 32768.0
 				bits := int16(binary.LittleEndian.Uint16(byteBuf[i*2 : (i+1)*2]))
@@ -494,7 +501,8 @@ func (t *AudioTap) readLoop() {
 				floatBuf[i] = math.Float32frombits(bits)
 			}
 		}
-		t.buf.Write(floatBuf[:sampleCount])
+
+		t.buf.Write(floatBuf[:accumSamples])
 	}
 }
 
