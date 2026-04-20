@@ -147,7 +147,8 @@ type AudioTap struct {
 	buf        *ringBuffer
 	done       chan struct{}
 	closed     bool
-	sampleSize int // bytes per sample: 4 for float32, 2 for s16le
+	sampleSize int  // bytes per sample: 4 for float32, 2 for s16le
+	useStderr  bool // for parecord -v: audio goes to stderr instead of stdout
 }
 
 // findMonitorSourceNode returns the node ID of the default sink's monitor source.
@@ -346,14 +347,16 @@ func newPulseAudioTap() *AudioTap {
 		cmd:        cmd,
 		stdout:     stdout,
 		stderr:     stderr,
-		buf:       newRingBuffer(8192),
-		done:      make(chan struct{}),
-		sampleSize: sampleSize,
+		buf:        newRingBuffer(8192),
+		done:       make(chan struct{}),
+		sampleSize:  sampleSize,
+		useStderr:  true, // parecord -v sends audio to stderr
 	}
 
 	go tap.readLoop()
-	// Drain stderr so parecord doesn't block
-	go io.Copy(io.Discard, tap.stderr)
+	// Drain the other pipe so parecord doesn't block
+	// For parecord -v: drain stdout (status), read from stderr (audio)
+	go io.Copy(io.Discard, tap.stdout)
 
 	return tap
 }
@@ -448,8 +451,14 @@ func (t *AudioTap) readLoop() {
 	byteBuf := make([]byte, maxSamples*4)
 	floatBuf := make([]float32, maxSamples)
 
+	// Select reader: stderr for parecord -v, stdout otherwise
+	reader := t.stdout
+	if t.useStderr {
+		reader = t.stderr
+	}
+
 	for {
-		n, err := io.ReadFull(t.stdout, byteBuf)
+		n, err := io.ReadFull(reader, byteBuf)
 		if err != nil {
 			return
 		}
