@@ -286,30 +286,18 @@ func newPulseAudioTap() *AudioTap {
 		return nil
 	}
 
-	// Detect PulseAudio format from pactl info
-	formatName, sampleRate, err := DetectPulseAudioFormat()
-	if err != nil {
-		if audioLogger != nil {
-			audioLogger.Printf("AudioTap: DetectPulseAudioFormat failed: %v, using default", err)
-		}
-		formatName = "s16le"
-		sampleRate = 44100
-	} else {
-		if audioLogger != nil {
-			audioLogger.Printf("AudioTap: detected PulseAudio format: %s, rate: %d", formatName, sampleRate)
-		}
-	}
-
-	// Determine bytes per sample for ring buffer sizing
-	sampleSize := 4
+	// Detect format for determining bytes per sample (used by readLoop)
+	// Note: --fix-format in parecord command will match this automatically
+	formatName, _, _ := DetectPulseAudioFormat()
+	sampleSize := 4 // default to float32
 	if formatName == "s16le" || formatName == "s16be" || formatName == "s16" {
 		sampleSize = 2
-	} else if formatName == "float32le" || formatName == "float32be" || formatName == "float32" {
-		sampleSize = 4
+	}
+	if audioLogger != nil {
+		audioLogger.Printf("AudioTap: using PulseAudio format: %s (%d bytes/sample)", formatName, sampleSize)
 	}
 
 	cmd := exec.Command("parecord",
-		"-v",
 		"--device=@DEFAULT_MONITOR@",
 		"--fix-format",
 		"--fix-rate",
@@ -350,13 +338,12 @@ func newPulseAudioTap() *AudioTap {
 		buf:        newRingBuffer(8192),
 		done:       make(chan struct{}),
 		sampleSize:  sampleSize,
-		useStderr:  true, // parecord -v sends audio to stderr
+		useStderr:  false, // parecord sends audio to stdout
 	}
 
 	go tap.readLoop()
-	// Drain the other pipe so parecord doesn't block
-	// For parecord -v: drain stdout (status), read from stderr (audio)
-	go io.Copy(io.Discard, tap.stdout)
+	// Drain stderr so parecord doesn't block
+	go io.Copy(io.Discard, tap.stderr)
 
 	return tap
 }
