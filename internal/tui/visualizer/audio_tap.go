@@ -13,6 +13,8 @@ import (
 )
 
 var audioLogger *log.Logger
+var audioServer      string
+var activeBackend   string
 
 func SetAudioLogger(l *log.Logger) {
 	audioLogger = l
@@ -69,6 +71,42 @@ func (r *ringBuffer) Available() uint64 {
 	head := atomic.LoadUint64(&r.head)
 	tail := atomic.LoadUint64(&r.tail)
 	return head - tail
+}
+
+func DetectAudioServer() string {
+	if audioServer != "" {
+		return audioServer
+	}
+
+	cmd := exec.Command("pactl", "info")
+	out, err := cmd.Output()
+	if err != nil {
+		if audioLogger != nil {
+			audioLogger.Printf("AudioTap: failed to detect audio server: %v", err)
+		}
+		audioServer = "Unknown"
+		return audioServer
+	}
+
+	lines := strings.Split(string(out), "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "Server Name:") {
+			name := strings.TrimSpace(strings.TrimPrefix(line, "Server Name:"))
+			audioServer = name
+			if audioLogger != nil {
+				audioLogger.Printf("AudioTap: detected audio server: %s", name)
+			}
+			return name
+		}
+	}
+
+	audioServer = "Unknown"
+	return audioServer
+}
+
+func IsPulseAudio() bool {
+	server := DetectAudioServer()
+	return strings.HasPrefix(server, "pulseaudio")
 }
 
 // AudioTap captures audio from the PipeWire monitor sink via pw-record.
@@ -134,10 +172,9 @@ func findMonitorSourceNode() (int, error) {
 	return 0, fmt.Errorf("no monitor source found")
 }
 
-// NewAudioTap creates an AudioTap that captures mono float32 audio at 48kHz
-// from the default PipeWire sink's monitor output.
+// newPipeWireTap creates an AudioTap using pw-record (native PipeWire).
 // Returns nil if pw-record is not available or no sink is found.
-func NewAudioTap() *AudioTap {
+func newPipeWireTap() *AudioTap {
 	if _, err := exec.LookPath("pw-record"); err != nil {
 		if audioLogger != nil {
 			audioLogger.Printf("AudioTap: pw-record not found: %v", err)
@@ -207,6 +244,117 @@ func NewAudioTap() *AudioTap {
 	return tap
 }
 
+// newPulseAudioTap creates an AudioTap using parecord (PulseAudio).
+// Returns nil if parecord is not available.
+func newPulseAudioTap() *AudioTap {
+	if _, err := exec.LookPath("parecord"); err != nil {
+		if audioLogger != nil {
+			audioLogger.Printf("AudioTap: parecord not found: %v", err)
+		}
+		return nil
+	}
+
+	cmd := exec.Command("parecord",
+		"--device=@DEFAULT_MONITOR@",
+		"--format=f32",
+		"--rate=48000",
+		"--channels=1",
+		"--channel-map=mono",
+		"-",
+	)
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		if audioLogger != nil {
+			audioLogger.Printf("AudioTap: parecord StdoutPipe failed: %v", err)
+		}
+		return nil
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		if audioLogger != nil {
+			audioLogger.Printf("AudioTap: parecord StderrPipe failed: %v", err)
+		}
+		return nil
+	}
+
+	if err := cmd.Start(); err != nil {
+		if audioLogger != nil {
+			audioLogger.Printf("AudioTap: parecord cmd.Start failed: %v", err)
+		}
+		return nil
+	}
+	if audioLogger != nil {
+		audioLogger.Printf("AudioTap: parecord started successfully (PID: %d)", cmd.Process.Pid)
+	}
+
+	tap := &AudioTap{
+		cmd:    cmd,
+		stdout: stdout,
+		stderr: stderr,
+		buf:    newRingBuffer(8192),
+		done:   make(chan struct{}),
+	}
+
+	go tap.readLoop()
+	// Drain stderr so parecord doesn't block
+	go io.Copy(io.Discard, tap.stderr)
+
+	return tap
+}
+
+// NewAudioTap creates an AudioTap that captures mono float32 audio at 48kHz
+// from the default audio sink's monitor output.
+// Auto-detects PipeWire vs PulseAudio and uses the appropriate backend.
+// Returns nil if no audio backend is available.
+func NewAudioTap() *AudioTap {
+	server := DetectAudioServer()
+	isPulse := IsPulseAudio()
+
+	// Try PipeWire first (pw-record) - works on Arch/Omarchy
+	// Also try on PulseAudio systems if pw-record is installed (may work via PipeWire compat)
+	if !isPulse || PwRecordAvailable() {
+		if audioLogger != nil {
+			audioLogger.Printf("AudioTap: trying PipeWire backend (server: %s)", server)
+		}
+		tap := newPipeWireTap()
+		if tap != nil {
+			activeBackend = "PipeWire"
+			if audioLogger != nil {
+				audioLogger.Printf("AudioTap: using PipeWire backend")
+			}
+			return tap
+		}
+		if audioLogger != nil {
+			audioLogger.Printf("AudioTap: pw-record failed, trying PulseAudio backend")
+		}
+	}
+
+	// Fallback to PulseAudio (parecord) - works on Ubuntu 22.04
+	if audioLogger != nil {
+		audioLogger.Printf("AudioTap: trying PulseAudio backend (server: %s)", server)
+	}
+	tap := newPulseAudioTap()
+	if tap != nil {
+		activeBackend = "PulseAudio"
+		if audioLogger != nil {
+			audioLogger.Printf("AudioTap: using PulseAudio backend")
+		}
+		return tap
+	}
+
+	activeBackend = ""
+	if audioLogger != nil {
+		audioLogger.Printf("AudioTap: no audio backend available, using simulated mode")
+	}
+	return nil
+}
+
+// ActiveBackend returns the currently active audio backend: "PipeWire", "PulseAudio", or "".
+func ActiveBackend() string {
+	return activeBackend
+}
+
 func (t *AudioTap) readLoop() {
 	defer close(t.done)
 
@@ -253,5 +401,10 @@ func (t *AudioTap) AvailableSamples() uint64 {
 
 func PwRecordAvailable() bool {
 	_, err := exec.LookPath("pw-record")
+	return err == nil
+}
+
+func ParecordAvailable() bool {
+	_, err := exec.LookPath("parecord")
 	return err == nil
 }
