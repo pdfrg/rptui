@@ -287,21 +287,26 @@ func newPulseAudioTap() *AudioTap {
 	}
 
 	// Detect format for determining bytes per sample (used by readLoop)
-	// Note: --fix-format in parecord command will match this automatically
-	formatName, _, _ := DetectPulseAudioFormat()
+	// and for command line flags
+	formatName, sampleRate, _ := DetectPulseAudioFormat()
 	sampleSize := 4 // default to float32
+	var formatFlag string
 	if formatName == "s16le" || formatName == "s16be" || formatName == "s16" {
 		sampleSize = 2
+		formatFlag = "s16le"
+	} else {
+		formatFlag = "float32le"
 	}
 	if audioLogger != nil {
-		audioLogger.Printf("AudioTap: using PulseAudio format: %s (%d bytes/sample)", formatName, sampleSize)
+		audioLogger.Printf("AudioTap: using PulseAudio format: %s, rate: %d, sampleSize: %d",
+			formatName, sampleRate, sampleSize)
 	}
 
 	cmd := exec.Command("parecord",
 		"--raw",
 		"--device=@DEFAULT_MONITOR@",
-		"--fix-format",
-		"--fix-rate",
+		"--format="+formatFlag,
+		"--rate="+fmt.Sprint(sampleRate),
 		"--channels=1",
 		"--channel-map=mono",
 		"-",
