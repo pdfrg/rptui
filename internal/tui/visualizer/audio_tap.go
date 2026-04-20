@@ -311,11 +311,42 @@ func NewAudioTap() *AudioTap {
 	server := DetectAudioServer()
 	isPulse := IsPulseAudio()
 
-	// Try PipeWire first (pw-record) - works on Arch/Omarchy
-	// Also try on PulseAudio systems if pw-record is installed (may work via PipeWire compat)
-	if !isPulse || PwRecordAvailable() {
+	// Primary backend: use the detected audio server's native tool
+	if isPulse {
+		// PulseAudio detected - use parecord first
 		if audioLogger != nil {
-			audioLogger.Printf("AudioTap: trying PipeWire backend (server: %s)", server)
+			audioLogger.Printf("AudioTap: primary backend: PulseAudio (server: %s)", server)
+		}
+		tap := newPulseAudioTap()
+		if tap != nil {
+			activeBackend = "PulseAudio"
+			if audioLogger != nil {
+				audioLogger.Printf("AudioTap: using PulseAudio backend")
+			}
+			return tap
+		}
+		if audioLogger != nil {
+			audioLogger.Printf("AudioTap: parecord failed, trying PipeWire fallback")
+		}
+
+		// Fallback: try pw-record if PulseAudio didn't work
+		if PwRecordAvailable() {
+			if audioLogger != nil {
+				audioLogger.Printf("AudioTap: trying PipeWire fallback")
+			}
+			tap = newPipeWireTap()
+			if tap != nil {
+				activeBackend = "PipeWire"
+				if audioLogger != nil {
+					audioLogger.Printf("AudioTap: using PipeWire fallback backend")
+				}
+				return tap
+			}
+		}
+	} else {
+		// PipeWire detected (or unknown) - use pw-record first
+		if audioLogger != nil {
+			audioLogger.Printf("AudioTap: primary backend: PipeWire (server: %s)", server)
 		}
 		tap := newPipeWireTap()
 		if tap != nil {
@@ -326,21 +357,21 @@ func NewAudioTap() *AudioTap {
 			return tap
 		}
 		if audioLogger != nil {
-			audioLogger.Printf("AudioTap: pw-record failed, trying PulseAudio backend")
+			audioLogger.Printf("AudioTap: pw-record failed, trying PulseAudio fallback")
 		}
-	}
 
-	// Fallback to PulseAudio (parecord) - works on Ubuntu 22.04
-	if audioLogger != nil {
-		audioLogger.Printf("AudioTap: trying PulseAudio backend (server: %s)", server)
-	}
-	tap := newPulseAudioTap()
-	if tap != nil {
-		activeBackend = "PulseAudio"
+		// Fallback: try parecord if PipeWire didn't work
 		if audioLogger != nil {
-			audioLogger.Printf("AudioTap: using PulseAudio backend")
+			audioLogger.Printf("AudioTap: trying PulseAudio fallback")
 		}
-		return tap
+		tap = newPulseAudioTap()
+		if tap != nil {
+			activeBackend = "PulseAudio"
+			if audioLogger != nil {
+				audioLogger.Printf("AudioTap: using PulseAudio fallback backend")
+			}
+			return tap
+		}
 	}
 
 	activeBackend = ""
