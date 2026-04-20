@@ -467,7 +467,13 @@ func (t *AudioTap) readLoop() {
 			}
 
 			if err != nil {
+				if audioLogger != nil {
+					audioLogger.Printf("AudioTap readLoop: read error: %v", err)
+				}
 				return
+			}
+			if audioLogger != nil && collected == 0 {
+				audioLogger.Printf("AudioTap readLoop: first read n=%d, sampleSize=%d", n, sampleSize)
 			}
 
 			sampleCount := n / sampleSize
@@ -491,6 +497,10 @@ func (t *AudioTap) readLoop() {
 		}
 
 		t.buf.Write(floatBuf[:accumSamples])
+		if audioLogger != nil {
+			audioLogger.Printf("AudioTap readLoop: wrote %d samples to buffer, available=%d",
+				accumSamples, t.buf.Available())
+		}
 	}
 }
 
