@@ -332,6 +332,14 @@ func newPulseAudioTap() *AudioTap {
 		audioLogger.Printf("AudioTap: parecord started successfully (PID: %d)", cmd.Process.Pid)
 	}
 
+	// Log when process exits
+	go func() {
+		err := cmd.Wait()
+		if audioLogger != nil {
+			audioLogger.Printf("AudioTap: parecord process exited: %v", err)
+		}
+	}()
+
 	tap := &AudioTap{
 		cmd:        cmd,
 		stdout:     stdout,
@@ -435,6 +443,11 @@ func ActiveBackend() string {
 func (t *AudioTap) readLoop() {
 	defer close(t.done)
 
+	if audioLogger != nil {
+		audioLogger.Printf("AudioTap readLoop: starting, sampleSize=%d, useStderr=%v",
+			t.sampleSize, t.useStderr)
+	}
+
 	accumSamples := 480  // accumulate this many before writing to ring buffer
 	byteBuf := make([]byte, accumSamples*4)
 	floatBuf := make([]float32, accumSamples)
@@ -469,6 +482,11 @@ func (t *AudioTap) readLoop() {
 			if err != nil {
 				if audioLogger != nil {
 					audioLogger.Printf("AudioTap readLoop: read error: %v", err)
+					// Log process state
+					state, sterr := t.cmd.Process.Wait()
+					if sterr == nil {
+						audioLogger.Printf("AudioTap readLoop: process exited: %v", state)
+					}
 				}
 				return
 			}
