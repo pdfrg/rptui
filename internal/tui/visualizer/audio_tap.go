@@ -302,7 +302,9 @@ func newPulseAudioTap() *AudioTap {
 			formatName, sampleRate, sampleSize)
 	}
 
-	cmd := exec.Command("parecord",
+	// Use stdbuf to disable stdout buffering - without it, parecord buffers
+	// output and Go's pipe sees EOF immediately
+	cmd := exec.Command("stdbuf", "-o0", "parecord",
 		"--raw",
 		"--device=@DEFAULT_MONITOR@",
 		"--format="+formatFlag,
