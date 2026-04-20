@@ -311,8 +311,7 @@ func newPulseAudioTap() *AudioTap {
 		"--rate="+fmt.Sprint(sampleRate),
 		"--channels=1",
 		"--channel-map=mono",
-		"-",
-	)
+	) // no "-" needed - stdout is default with stdbuf
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
