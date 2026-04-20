@@ -240,20 +240,20 @@ func (v *Visualizer) updateFromAudio() {
 }
 
 // EnableRealAudio enables or disables real audio capture.
-// If enabled and pw-record is available, starts the audio tap.
-// Returns the actual audio source in use: "PipeWire" or "Simulated".
+// If enabled and an audio tap is available, starts the audio tap.
+// Returns the actual audio source in use: "PipeWire", "PulseAudio", or "Simulated".
 func (v *Visualizer) EnableRealAudio(enabled bool) string {
 	if v == nil {
 		return "Simulated"
 	}
 
-	if enabled && PwRecordAvailable() && v.audioTap == nil {
+	if enabled && v.audioTap == nil {
 		v.audioTap = NewAudioTap()
 		if v.audioTap != nil {
 			v.analyzer = NewAnalyzer()
 			v.realAudio = true
 			v.audioReady = false // will become true when data arrives
-			return "PipeWire"
+			return ActiveBackend()
 		}
 	}
 
@@ -266,7 +266,7 @@ func (v *Visualizer) EnableRealAudio(enabled bool) string {
 	}
 
 	if v.realAudio {
-		return "PipeWire"
+		return ActiveBackend()
 	}
 	return "Simulated"
 }
