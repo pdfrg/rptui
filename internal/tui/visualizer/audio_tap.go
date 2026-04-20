@@ -298,6 +298,7 @@ func newPulseAudioTap() *AudioTap {
 	}
 
 	cmd := exec.Command("parecord",
+		"--raw",
 		"--device=@DEFAULT_MONITOR@",
 		"--fix-format",
 		"--fix-rate",
