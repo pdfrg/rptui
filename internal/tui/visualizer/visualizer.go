@@ -271,13 +271,13 @@ func (v *Visualizer) EnableRealAudio(enabled bool) string {
 	return "Simulated"
 }
 
-// AudioSource returns the current audio source: "PipeWire" or "Simulated".
+// AudioSource returns the current audio source: "PipeWire", "PulseAudio", or "Simulated".
 func (v *Visualizer) AudioSource() string {
 	if v == nil {
 		return "Simulated"
 	}
 	if v.realAudio {
-		return "PipeWire"
+		return ActiveBackend()
 	}
 	return "Simulated"
 }
