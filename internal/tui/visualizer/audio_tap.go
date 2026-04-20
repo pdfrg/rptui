@@ -456,12 +456,12 @@ func (t *AudioTap) readLoop() {
 			var err error
 
 			// pw-record (stdout): use io.ReadFull for exact buffer
-			// parecord -v (stderr): accumulate via Read() for variable chunks
+			// parecord: accumulate via Read() for variable chunks
 			if t.useStderr {
 				n, err = reader.Read(byteBuf[collected*sampleSize:])
 			} else {
-				// For pw-record: use fixed buffer size
-				localBuf := byteBuf[collected*4 : ]
+				// Read from stdout (parecord, pw-record)
+				localBuf := byteBuf[collected*sampleSize:]
 				n, err = io.ReadFull(reader, localBuf)
 			}
 
