@@ -455,7 +455,12 @@ func (t *AudioTap) readLoop() {
 	}
 
 	accumSamples := 2048  // accumulate this many before writing to ring buffer
-	byteBuf := make([]byte, accumSamples*t.sampleSize)
+	// sampleSize is 0 for pw-record (float32), 2 for parecord (s16le)
+	sampleSizeBuf := t.sampleSize
+	if sampleSizeBuf == 0 {
+		sampleSizeBuf = 4 // default to float32 for pw-record
+	}
+	byteBuf := make([]byte, accumSamples*sampleSizeBuf)
 	floatBuf := make([]float32, accumSamples)
 
 	// Select reader: stderr for parecord -v, stdout otherwise
