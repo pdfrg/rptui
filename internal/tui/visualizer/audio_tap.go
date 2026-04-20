@@ -458,7 +458,17 @@ func (t *AudioTap) readLoop() {
 	}
 
 	for {
-		n, err := io.ReadFull(reader, byteBuf)
+		var n int
+		var err error
+
+		// pw-record (stdout): use io.ReadFull for exact buffer
+		// parecord -v (stderr): use Read() for variable chunks
+		if t.useStderr {
+			n, err = reader.Read(byteBuf)
+		} else {
+			n, err = io.ReadFull(reader, byteBuf)
+		}
+
 		if err != nil {
 			return
 		}
