@@ -109,14 +109,45 @@ func IsPulseAudio() bool {
 	return strings.HasPrefix(server, "pulseaudio")
 }
 
+func DetectPulseAudioFormat() (string, int, error) {
+	cmd := exec.Command("pactl", "info")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", 0, err
+	}
+
+	lines := strings.Split(string(out), "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "Default Sample Specification:") {
+			spec := strings.TrimSpace(strings.TrimPrefix(line, "Default Sample Specification:"))
+			parts := strings.Fields(spec)
+			if len(parts) >= 2 {
+				format := parts[0] // "s16le", "float32le", etc.
+				rate := parts[1]   // "44100Hz", "48000Hz", etc.
+
+				// Parse sample rate
+				rate = strings.TrimSuffix(rate, "Hz")
+				rateNum, err := strconv.Atoi(rate)
+				if err != nil {
+					rateNum = 44100
+				}
+
+				return format, rateNum, nil
+			}
+		}
+	}
+	return "", 0, fmt.Errorf("Default Sample Specification not found")
+}
+
 // AudioTap captures audio from the PipeWire monitor sink via pw-record.
 type AudioTap struct {
-	cmd    *exec.Cmd
-	stdout io.ReadCloser
-	stderr io.ReadCloser
-	buf    *ringBuffer
-	done   chan struct{}
-	closed bool
+	cmd        *exec.Cmd
+	stdout     io.ReadCloser
+	stderr     io.ReadCloser
+	buf        *ringBuffer
+	done       chan struct{}
+	closed     bool
+	sampleSize int // bytes per sample: 4 for float32, 2 for s16le
 }
 
 // findMonitorSourceNode returns the node ID of the default sink's monitor source.
@@ -254,10 +285,32 @@ func newPulseAudioTap() *AudioTap {
 		return nil
 	}
 
+	// Detect PulseAudio format from pactl info
+	formatName, sampleRate, err := DetectPulseAudioFormat()
+	if err != nil {
+		if audioLogger != nil {
+			audioLogger.Printf("AudioTap: DetectPulseAudioFormat failed: %v, using default", err)
+		}
+		formatName = "s16le"
+		sampleRate = 44100
+	} else {
+		if audioLogger != nil {
+			audioLogger.Printf("AudioTap: detected PulseAudio format: %s, rate: %d", formatName, sampleRate)
+		}
+	}
+
+	// Determine bytes per sample for ring buffer sizing
+	sampleSize := 4
+	if formatName == "s16le" || formatName == "s16be" || formatName == "s16" {
+		sampleSize = 2
+	} else if formatName == "float32le" || formatName == "float32be" || formatName == "float32" {
+		sampleSize = 4
+	}
+
 	cmd := exec.Command("parecord",
 		"--device=@DEFAULT_MONITOR@",
-		"--format=f32",
-		"--rate=48000",
+		"--fix-format",
+		"--fix-rate",
 		"--channels=1",
 		"--channel-map=mono",
 		"-",
@@ -289,11 +342,12 @@ func newPulseAudioTap() *AudioTap {
 	}
 
 	tap := &AudioTap{
-		cmd:    cmd,
-		stdout: stdout,
-		stderr: stderr,
-		buf:    newRingBuffer(8192),
-		done:   make(chan struct{}),
+		cmd:        cmd,
+		stdout:     stdout,
+		stderr:     stderr,
+		buf:       newRingBuffer(8192),
+		done:      make(chan struct{}),
+		sampleSize: sampleSize,
 	}
 
 	go tap.readLoop()
@@ -389,18 +443,36 @@ func ActiveBackend() string {
 func (t *AudioTap) readLoop() {
 	defer close(t.done)
 
-	byteBuf := make([]byte, 480*4)
-	floatBuf := make([]float32, 480)
+	maxSamples := 480
+	byteBuf := make([]byte, maxSamples*4)
+	floatBuf := make([]float32, maxSamples)
 
 	for {
 		n, err := io.ReadFull(t.stdout, byteBuf)
 		if err != nil {
 			return
 		}
-		sampleCount := n / 4
+
+		sampleSize := t.sampleSize
+		if sampleSize == 0 {
+			sampleSize = 4 // default to float32
+		}
+
+		sampleCount := n / sampleSize
+		if sampleCount > maxSamples {
+			sampleCount = maxSamples
+		}
+
 		for i := 0; i < sampleCount; i++ {
-			bits := binary.LittleEndian.Uint32(byteBuf[i*4 : (i+1)*4])
-			floatBuf[i] = math.Float32frombits(bits)
+			if sampleSize == 2 {
+				// s16le to float32: divide by 32768.0
+				bits := int16(binary.LittleEndian.Uint16(byteBuf[i*2 : (i+1)*2]))
+				floatBuf[i] = float32(bits) / 32768.0
+			} else {
+				// float32 (4 bytes)
+				bits := binary.LittleEndian.Uint32(byteBuf[i*4 : (i+1)*4])
+				floatBuf[i] = math.Float32frombits(bits)
+			}
 		}
 		t.buf.Write(floatBuf[:sampleCount])
 	}
