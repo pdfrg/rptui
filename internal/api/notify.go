@@ -49,9 +49,9 @@ func SendDesktopNotification(song *models.Song, stationName string, cfg *config.
 	case "linux":
 		sendLinuxNotification(title, body.String(), withImage, cfg)
 	case "darwin":
-		sendMacOSNotification(title, body.String(), withImage)
+		sendMacOSNotification(title, body.String(), withImage, cfg)
 	case "windows":
-		sendWindowsNotification(title, body.String(), withImage)
+		sendWindowsNotification(title, body.String(), withImage, cfg)
 	}
 }
 
@@ -88,7 +88,7 @@ func sendLinuxNotification(title, body string, withImage bool, cfg *config.Confi
 	}()
 }
 
-func sendMacOSNotification(title, body string, withImage bool) {
+func sendMacOSNotification(title, body string, withImage bool, cfg *config.Config) {
 	imgArg := ""
 	if withImage {
 		if _, err := os.Stat(notifyArtPath); err == nil {
@@ -105,22 +105,63 @@ func sendMacOSNotification(title, body string, withImage bool) {
 	}()
 }
 
-func sendWindowsNotification(title, body string, withImage bool) {
-	// Windows PowerShell toast notification (without image for simplicity)
+func sendWindowsNotification(title, body string, withImage bool, cfg *config.Config) {
+	// Windows PowerShell toast notification with optional image support
 	// Replace newlines with </text><text> for multi-line in toast
-	bodyEscaped := strings.ReplaceAll(body, "\n", "; ")
+	bodyEscaped := strings.ReplaceAll(body, "\n", "</text><text>")
+
+	// Build XML with or without image
+	var xmlContent string
+	var usedImagePath string
+	if withImage {
+		// Try to find an image to use (same priority as Linux)
+		var imagePath string
+		if cfg.CopyAlbumArt && cfg.AlbumArtPath != "" {
+			if _, err := os.Stat(cfg.AlbumArtPath); err == nil {
+				imagePath = cfg.AlbumArtPath
+			}
+		} else if _, err := os.Stat(notifyArtPath); err == nil {
+			imagePath = notifyArtPath
+		}
+
+		if imagePath != "" {
+			// Use Windows-style paths for PowerShell (escape backslashes)
+			usedImagePath = imagePath
+			psPath := strings.ReplaceAll(imagePath, "\\", "\\\\")
+			xmlContent = fmt.Sprintf("<toast><visual><binding template=\"ToastGeneric\"><image placement=\"appLogoOverride\" src=\"file:///%s\"/><text>%s</text><text>%s</text></binding></visual></toast>",
+				psPath, strings.ReplaceAll(title, "&", "&amp;"), strings.ReplaceAll(bodyEscaped, "&", "&amp;"))
+		} else {
+			// Fallback to text-only if no image available
+			xmlContent = fmt.Sprintf("<toast><visual><binding template=\"ToastGeneric\"><text>%s</text><text>%s</text></binding></visual></toast>",
+				strings.ReplaceAll(title, "&", "&amp;"), strings.ReplaceAll(bodyEscaped, "&", "&amp;"))
+		}
+	} else {
+		// Text-only notification
+		xmlContent = fmt.Sprintf("<toast><visual><binding template=\"ToastGeneric\"><text>%s</text><text>%s</text></binding></visual></toast>",
+			strings.ReplaceAll(title, "&", "&amp;"), strings.ReplaceAll(bodyEscaped, "&", "&amp;"))
+	}
+
 	script := fmt.Sprintf(`[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
 $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
-$xml.LoadXml('<toast><text>%s</text><text>%s</text></toast>')
+$xml.LoadXml('%s')
 $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
 [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("rptui").Show($toast)`,
-		strings.ReplaceAll(title, "'", "''"), strings.ReplaceAll(bodyEscaped, "'", "''"))
+		xmlContent)
 
 	go func() {
 		cmd := exec.Command("powershell", "-NoProfile", "-Command", script)
-		cmd.Stderr = os.Stderr
+		if notifyLogger != nil {
+			notifyLogger.Printf("Windows notification: title='%s', withImage=%v, imagePath='%s'", title, withImage, usedImagePath)
+		}
+		stderr, _ := cmd.StderrPipe()
 		cmd.Start()
-		cmd.Wait()
+		err := cmd.Wait()
+		if err != nil {
+			errBytes, _ := io.ReadAll(stderr)
+			if notifyLogger != nil {
+				notifyLogger.Printf("Windows notification failed: %v, stderr: %s", err, string(errBytes))
+			}
+		}
 	}()
 }
 

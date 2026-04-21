@@ -13,20 +13,35 @@ func newWASAPITap() *AudioTap {
 	return nil
 }
 
-const blackHoleDevice = "BlackHole 2ch"
-
 func SoXAvailable() bool {
 	_, err := exec.LookPath("sox")
 	return err == nil
 }
 
-func BlackHoleAvailable() bool {
+func BlackHoleAvailable() (bool, string) {
 	if !SoXAvailable() {
-		return false
+		return false, ""
 	}
-	cmd := exec.Command("sox", "-t", "coreaudio", blackHoleDevice, "-n", "stat")
-	err := cmd.Run()
-	return err == nil
+
+	// Try multiple possible BlackHole device names in priority order
+	candidates := []string{
+		"BlackHole 2ch",  // Most common
+		"BlackHole 16ch", // Multi-channel
+		"BlackHole 64ch", // High channel count
+		"BlackHole",      // Base name fallback
+	}
+
+	for _, device := range candidates {
+		cmd := exec.Command("sox", "-t", "coreaudio", device, "-n", "stat")
+		if err := cmd.Run(); err == nil {
+			if audioLogger != nil {
+				audioLogger.Printf("AudioTap: Found BlackHole device: %s", device)
+			}
+			return true, device
+		}
+	}
+
+	return false, ""
 }
 
 func newDarwinAudioTap() *AudioTap {
@@ -37,15 +52,16 @@ func newDarwinAudioTap() *AudioTap {
 		return nil
 	}
 
-	if !BlackHoleAvailable() {
+	available, device := BlackHoleAvailable()
+	if !available {
 		if audioLogger != nil {
-			audioLogger.Printf("AudioTap: BlackHole device '%s' not found", blackHoleDevice)
+			audioLogger.Printf("AudioTap: No BlackHole device found")
 		}
 		return nil
 	}
 
 	cmd := exec.Command("sox",
-		"-t", "coreaudio", blackHoleDevice,
+		"-t", "coreaudio", device,
 		"-t", "raw", "-",
 		"rate", "48000",
 		"channels", "1",
