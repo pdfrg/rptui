@@ -389,7 +389,7 @@ go build -ldflags "-s -w -X rptui/internal/api.LastFMAPIKey=YOUR_KEY -X rptui/in
 2. Download binary with API key and shared secret built-in.
 
 For both methods (1) and (2): run `rptui --lastfm-auth`.
-Will open default browser to last.fm login page to authorize app.
+Will open default browser to Last.fm login page to authorize app.
 Session key will be automatically added to rptui config file.
 Session key does not expire.
 
