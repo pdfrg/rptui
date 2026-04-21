@@ -35,7 +35,7 @@ While Radio Paradise offers the absolute best internet radio stations, human-cur
 - **Album Art**: Smart terminal support via [go-termimg](https://github.com/blacktop/go-termimg) (Kitty, iTerm2, Sixel, Unicode fallback).  Terminals with Kitty image protocol support recommended (Kitty, Ghostty, and Rio all work perfectly).
 - **Visualizations**: 9 real-time audio visualizations (bars, braille, braille bars, wave, rain, stars, binary, segmented, classic peak).  Full terminal window toggle, true fullscreen when terminal maximized.
 - **Scrobbling**: [Last.fm](https://www.last.fm/) and [ListenBrainz](https://listenbrainz.org/) support.
-- **Themes**: Automatic current Omarchy theme detection with live-reloads, 6 built-in themes, and custom colors.toml support.  Smart parsing of Omarchy themes for optimum color choices (tested on 70 themes).
+- **Themes**: Automatic current Omarchy theme detection with live-reloads, 6 built-in themes, and custom colors.toml support.  Smart parsing of Omarchy themes for optimum color choices (tested on 70 themes).  Option to disable theme background or themes entirely to use your own terminal palette.
 - **Jukebox Mode**: Random play all favorites, optional re-shuffle and repeat all for endless playback.  Works offline.
 - **Offline Mode**: Cache any station for any duration.  Playback anytime, even while offline.  Album art included.
 - **Network Status Handling**: Smart prompts offer to change modes when network change detected, so that music keeps playing. 
@@ -72,19 +72,19 @@ See [SCREENSHOTS.md](SCREENSHOTS.md) for the full gallery, including all built-i
 - **mpv-mpris** — MPRIS support for media keys and desktop integration
 - **notify-send** — Desktop notifications on song changes with optional album art
 
-### Audio Visualizer Dependencies
+### Visualizer Dependencies (MacOS, Optional)
 
 The audio visualizer requires platform-specific audio capture tools:
 
 | Platform | Tools | Notes |
 |----------|-------|-------|
-| **Linux** | PipeWire or PulseAudio | Built into most distros |
-| **Windows** | WASAPI | Built into Windows |
+| **Linux** | PipeWire or PulseAudio | Built in |
+| **Windows** | WASAPI | Built in |
 | **macOS** | SoX + BlackHole | Install via Homebrew |
 
-#### macOS Setup
+#### MacOS Setup
 
-macOS requires additional setup to capture system audio for the visualizer:
+MacOS requires additional setup to capture system audio for the visualizer:
 
 ```bash
 brew install sox blackhole-2ch
@@ -99,9 +99,12 @@ Then configure in **Audio MIDI Setup** (Applications → Utilities):
 
 All system audio is now routed through BlackHole and can be captured for the visualizer. Volume control may be disabled (normal for Multi-Output Device).
 
-Without these tools, macOS falls back to simulated visualizer mode.
+Without these tools, MacOS falls back to simulated visualizer mode.
 
-### Quick Installation (Linux, Windows, or Mac)
+### Quick Installation (Linux, Windows, or MacOS)
+
+NOTE: Windows and MacOS support is considered experimental and untested.
+Feedback, fixes, or improvements would be greatly appreciated.
 
 ```bash
 # Recommended: install via Go

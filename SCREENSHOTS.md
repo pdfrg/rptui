@@ -75,3 +75,30 @@ All screenshots were taken with the excellent [Aetheria Omarchy theme](https://g
 **Synth**  
 ![Synth](assets/rptui-theme-synth.png)
 
+## On Ubuntu MATE 22.04
+Similar for default Ubuntu (gnome-terminal), Xubuntu (xfce4-terminal), and other distros with these terminals
+
+**mate-terminal transparency disabled**
+Preferences > Background > Transparent Background > slider set to Maximum
+Catppuccin Mocha default theme
+NOTE: works as intended
+![Catppuccin mocha](assets/rptui-mate-transparency-off.png)
+
+**mate-terminal transparency enabled**
+Preferences > Background > Transparent Background > slider not set to Maximum
+Catppuccin Mocha default theme
+NOTE: most text with opaque background, terminal background with gray tint, not desired
+![Catppuccin mocha](assets/rptui-mate-transparency-on.png)
+
+**`transparent_background = true`**
+Catppuccin Mocha default theme
+NOTE: text background transparency restored, no gray tint!
+![Catpuccin mocha](assets/rptui-mate-transparent-background-true.png)
+
+**`disable_theme = true`**
+NOTE: no theme colors, uses terminal palette
+![No theme](assets/rptui-mate-disable-theme-true.png)
+
+**PulseAudio visualizer**
+![Pulseaudio visualizer](assets/rptui-mate-pulseaudio-visualizer.png)
+
