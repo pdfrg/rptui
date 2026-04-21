@@ -9,6 +9,10 @@ import (
 	"os/exec"
 )
 
+func newWASAPITap() *AudioTap {
+	return nil
+}
+
 const blackHoleDevice = "BlackHole 2ch"
 
 func SoXAvailable() bool {
