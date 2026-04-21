@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
@@ -56,19 +57,23 @@ type IPCResponse struct {
 
 // NewMPVBackend creates a new MPV backend
 func NewMPVBackend() *MPVBackend {
-	// Use XDG runtime directory for socket
-	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
-	if runtimeDir == "" {
-		// Fallback to /tmp if XDG runtime not available
-		runtimeDir = "/tmp"
-	}
-	mpvDir := filepath.Join(runtimeDir, "mpv")
-	if err := os.MkdirAll(mpvDir, 0700); err != nil {
-		// Fallback to /tmp if directory creation fails
-		mpvDir = "/tmp"
-	}
+	var socketPath string
 
-	socketPath := filepath.Join(mpvDir, "rptui-socket")
+	if runtime.GOOS == "windows" {
+		// Windows uses named pipes
+		socketPath = `\\.\pipe\rptui-socket`
+	} else {
+		// Linux/macOS use Unix sockets
+		runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
+		if runtimeDir == "" {
+			runtimeDir = os.TempDir()
+		}
+		mpvDir := filepath.Join(runtimeDir, "mpv")
+		if err := os.MkdirAll(mpvDir, 0700); err != nil {
+			mpvDir = filepath.Join(os.TempDir(), "mpv")
+		}
+		socketPath = filepath.Join(mpvDir, "rptui-socket")
+	}
 
 	return &MPVBackend{
 		socketPath:    socketPath,
@@ -84,14 +89,18 @@ func (m *MPVBackend) Start(urls []string) error {
 	// Stop any existing process
 	m.stopLocked()
 
-	// Ensure socket directory exists
-	socketDir := filepath.Dir(m.socketPath)
-	if err := os.MkdirAll(socketDir, 0700); err != nil {
-		return fmt.Errorf("failed to create socket directory: %w", err)
+	// Ensure socket directory exists (Unix only; Windows named pipes don't need directories)
+	if runtime.GOOS != "windows" {
+		socketDir := filepath.Dir(m.socketPath)
+		if err := os.MkdirAll(socketDir, 0700); err != nil {
+			return fmt.Errorf("failed to create socket directory: %w", err)
+		}
+		// Remove stale socket file
+		os.Remove(m.socketPath)
+	} else {
+		// On Windows, remove stale named pipe
+		os.Remove(m.socketPath)
 	}
-
-	// Remove stale socket file
-	os.Remove(m.socketPath)
 
 	// Build MPV command
 	args := []string{
@@ -520,10 +529,16 @@ func (m *MPVBackend) AppendToPlaylist(urls []string) error {
 
 // sendIPCCommandLocked sends an IPC command to MPV (must be called with lock held)
 func (m *MPVBackend) sendIPCCommandLocked(cmd IPCCommand) (*IPCResponse, error) {
-	conn, err := net.DialUnix("unix", nil, &net.UnixAddr{
-		Name: m.socketPath,
-		Net:  "unix",
-	})
+	var conn net.Conn
+	var err error
+
+	if runtime.GOOS == "windows" {
+		// Windows: use named pipe
+		conn, err = net.Dial("pipe", m.socketPath)
+	} else {
+		// Linux/macOS: use Unix socket
+		conn, err = net.Dial("unix", m.socketPath)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to MPV socket: %w", err)
 	}

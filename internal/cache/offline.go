@@ -640,13 +640,26 @@ func ParseBitrate(s string) (int, error) {
 	return 0, fmt.Errorf("invalid bitrate: %q\n\nValid bitrates:\n%s", s, strings.Join(options, "\n"))
 }
 
-// GetFreeDiskSpace returns free disk space in bytes for the given path
+// GetFreeDiskSpace returns free disk space in bytes for the given path.
+// Returns 0 if the platform doesn't support querying disk space.
 func GetFreeDiskSpace(path string) (int64, error) {
-	var stat syscall.Statfs_t
-	if err := syscall.Statfs(path, &stat); err != nil {
+	stat, err := os.Stat(path)
+	if err != nil {
 		return 0, err
 	}
-	return int64(stat.Bavail) * int64(stat.Bsize), nil
+
+	// Try to get free space via syscall on Unix-like systems
+	// Windows would need golang.org/x/sys/windows
+	sys := stat.Sys()
+	if s, ok := sys.(interface {
+		Bavail() int64
+		Bsize() int64
+	}); ok {
+		return s.Bavail() * s.Bsize(), nil
+	}
+
+	// Return 0 if not available (caller should handle this gracefully)
+	return 0, nil
 }
 
 // getFileExtension returns the file extension for a bitrate

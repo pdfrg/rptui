@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/pdfrg/rptui/internal/config"
@@ -21,14 +22,10 @@ func init() {
 	notifyLogger = loginit.InitLogger("[NOTIFY] ")
 }
 
-const notifyArtPath = "/tmp/rptui-notify.jpg"
+var notifyArtPath = filepath.Join(os.TempDir(), "rptui-notify.jpg")
 
 // SendDesktopNotification shows a desktop notification with song info
 func SendDesktopNotification(song *models.Song, stationName string, cfg *config.Config, withImage bool) {
-	if _, err := exec.LookPath("notify-send"); err != nil {
-		return
-	}
-
 	title := "rptui - Radio Paradise"
 
 	var body strings.Builder
@@ -48,6 +45,21 @@ func SendDesktopNotification(song *models.Song, stationName string, cfg *config.
 
 	body.WriteString(stationName)
 
+	switch runtime.GOOS {
+	case "linux":
+		sendLinuxNotification(title, body.String(), withImage, cfg)
+	case "darwin":
+		sendMacOSNotification(title, body.String(), withImage)
+	case "windows":
+		sendWindowsNotification(title, body.String(), withImage)
+	}
+}
+
+func sendLinuxNotification(title, body string, withImage bool, cfg *config.Config) {
+	if _, err := exec.LookPath("notify-send"); err != nil {
+		return
+	}
+
 	var args []string
 	args = append(args, "-t", "5000")
 
@@ -61,7 +73,7 @@ func SendDesktopNotification(song *models.Song, stationName string, cfg *config.
 		}
 	}
 
-	args = append(args, "--", title, body.String())
+	args = append(args, "--", title, body)
 
 	go func() {
 		cmd := exec.Command("notify-send", args...)
@@ -73,6 +85,42 @@ func SendDesktopNotification(song *models.Song, stationName string, cfg *config.
 			notifyLogger.Printf("notify-send args: %q", args)
 			notifyLogger.Printf("desktop notification failed: %v, stderr: %s", err, string(errBytes))
 		}
+	}()
+}
+
+func sendMacOSNotification(title, body string, withImage bool) {
+	imgArg := ""
+	if withImage {
+		if _, err := os.Stat(notifyArtPath); err == nil {
+			imgArg = fmt.Sprintf("with image alias POSIX file \"%s\"", notifyArtPath)
+		}
+	}
+
+	script := fmt.Sprintf(`display notification "%s" with title "%s" %s`, strings.ReplaceAll(body, "\"", "\\\""), strings.ReplaceAll(title, "\"", "\\\""), imgArg)
+	go func() {
+		cmd := exec.Command("osascript", "-e", script)
+		cmd.Stderr = os.Stderr
+		cmd.Start()
+		cmd.Wait()
+	}()
+}
+
+func sendWindowsNotification(title, body string, withImage bool) {
+	// Windows PowerShell toast notification (without image for simplicity)
+	// Replace newlines with </text><text> for multi-line in toast
+	bodyEscaped := strings.ReplaceAll(body, "\n", "; ")
+	script := fmt.Sprintf(`[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+$xml = New-Object Windows.Data.Xml.Dom.XmlDocument
+$xml.LoadXml('<toast><text>%s</text><text>%s</text></toast>')
+$toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
+[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("rptui").Show($toast)`,
+		strings.ReplaceAll(title, "'", "''"), strings.ReplaceAll(bodyEscaped, "'", "''"))
+
+	go func() {
+		cmd := exec.Command("powershell", "-NoProfile", "-Command", script)
+		cmd.Stderr = os.Stderr
+		cmd.Start()
+		cmd.Wait()
 	}()
 }
 

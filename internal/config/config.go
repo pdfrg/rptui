@@ -124,7 +124,7 @@ type VisualizerConfig struct {
 	Mode         string `toml:"mode" comment:"default visualizer mode\nBars, Braille, ClassicPeak, Wave, Stars, BrailleBars, Rain, Segmented, Binary (default: Bars)"`
 	ShowInfo     string `toml:"show_info" comment:"song info overlay in fullscreen visualizer\nfade, on, off (default: fade)"`
 	InfoDuration int    `toml:"info_duration" comment:"seconds to show song info overlay (default: 5)"`
-	RealAudio    bool   `toml:"real_audio" comment:"use PipeWire audio capture if available\nrequires pw-record (default: true)"`
+	RealAudio    bool   `toml:"real_audio" comment:"use real audio capture\nLinux: PipeWire (pw-record) or PulseAudio (parecord)\nWindows: WASAPI loopback\nmacOS: not supported (default: true)"`
 }
 
 // DefaultConfig returns a Config with default values
@@ -134,7 +134,7 @@ func DefaultConfig() *Config {
 		Channel:         0,
 		Bitrate:         3,
 		ShowAlbumArt:    true,
-		AlbumArtPath:    "/tmp/cover.jpg",
+		AlbumArtPath:    filepath.Join(os.TempDir(), "cover.jpg"),
 		CopyAlbumArt:    false,
 		FavoritesDir:    favoritesDir,
 		MaxFavorites:    100,
