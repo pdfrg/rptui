@@ -143,7 +143,7 @@ The config file is located at `~/.config/rptui/config.toml`. It is created autom
 | `visualizer.mode` | string | Visualizer style: `Bars`, `Braille`, `ClassicPeak`, `Wave`, `Stars`, `BrailleBars`, `Rain`, `Segmented`, `Binary` |
 | `visualizer.show_info` | string | Song info overlay: `fade`, `on`, `off` |
 | `visualizer.info_duration` | int | Seconds to show song info (default: 5) |
-| `visualizer.real_audio` | bool | Use PipeWire audio capture (requires `pw-record`) |
+| `visualizer.real_audio` | bool | Use real audio capture for visualizer (Linux: PipeWire/PulseAudio, Windows: WASAPI, macOS: SoX+BlackHole). Default: true. |
 
 ### Jukebox Mode
 
@@ -293,6 +293,7 @@ Customize command to point to the rptui binary on your system, or just 'rptui' i
 Size is in the format (width height). Adjust to your preferences.
 Sizes below are recommended minimums, based on use of 11pt font in the terminal.
 For large (default) and medium, more narrow will work, but some keybindings won't be shown in the footer.
+For different terminal font sizes, optimal width and height values can vary widely.
 
 ```
 bindd = SUPER SHIFT, R, rptui, exec, xdg-terminal-exec --app-id=rptui.medium -e /path/to/rptui/rptui --layout medium

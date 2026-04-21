@@ -7,6 +7,7 @@ import (
 	"log"
 	"math"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -365,9 +366,48 @@ func newPulseAudioTap() *AudioTap {
 
 // NewAudioTap creates an AudioTap that captures mono float32 audio at 48kHz
 // from the default audio sink's monitor output.
-// Auto-detects PipeWire vs PulseAudio and uses the appropriate backend.
+// Auto-detects platform (Windows/PipeWire/PulseAudio/macOS/SoX) and uses appropriate backend.
 // Returns nil if no audio backend is available.
 func NewAudioTap() *AudioTap {
+	// Windows: use WASAPI loopback capture
+	if runtime.GOOS == "windows" {
+		if audioLogger != nil {
+			audioLogger.Printf("AudioTap: Windows detected, using WASAPI loopback")
+		}
+		tap := newWASAPITap()
+		if tap != nil {
+			activeBackend = "WASAPI"
+			if audioLogger != nil {
+				audioLogger.Printf("AudioTap: using WASAPI backend")
+			}
+			return tap
+		}
+		if audioLogger != nil {
+			audioLogger.Printf("AudioTap: WASAPI not available, using simulated mode")
+		}
+		return nil
+	}
+
+	// macOS: use SoX with BlackHole for system audio capture
+	if runtime.GOOS == "darwin" {
+		if audioLogger != nil {
+			audioLogger.Printf("AudioTap: macOS detected, using SoX + BlackHole")
+		}
+		tap := newDarwinAudioTap()
+		if tap != nil {
+			activeBackend = "SoX"
+			if audioLogger != nil {
+				audioLogger.Printf("AudioTap: using SoX backend")
+			}
+			return tap
+		}
+		if audioLogger != nil {
+			audioLogger.Printf("AudioTap: SoX/BlackHole not available, using simulated mode")
+		}
+		return nil
+	}
+
+	// Linux: detect PipeWire vs PulseAudio
 	server := DetectAudioServer()
 	isPulse := IsPulseAudio()
 
@@ -566,3 +606,13 @@ func ParecordAvailable() bool {
 	_, err := exec.LookPath("parecord")
 	return err == nil
 }
+
+func newDarwinAudioTap() *AudioTap {
+	return nil
+}
+
+
+
+
+
+

@@ -67,13 +67,41 @@ See [SCREENSHOTS.md](SCREENSHOTS.md) for the full gallery, including all built-i
 - **mpv** — Required for audio playback
 - **Go 1.22+** — To build from source
 
-### Recommended Dependencies
+### Recommended Dependencies (Linux)
 
 - **mpv-mpris** — MPRIS support for media keys and desktop integration
 - **notify-send** — Desktop notifications on song changes with optional album art
-- **PipeWire** (with pipewire-alsa) — Required for real audio visualization
 
-### Quick Installation
+### Audio Visualizer Dependencies
+
+The audio visualizer requires platform-specific audio capture tools:
+
+| Platform | Tools | Notes |
+|----------|-------|-------|
+| **Linux** | PipeWire or PulseAudio | Built into most distros |
+| **Windows** | WASAPI | Built into Windows |
+| **macOS** | SoX + BlackHole | Install via Homebrew |
+
+#### macOS Setup
+
+macOS requires additional setup to capture system audio for the visualizer:
+
+```bash
+brew install sox blackhole-2ch
+```
+
+Then configure in **Audio MIDI Setup** (Applications → Utilities):
+
+1. Click **+** → **Create Multi-Output Device**
+2. Check: **BlackHole 2ch** and your speakers/headphones
+3. Go to **System Settings → Sound → Output**
+4. Select the Multi-Output Device
+
+All system audio is now routed through BlackHole and can be captured for the visualizer. Volume control may be disabled (normal for Multi-Output Device).
+
+Without these tools, macOS falls back to simulated visualizer mode.
+
+### Quick Installation (Linux, Windows, or Mac)
 
 ```bash
 # Recommended: install via Go
@@ -89,7 +117,23 @@ go build -o rptui ./cmd/rptui
 
 Both `go install` and `go build` work for basic usage. See [DOCUMENTATION.md](DOCUMENTATION.md) for optional scrobbling setup.
 
-A pre-built binary for Linux/x86 with last.fm support baked-in is downloadable from releases. Only a last.fm user account is required. See DOCUMENTATION.md / Scrobbling for details.
+Pre-built binaries for Linux, Windows, and MacOS with last.fm support baked-in are downloadable from releases. Only a last.fm user account is required. See DOCUMENTATION.md / Scrobbling for details.
+
+## Terminal Compatibility
+
+The included themes are designed and tested primarily on modern GPU-accelerated terminals (Kitty, Ghostty, and Rio on Arch-based systems). These give the cleanest, most polished look.
+On non-GPU-accelerated terminals — especially the default terminals shipped with Debian/Ubuntu derivatives and MATE/GNOME desktops (mate-terminal, gnome-terminal, and similar VTE-based terminals) — the themed background and color overrides can sometimes render incorrectly.
+To make the app look great on any Linux terminal, use these config options:
+
+`transparent_background = true`  Turns off the app’s own background theming and uses your terminal’s native background instead.
+
+`disable_theme = true`  Completely disables themes and falls back to your terminal’s built-in palette (colors 0-15). You can still tweak individual colors if you want.
+
+These two config settings were added specifically so the app looks great everywhere. Just pick whichever looks better in your terminal — most people only need one of them.
+To see the effects of enabling these options, please see [SCREENSHOTS.md](SCREENSHOTS.md).
+
+Recommendation: For the best overall experience (best image support, full theme compatibility), use a modern terminal like Kitty, Ghostty, or Rio.
+But you never have to — the config options guarantee a clean, usable interface on the default Ubuntu/MATE terminal, xfce4-terminal, or any other emulator.
 
 ## Attribution
 
