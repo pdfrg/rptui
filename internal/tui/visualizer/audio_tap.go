@@ -607,10 +607,6 @@ func ParecordAvailable() bool {
 	return err == nil
 }
 
-func newDarwinAudioTap() *AudioTap {
-	return nil
-}
-
 
 
 

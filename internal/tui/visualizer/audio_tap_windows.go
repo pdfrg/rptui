@@ -10,6 +10,10 @@ import (
 	"github.com/moutend/go-wca/pkg/wca"
 )
 
+func newDarwinAudioTap() *AudioTap {
+	return nil
+}
+
 // wasapiTap is the Windows WASAPI implementation
 type wasapiTap struct {
 	audioClient *wca.IAudioClient

@@ -1,9 +1,12 @@
-//go:build !windows && !darwin
-// +build !windows,!darwin
+//go:build !darwin && !windows
+// +build !darwin,!windows
 
 package visualizer
 
-// Stub for Windows compilation - these are defined in audio_tap.go for Linux
+func newDarwinAudioTap() *AudioTap {
+	return nil
+}
+
 func newWASAPITap() *AudioTap {
 	return nil
 }
