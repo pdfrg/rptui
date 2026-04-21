@@ -1,0 +1,44 @@
+project_name: rptui
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: rptui
+    main: ./cmd/rptui
+    binary: rptui
+    ldflags:
+      - -s -w
+      - -X main.Version={{.Version}}
+      - -X github.com/pdfrg/rptui/internal/api.LastFMAPIKey={{.Env.LASTFM_KEY}}
+      - -X github.com/pdfrg/rptui/internal/api.LastFMSharedSecret={{.Env.LASTFM_SECRET}}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    goarm:
+      - 7  # For arm64 compatibility
+
+archives:
+  - id: rptui
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+
+release:
+  github:
+    owner: pdfrg
+    name: rptui
+  draft: true  # Set to false when ready for production
