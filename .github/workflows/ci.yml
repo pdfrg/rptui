@@ -42,9 +42,9 @@ jobs:
             echo "The following files need to be formatted:"
             gofmt -s -l .
             exit 1
-          fi
+           fi
 
-       - name: Build all platforms
+      - name: Build all platforms
          run: |
            GOOS=linux GOARCH=amd64 go build ./...
            GOOS=linux GOARCH=arm64 go build ./...
