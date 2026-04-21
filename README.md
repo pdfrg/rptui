@@ -146,6 +146,10 @@ Audio visualizations: [cliamp](https://github.com/bjarneo/cliamp).  Awesome musi
 
 For detailed configuration options and advanced usage, see [DOCUMENTATION.md](DOCUMENTATION.md).
 
+## Support
+
+If you enjoy listening to Radio Paradise, please consider [supporting them](https://radioparadise.com/donate).
+
 ## License
 
 MIT
