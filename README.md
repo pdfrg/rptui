@@ -120,23 +120,23 @@ go build -o rptui ./cmd/rptui
 
 Both `go install` and `go build` work for basic usage. See [DOCUMENTATION.md](DOCUMENTATION.md) for optional scrobbling setup.
 
-Pre-built binaries for Linux, Windows, and MacOS with last.fm support baked-in are downloadable from releases. Only a last.fm user account is required. See DOCUMENTATION.md / Scrobbling for details.
+Pre-built binaries for Linux, Windows, and MacOS with Last.fm support baked-in are downloadable from releases. Only a Last.fm user account is required. See DOCUMENTATION.md / Scrobbling for details.
 
 ## Terminal Compatibility
 
 The included themes are designed and tested primarily on modern GPU-accelerated terminals (Kitty, Ghostty, and Rio on Arch-based systems). These give the cleanest, most polished look.
-On non-GPU-accelerated terminals — especially the default terminals shipped with Debian/Ubuntu derivatives and MATE/GNOME desktops (mate-terminal, gnome-terminal, and similar VTE-based terminals) — the themed background and color overrides can sometimes render incorrectly.
+On non-GPU-accelerated terminals, especially the default terminals shipped with Debian/Ubuntu derivatives and MATE/GNOME desktops (mate-terminal, gnome-terminal, and similar VTE-based terminals), the themed background and color overrides can sometimes render incorrectly, especially when the terminal is configured with background transparency.
 To make the app look great on any Linux terminal, use these config options:
 
 `transparent_background = true`  Turns off the app’s own background theming and uses your terminal’s native background instead.
 
 `disable_theme = true`  Completely disables themes and falls back to your terminal’s built-in palette (colors 0-15). You can still tweak individual colors if you want.
 
-These two config settings were added specifically so the app looks great everywhere. Just pick whichever looks better in your terminal — most people only need one of them.
-To see the effects of enabling these options, please see [SCREENSHOTS.md](SCREENSHOTS.md).
+These two config settings were added specifically so the app looks great everywhere. Just pick whichever looks better in your terminal.
+To see the effects of terminal transparency settings, and of enabling these options, please see [SCREENSHOTS.md](SCREENSHOTS.md).
 
 Recommendation: For the best overall experience (best image support, full theme compatibility), use a modern terminal like Kitty, Ghostty, or Rio.
-But you never have to — the config options guarantee a clean, usable interface on the default Ubuntu/MATE terminal, xfce4-terminal, or any other emulator.
+However, these are absolutely NOT required.  The config options guarantee a clean, usable interface on the default Ubuntu/MATE terminal, xfce4-terminal, or any other emulator.
 
 ## Attribution
 
