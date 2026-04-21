@@ -23,8 +23,11 @@ AGENTS.md
 grok-readme.md
 session-*.md
 
-# Documentation
+# Planning documents
 docs/
 
-# Releases
+# Releases (archive of all linux/amd64 versions)
 releases/
+
+# Current release builds (multiplatform)
+dist/
