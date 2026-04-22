@@ -17,10 +17,10 @@ func newDarwinAudioTap() *AudioTap {
 // wasapiTap is the Windows WASAPI implementation
 type wasapiTap struct {
 	audioClient *wca.IAudioClient
-	capture   *wca.IAudioCaptureClient
-	buf       *ringBuffer
-	done      chan struct{}
-	closed    bool
+	capture     *wca.IAudioCaptureClient
+	buf         *ringBuffer
+	done        chan struct{}
+	closed      bool
 }
 
 func wasapiTapReadLoop(tap *wasapiTap) {
@@ -154,9 +154,9 @@ func winWASAPITap() *wasapiTap {
 
 	wTap := &wasapiTap{
 		audioClient: audioClient,
-		capture:   capture,
-		buf:      newRingBuffer(8192),
-		done:     make(chan struct{}),
+		capture:     capture,
+		buf:         newRingBuffer(8192),
+		done:        make(chan struct{}),
 	}
 
 	go wasapiTapReadLoop(wTap)

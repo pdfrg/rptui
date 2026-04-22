@@ -14,8 +14,8 @@ import (
 )
 
 var audioLogger *log.Logger
-var audioServer      string
-var activeBackend   string
+var audioServer string
+var activeBackend string
 
 func SetAudioLogger(l *log.Logger) {
 	audioLogger = l
@@ -353,7 +353,7 @@ func newPulseAudioTap() *AudioTap {
 		stderr:     stderr,
 		buf:        newRingBuffer(8192),
 		done:       make(chan struct{}),
-		sampleSize:  sampleSize,
+		sampleSize: sampleSize,
 		useStderr:  false, // parecord sends audio to stdout
 	}
 
@@ -494,7 +494,7 @@ func (t *AudioTap) readLoop() {
 			t.sampleSize, t.useStderr)
 	}
 
-	accumSamples := 2048  // accumulate this many before writing to ring buffer
+	accumSamples := 2048 // accumulate this many before writing to ring buffer
 	// sampleSize is 0 for pw-record (float32), 2 for parecord (s16le)
 	sampleSizeBuf := t.sampleSize
 	if sampleSizeBuf == 0 {
@@ -606,9 +606,3 @@ func ParecordAvailable() bool {
 	_, err := exec.LookPath("parecord")
 	return err == nil
 }
-
-
-
-
-
-
