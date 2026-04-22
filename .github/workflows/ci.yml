@@ -42,7 +42,7 @@ jobs:
             echo "The following files need to be formatted:"
             gofmt -s -l .
             exit 1
-           fi
+          fi
 
       - name: Build all platforms
          run: |
