@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -34,6 +35,7 @@ import (
 	"github.com/pdfrg/rptui/internal/loginit"
 	"github.com/pdfrg/rptui/internal/models"
 	"github.com/pdfrg/rptui/internal/mpv"
+	"github.com/pdfrg/rptui/internal/smad"
 	"github.com/pdfrg/rptui/internal/tui/modals"
 	"github.com/pdfrg/rptui/internal/tui/visualizer"
 	"github.com/pdfrg/rptui/internal/tui/widgets"
@@ -1279,6 +1281,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case pollTickMsg:
 		return handle(m.handlePollTick(msg))
+
+	case djDetectionDoneMsg:
+		if msg.hasSpeech && msg.song == m.currentSong && m.mpvBackend != nil {
+			pos, err := m.mpvBackend.GetPlaybackPosition()
+			if err == nil && pos.TimePos < msg.skipEnd {
+				// Absolute seek to end of detected speech
+				_ = m.mpvBackend.SeekAbsolute(msg.skipEnd)
+				if pos.TimePos <= msg.skipStart {
+					logger.Printf("DJ speech detected (%.1fs), skipping to %.1fs (confidence: %.2f)",
+						msg.skipEnd-msg.skipStart, msg.skipEnd, msg.confidence)
+				} else {
+					logger.Printf("Currently in DJ speech, skipping to %.1fs", msg.skipEnd)
+				}
+			}
+		}
 
 	case sleepTimerTickMsg:
 		return handle(m.handleSleepTimerTick(msg))
@@ -3860,10 +3877,89 @@ func (m *Model) updateBottomView() {
 	m.viewport.SetContent(content)
 }
 
+// startDJDetection starts background DJ speech detection for a song.
+// Returns a cmd that runs the detection and updates song state when done.
+func (m *Model) startDJDetection(song *models.Song) tea.Cmd {
+	return func() tea.Msg {
+		if !m.config.SkipDJSegments {
+			return djDetectionDoneMsg{song: song}
+		}
+
+		// Use song's audio file path for detection
+		audioPath := song.GaplessURL
+		if audioPath == "" {
+			return djDetectionDoneMsg{song: song}
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
+		// Check availability first
+		getBinDir := func() string {
+			if runtime.GOOS == "windows" {
+				return "Scripts"
+			}
+			return "bin"
+		}
+		pythonPath := filepath.Join(xdg.CacheHome, "rptui", "env", getBinDir(), "python")
+		modelPath := filepath.Join(xdg.CacheHome, "rptui", "tvsm_models", "TVSM-cuesheet", "Models", "epoch=10-step=4058.ckpt")
+		checker := smad.NewDJChecker(
+			pythonPath,
+			filepath.Join(xdg.CacheHome, "rptui", "smad", "detector.py"),
+			modelPath,
+			filepath.Join(xdg.CacheHome, "rptui", "smad", "cache"),
+		)
+
+		speechStart, speechEnd, confidence, hasSpeech, err := checker.Detect(ctx, audioPath)
+
+		if err != nil {
+			logger.Printf("DJ detection failed: %v", err)
+			return djDetectionDoneMsg{song: song}
+		}
+
+		if hasSpeech && confidence >= m.config.DJConfidence {
+			// Calculate skip positions
+			skipStart := speechStart - m.config.DJSafetyBuffer
+			if skipStart < 0 {
+				skipStart = 0
+			}
+
+			skipEnd := speechEnd + m.config.DJSafetyBuffer
+			if skipEnd > song.GetDurationSeconds() {
+				skipEnd = song.GetDurationSeconds()
+			}
+
+			return djDetectionDoneMsg{
+				song:       song,
+				hasSpeech:  true,
+				skipStart:  skipStart,
+				skipEnd:    skipEnd,
+				confidence: confidence,
+			}
+		}
+
+		return djDetectionDoneMsg{song: song}
+	}
+}
+
+// djDetectionDoneMsg is sent when DJ detection completes
+type djDetectionDoneMsg struct {
+	song       *models.Song
+	hasSpeech  bool
+	skipStart  float64
+	skipEnd    float64
+	confidence float64
+}
+
 // songChangedCmds is the centralized handler for all song transitions
 // (initial load, manual skip/prev, natural transition).
 // It updates model state and returns Cmds for all async fetches.
 func (m *Model) songChangedCmds() tea.Cmd {
+	// Start DJ detection if enabled
+	if m.currentSong != nil && m.config.SkipDJSegments {
+		return m.startDJDetection(m.currentSong)
+	}
+
 	if m.currentSongIndex < 0 || m.currentSongIndex >= len(m.songs) {
 		return nil
 	}
