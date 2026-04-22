@@ -32,18 +32,18 @@ var BitrateNames = map[int]string{
 
 // Config manages user configuration persistence
 type Config struct {
-	path            string
-	Channel         int    `toml:"channel" comment:"default station for new sessions\nchanges made in app are saved to file and retained on restart\n0=Main, 1=Mellow, 2=Rock, 3=Globe, 42=Serenity, 5=Beyond, 945=KFAT (default: 0)"`
-	Bitrate         int    `toml:"bitrate" comment:"1=64k AAC, 2=128k AAC, 3=320k AAC, 4=FLAC (default: 3)"`
-	ShowAlbumArt    bool   `toml:"show_album_art" comment:"display album art for each song\nuses the best supported image protocol with auto fallback\nkitty > iterm2 > sixel > unicode (default: true)"`
-	CopyAlbumArt    bool   `toml:"copy_album_art" comment:"save album art to file, useful for desktop/statusbar widgets (default: false)"`
-	AlbumArtPath    string `toml:"album_art_path" comment:"file path for album art copy, needed if copy_album_art is true (default: /tmp/cover.jpg)"`
-	FavoritesDir    string `toml:"favorites_dir" comment:"directory for favorites metadata and audio files (default: XDG_CACHE_HOME/rptui/favorites)"`
-	MaxFavorites    int    `toml:"max_favorites" comment:"maximum favorites to save, to limit disk use\nset to 999999 for effectively unlimited (default: 100)"`
-	MinFavorites    int    `toml:"min_favorites" comment:"minimum favorites to enable favorites mode\nautoplay favorites while awaiting RP API response for uninterrupted playback\nmust be <= max_favorites (default: 10)"`
-	ShowSkipWarning bool   `toml:"show_skip_warning" comment:"warn when skipping ahead of livestream without enough favorites\nset to false to disable (default: true)"`
-	ColorsFile      string `toml:"colors_file" comment:"custom colors.toml file path, takes priority over theme setting\nfallback order: colors_file > theme > omarchy current theme > Catppuccin Mocha (default: '')"`
-	Theme           string `toml:"theme" comment:"built-in theme name\ncatppuccin-mocha, gruvbox-dark, dark-red, osaka-jade, synth, basic (default: '')"`
+	path                  string
+	Channel               int    `toml:"channel" comment:"default station for new sessions\nchanges made in app are saved to file and retained on restart\n0=Main, 1=Mellow, 2=Rock, 3=Globe, 42=Serenity, 5=Beyond, 945=KFAT (default: 0)"`
+	Bitrate               int    `toml:"bitrate" comment:"1=64k AAC, 2=128k AAC, 3=320k AAC, 4=FLAC (default: 3)"`
+	ShowAlbumArt          bool   `toml:"show_album_art" comment:"display album art for each song\nuses the best supported image protocol with auto fallback\nkitty > iterm2 > sixel > unicode (default: true)"`
+	CopyAlbumArt          bool   `toml:"copy_album_art" comment:"save album art to file, useful for desktop/statusbar widgets (default: false)"`
+	AlbumArtPath          string `toml:"album_art_path" comment:"file path for album art copy, needed if copy_album_art is true (default: /tmp/cover.jpg)"`
+	FavoritesDir          string `toml:"favorites_dir" comment:"directory for favorites metadata and audio files (default: XDG_CACHE_HOME/rptui/favorites)"`
+	MaxFavorites          int    `toml:"max_favorites" comment:"maximum favorites to save, to limit disk use\nset to 999999 for effectively unlimited (default: 100)"`
+	MinFavorites          int    `toml:"min_favorites" comment:"minimum favorites to enable favorites mode\nautoplay favorites while awaiting RP API response for uninterrupted playback\nmust be <= max_favorites (default: 10)"`
+	ShowSkipWarning       bool   `toml:"show_skip_warning" comment:"warn when skipping ahead of livestream without enough favorites\nset to false to disable (default: true)"`
+	ColorsFile            string `toml:"colors_file" comment:"custom colors.toml file path, takes priority over theme setting\nfallback order: colors_file > theme > omarchy current theme > Catppuccin Mocha (default: '')"`
+	Theme                 string `toml:"theme" comment:"built-in theme name\ncatppuccin-mocha, gruvbox-dark, dark-red, osaka-jade, synth, basic (default: '')"`
 	TransparentBackground bool   `toml:"transparent_background" comment:"use terminal's default background color (default: false)"`
 	DisableTheme          bool   `toml:"disable_theme" comment:"disable all theming, use terminal's default colors (default: false)"`
 
@@ -156,14 +156,14 @@ func DefaultConfig() *Config {
 			Repeat:            false,
 			CrossfadeDuration: 3.0,
 		},
-		Layout:        "large",
-		ForceProtocol: "",
+		Layout:                "large",
+		ForceProtocol:         "",
 		TransparentBackground: false,
 		DisableTheme:          false,
 		TerminalPalette: TerminalPaletteConfig{
 			Cursor: 2, // green
-			Accent: 4,  // blue
-			Muted:  8,  // gray
+			Accent: 4, // blue
+			Muted:  8, // gray
 		},
 	}
 }

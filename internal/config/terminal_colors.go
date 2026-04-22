@@ -13,10 +13,10 @@ import (
 )
 
 type TerminalColors struct {
-	mu            sync.RWMutex
-	foreground    string
-	background    string
-	palette       map[int]string
+	mu           sync.RWMutex
+	foreground   string
+	background   string
+	palette      map[int]string
 	queried      bool
 	querySuccess bool
 }
@@ -30,7 +30,7 @@ var (
 const (
 	IdxCursor = 2 // green
 	IdxAccent = 4 // blue
-	IdxMuted = 8  // gray
+	IdxMuted  = 8 // gray
 )
 
 // GetTerminalColors returns the terminal's default colors.
@@ -117,7 +117,7 @@ func (t *TerminalColors) queryTermenv() {
 	// Try termenv for default fg/bg (OSC 10/11)
 	// First try with stdout (works in some terminals)
 	output := termenv.NewOutput(os.Stdout)
-	
+
 	// First try to get TTY explicitly
 	tty := output.TTY()
 	if tty != nil {
@@ -125,7 +125,7 @@ func (t *TerminalColors) queryTermenv() {
 		ttyOutput := termenv.NewOutput(tty)
 		ttyFg := ttyOutput.ForegroundColor()
 		ttyBg := ttyOutput.BackgroundColor()
-		
+
 		if ttyFg != nil {
 			if seq := ttyFg.Sequence(false); seq != "" {
 				t.foreground = sequenceToHex(seq)
@@ -137,7 +137,7 @@ func (t *TerminalColors) queryTermenv() {
 			}
 		}
 	}
-	
+
 	// Fallback to stdout if TTY didn't work
 	if t.foreground == "" || t.background == "" {
 		fgColor := output.ForegroundColor()

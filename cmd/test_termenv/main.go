@@ -1,3 +1,4 @@
+//go:build ignore
 // +build ignore
 
 // Test program to debug termenv terminal color detection
