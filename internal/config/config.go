@@ -77,6 +77,12 @@ type Config struct {
 	AutoBlocklistRPEnabled   bool `toml:"auto_blocklist_rp_enabled" comment:"when authenticated, automatically blocklist songs rated at or below the threshold\nthreshold: rating value 1-4, songs rated <= threshold are blocked (default: false)"`
 	AutoBlocklistRPThreshold int  `toml:"auto_blocklist_rp_threshold" comment:"rating threshold for auto-blocklist (1-4, default: 3)\nsongs with your RP rating <= this value are automatically blocked"`
 
+	// DJ segment skipping (SMAD detection)
+	SkipDJSegments bool    `toml:"skip_dj_segments" comment:"enable automatic skipping of DJ speech at start/end of songs"`
+	DJCheckSeconds int     `toml:"dj_check_seconds" comment:"seconds from start/end of song to check for speech (default: 30)"`
+	DJConfidence   float64 `toml:"dj_confidence" comment:"minimum confidence for speech detection (0.0-1.0, default: 0.5)"`
+	DJSafetyBuffer float64 `toml:"dj_safety_buffer" comment:"extra seconds to add after detected speech for safe skipping (default: 0.5)"`
+
 	// Layout mode
 	Layout string `toml:"layout" comment:"UI layout mode\nlarge: full layout with all elements (default)\nmedium: no bottom view (no playlist/lyrics/visualizer)\ncompact: no album art, no bottom view, mini footer\nnarrow: album art top-left, now playing below, mini footer (default: large)"`
 
@@ -151,6 +157,10 @@ func DefaultConfig() *Config {
 		NotificationsShowArt:     true,
 		AutoBlocklistRPEnabled:   false,
 		AutoBlocklistRPThreshold: 3,
+		SkipDJSegments:           false,
+		DJCheckSeconds:           30,
+		DJConfidence:             0.65,
+		DJSafetyBuffer:           0.5,
 		Jukebox: JukeboxConfig{
 			MinFaves:          20,
 			Repeat:            false,

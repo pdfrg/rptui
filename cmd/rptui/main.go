@@ -17,6 +17,7 @@ import (
 	"github.com/pdfrg/rptui/internal/cache"
 	"github.com/pdfrg/rptui/internal/config"
 	_ "github.com/pdfrg/rptui/internal/loginit"
+	"github.com/pdfrg/rptui/internal/smad"
 	"github.com/pdfrg/rptui/internal/tui"
 )
 
@@ -39,6 +40,7 @@ func main() {
 	layoutOverride := ""
 	sleepTimerDuration := time.Duration(0)
 	alarmTime := time.Time{}
+	setupDJSkip := false
 
 	args := os.Args[1:]
 
@@ -97,6 +99,9 @@ func main() {
 		case "--test-terminal-colors":
 			handleTestTerminalColors()
 			return
+		case "--setup-dj-skip":
+			setupDJSkip = true
+			continue
 		case "--sleep":
 			if i+1 < len(args) {
 				d, err := time.ParseDuration(args[i+1])
@@ -151,6 +156,16 @@ func main() {
 	}
 
 	// Normal mode or jukebox mode
+	if setupDJSkip {
+		err := smad.Setup("", filepath.Join(xdg.CacheHome, "rptui"))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error setting up DJ skip: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("DJ skip setup complete.")
+		return
+	}
+
 	cfg, err := config.NewConfig()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
@@ -696,12 +711,12 @@ FLAGS:
     -v, --version           Show version information and exit
     -j, --jukebox           Launch in jukebox mode (random favorites playback)
         --layout LAYOUT     Set UI layout: large, medium, compact, narrow
-                            large: full layout with all elements (default)
-                            medium: no bottom view (no playlist/lyrics/visualizer)
-                            compact: no album art, no bottom view, mini footer
-                            narrow: album art top-left, now playing below, mini footer
-
-OFFLINE CACHE:
+                             large: full layout with all elements (default)
+                             medium: no bottom view (no playlist/lyrics/visualizer)
+                             compact: no album art, no bottom view, mini footer
+                             narrow: album art top-left, now playing below, mini footer
+ 
+ OFFLINE CACHE:
     --cache <DURATION> [STATION] [BITRATE]
                             Record audio cache for offline playback
                             DURATION: recording length (e.g., 2h, 3.5h)
@@ -724,6 +739,7 @@ SLEEP TIMER / ALARM:
                             App starts at specified time
 
 ACTIONS:
+    --setup-dj-skip         Setup isolated Python venv with TVSM model for DJ skip
     --lastfm-auth           Run Last.fm OAuth authentication flow and save session key
     --rp-auth               Authenticate with Radio Paradise account
                              Enables user ratings, comments, favorites sync, and My Paradise channel
