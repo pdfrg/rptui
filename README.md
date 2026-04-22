@@ -1,3 +1,5 @@
+[![CI](https://github.com/pdfrg/rptui/actions/workflows/ci.yml/badge.svg)](https://github.com/pdfrg/rptui/actions/workflows/ci.yml)
+
 # RadioParadise TUI
 
 <img src="assets/rptui-icon.png" alt="rptui icon" width="200" align="left" style="margin-right: 20px; margin-top: -20px; margin-bottom: 20px;">
