@@ -124,6 +124,17 @@ func (c *CacheManager) EnsureDirectories() error {
 
 	c.favorites = c.loadMetadata(c.favoritesDir)
 	c.blocklist = c.loadMetadata(c.blocklistDir)
+
+	// Deduplicate favorites (removes entries created by old EventID-only dedup)
+	if deduped := c.dedupFavorites(c.favorites); deduped != nil {
+		c.favorites = deduped
+		if err := c.saveMetadata(c.favoritesDir, c.favorites); err != nil {
+			logger.Printf("Failed to save deduped favorites: %v", err)
+		} else {
+			logger.Printf("Deduplicated favorites metadata")
+		}
+	}
+
 	return nil
 }
 
@@ -159,12 +170,46 @@ func (c *CacheManager) saveMetadata(dir string, songs []CachedSong) error {
 	return nil
 }
 
+// songIdentityKey returns a stable identity key for deduplication.
+// Priority: SongID (stable across replays), then Artist-Album-Title, then EventID.
+func songIdentityKey(s *models.Song) string {
+	if s.SongID != 0 {
+		return fmt.Sprintf("sid:%d", s.SongID)
+	}
+	if s.Artist != "" || s.Album != "" || s.Title != "" {
+		return fmt.Sprintf("aat:%s-%s-%s", s.Artist, s.Album, s.Title)
+	}
+	return fmt.Sprintf("eid:%d", s.EventID)
+}
+
+// cachedSongIdentityKey returns a stable identity key for a CachedSong.
+func cachedSongIdentityKey(cs *CachedSong) string {
+	if cs.SongID != 0 {
+		return fmt.Sprintf("sid:%d", cs.SongID)
+	}
+	if cs.Artist != "" || cs.Album != "" || cs.Title != "" {
+		return fmt.Sprintf("aat:%s-%s-%s", cs.Artist, cs.Album, cs.Title)
+	}
+	return fmt.Sprintf("eid:%d", cs.EventID)
+}
+
+// isSameFavorite checks if a song matches an existing cached favorite.
+func isSameFavorite(song *models.Song, fav CachedSong) bool {
+	if song.SongID != 0 && fav.SongID != 0 {
+		return fav.SongID == song.SongID
+	}
+	if song.Artist != "" || song.Album != "" || song.Title != "" {
+		return fav.Artist == song.Artist && fav.Album == song.Album && fav.Title == song.Title
+	}
+	return fav.EventID == song.EventID
+}
+
 // IsFavorite checks if a song is in favorites
 func (c *CacheManager) IsFavorite(song *models.Song) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	for _, fav := range c.favorites {
-		if fav.EventID == song.EventID {
+		if isSameFavorite(song, fav) {
 			return true
 		}
 	}
@@ -192,9 +237,9 @@ func (c *CacheManager) AddFavorite(song *models.Song, fileExt string) (string, e
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Check if already exists
+	// Check if already exists (by SongID, then Artist-Album-Title, then EventID)
 	for _, fav := range c.favorites {
-		if fav.EventID == song.EventID {
+		if isSameFavorite(song, fav) {
 			return "", nil
 		}
 	}
@@ -210,6 +255,7 @@ func (c *CacheManager) AddFavorite(song *models.Song, fileExt string) (string, e
 
 	cached := CachedSong{
 		EventID:        song.EventID,
+		SongID:         song.SongID,
 		Title:          song.Title,
 		Artist:         song.Artist,
 		Album:          song.Album,
@@ -249,10 +295,25 @@ func (c *CacheManager) RemoveFavorite(eventID int64) error {
 	return nil
 }
 
+// RemoveFavoriteBySong removes a song from favorites using stable identity
+func (c *CacheManager) RemoveFavoriteBySong(song *models.Song) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	for i, fav := range c.favorites {
+		if isSameFavorite(song, fav) {
+			c.removeAudioFile(fav.AudioPath)
+			c.favorites = append(c.favorites[:i], c.favorites[i+1:]...)
+			return c.saveMetadata(c.favoritesDir, c.favorites)
+		}
+	}
+	return nil
+}
+
 // ToggleFavorite checks if a song is already a favorite.
 func (c *CacheManager) ToggleFavorite(song *models.Song, fileExt string) (bool, string, error) {
 	if c.IsFavorite(song) {
-		if err := c.RemoveFavorite(song.EventID); err != nil {
+		if err := c.RemoveFavoriteBySong(song); err != nil {
 			return false, "", err
 		}
 		return false, "", nil
@@ -443,6 +504,7 @@ func (cs *CachedSong) ToSong() *models.Song {
 		Year:           cs.Year,
 		Duration:       cs.Duration,
 		EventID:        cs.EventID,
+		SongID:         cs.SongID,
 		GaplessURL:     url,
 		CoverLarge:     cs.CoverLarge,
 		Rating:         cs.Rating,
@@ -469,11 +531,21 @@ func (c *CacheManager) StartFavoriteDownload(song *models.Song, fileExt string, 
 
 // downloadAndAdd downloads audio to a .tmp file, renames on success, then adds to favorites.
 func (c *CacheManager) downloadAndAdd(song *models.Song, fileExt string) bool {
+	// Check if already a favorite before downloading (by SongID/Artist-Album-Title/EventID)
+	if c.IsFavorite(song) {
+		return true
+	}
+
 	audioPath := c.buildAudioPath(song, fileExt)
 	tmpPath := audioPath + ".tmp"
 
 	if _, err := os.Stat(audioPath); err == nil {
-		return false
+		// Audio file already exists on disk — add to metadata if missing
+		if _, addErr := c.AddFavorite(song, fileExt); addErr != nil {
+			logger.Printf("Audio file exists but failed to add metadata for %s: %v", filepath.Base(audioPath), addErr)
+			return false
+		}
+		return true
 	}
 
 	logger.Printf("Downloading favorite audio: %s", filepath.Base(audioPath))
@@ -578,6 +650,31 @@ func sanitizeFilename(s string, maxLen int) string {
 	result := strings.TrimSpace(b.String())
 	if len(result) > maxLen {
 		result = result[:maxLen]
+	}
+	return result
+}
+
+// dedupFavorites removes duplicate entries from a favorites slice using stable identity.
+// Returns nil if no duplicates were found. Keeps the first (newest) entry for each identity.
+func (c *CacheManager) dedupFavorites(favorites []CachedSong) []CachedSong {
+	seen := make(map[string]bool)
+	var result []CachedSong
+	changed := false
+
+	for _, fav := range favorites {
+		key := cachedSongIdentityKey(&fav)
+		if seen[key] {
+			logger.Printf("Dedup: removing duplicate favorite: %s - %s (key=%s)", fav.Artist, fav.Title, key)
+			c.removeAudioFile(fav.AudioPath)
+			changed = true
+			continue
+		}
+		seen[key] = true
+		result = append(result, fav)
+	}
+
+	if !changed {
+		return nil
 	}
 	return result
 }
