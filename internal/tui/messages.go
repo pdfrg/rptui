@@ -236,6 +236,14 @@ func openDonatePageCmd() tea.Msg {
 	return nil
 }
 
+func openLidarrURLCmd(url string) tea.Cmd {
+	return func() tea.Msg {
+		cmd := exec.Command("xdg-open", url)
+		cmd.Start()
+		return nil
+	}
+}
+
 // setStatus sets a temporary status message that auto-clears after 5 seconds.
 // Returns a tea.Cmd (possibly nil) that should be batched with other commands.
 func setStatus(m *Model, msg string, isError bool) tea.Cmd {

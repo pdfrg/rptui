@@ -60,6 +60,9 @@ type Config struct {
 	LastFM       LastFMConfig       `toml:"lastfm" comment:"Last.fm scrobbling\nrun 'rptui --lastfm-auth' once to obtain a session key"`
 	ListenBrainz ListenBrainzConfig `toml:"listenbrainz" comment:"ListenBrainz scrobbling\ntoken found at: https://listenbrainz.org/profile/"`
 
+	// Lidarr integration
+	Lidarr LidarrConfig `toml:"lidarr" comment:"Lidarr music collection manager\nshows artist/album monitoring status, opens Lidarr web UI\napi_key from: Lidarr Settings > General"`
+
 	// Visualizer settings
 	Visualizer VisualizerConfig `toml:"visualizer" comment:"audio visualizer settings"`
 
@@ -80,7 +83,7 @@ type Config struct {
 	// DJ segment skipping (SMAD detection)
 	SkipDJSegments bool    `toml:"skip_dj_segments" comment:"enable automatic skipping of DJ speech at start/end of songs"`
 	DJCheckSeconds int     `toml:"dj_check_seconds" comment:"seconds from start/end of song to check for speech (default: 30)"`
-	DJConfidence   float64 `toml:"dj_confidence" comment:"minimum confidence for speech detection (0.0-1.0, default: 0.5)"`
+	DJConfidence float64 `toml:"dj_confidence" comment:"minimum confidence for speech detection (0.0-1.0, default: 0.65)"`
 	DJSafetyBuffer float64 `toml:"dj_safety_buffer" comment:"extra seconds to add after detected speech for safe skipping (default: 0.5)"`
 
 	// Layout mode
@@ -116,6 +119,13 @@ type ListenBrainzConfig struct {
 type RPAuthConfig struct {
 	Username string `toml:"username" comment:"RP account username"`
 	Password string `toml:"password" comment:"RP account password (used to obtain session token)"`
+}
+
+// LidarrConfig holds Lidarr integration settings
+type LidarrConfig struct {
+	Enabled bool   `toml:"enabled" comment:"enable Lidarr integration (default: false)"`
+	URL     string `toml:"url" comment:"Lidarr base URL (e.g., http://localhost:8686)"`
+	APIKey  string `toml:"api_key" comment:"Lidarr API key from Settings > General"`
 }
 
 // TerminalPaletteConfig holds palette indices for disable_theme mode
@@ -333,6 +343,17 @@ func (c *Config) applyDefaults() {
 	}
 
 	// TransparentBackground and DisableTheme don't need validation (bool is always valid)
+
+	// Validate DJ segment skipping settings
+	if c.DJCheckSeconds < 5 || c.DJCheckSeconds > 120 {
+		c.DJCheckSeconds = defaults.DJCheckSeconds
+	}
+	if c.DJConfidence < 0.1 || c.DJConfidence > 0.99 {
+		c.DJConfidence = defaults.DJConfidence
+	}
+	if c.DJSafetyBuffer < 0 || c.DJSafetyBuffer > 5 {
+		c.DJSafetyBuffer = defaults.DJSafetyBuffer
+	}
 }
 
 // GetDisplayInfo returns display string for current station/bitrate

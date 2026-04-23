@@ -371,6 +371,23 @@ func (m *MPVBackend) SeekRelative(deltaSeconds float64) error {
 	return err
 }
 
+// SeekAbsolute seeks to absolute position in seconds in current track.
+func (m *MPVBackend) SeekAbsolute(positionSeconds float64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.process == nil {
+		return fmt.Errorf("MPV not running")
+	}
+
+	cmd := IPCCommand{
+		Command: []any{"seek", positionSeconds, "absolute"},
+	}
+
+	_, err := m.sendIPCCommandLocked(cmd)
+	return err
+}
+
 // SeekToStart seeks to beginning of current track
 func (m *MPVBackend) SeekToStart() error {
 	m.mu.Lock()
