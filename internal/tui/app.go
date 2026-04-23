@@ -15,7 +15,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -214,17 +213,18 @@ type Model struct {
 	themeWatcher *config.ThemeWatcher
 
 	// API Clients
-	rpAPI             *api.RadioParadiseAPI
-	authClient        *api.RPAuthClient
-	commentsClient    *api.RPCommentsClient
-	ratingsClient     *api.RPRatingsClient
-	lyricsClient      *api.LRCLibClient
-	wikipediaClient   *api.WikipediaClient
-	discogsClient     *api.DiscogsClient
+	rpAPI *api.RadioParadiseAPI
+	authClient *api.RPAuthClient
+	commentsClient *api.RPCommentsClient
+	ratingsClient *api.RPRatingsClient
+	lyricsClient *api.LRCLibClient
+	wikipediaClient *api.WikipediaClient
+	discogsClient *api.DiscogsClient
 	musicbrainzClient *api.MusicBrainzClient
-	theaudiodbClient  *api.TheAudioDBClient
-	mpvBackend        *mpv.MPVBackend
-	cacheManager      *cache.CacheManager
+	theaudiodbClient *api.TheAudioDBClient
+	lidarrClient *api.LidarrClient
+	mpvBackend *mpv.MPVBackend
+	cacheManager *cache.CacheManager
 
 	// State
 	songs            []*models.Song
@@ -283,6 +283,10 @@ type Model struct {
 	pendingArtistArtLoaded bool
 	pendingArtistArtWidth  int
 	pendingArtistArtHeight int
+
+	// Lidarr state
+	lidarrArtistStatus *api.LidarrArtistStatus // current song's Lidarr artist status
+	lidarrAlbums map[string]*api.LidarrAlbumStatus // current artist's album status in Lidarr
 
 	// Bubbles components
 	viewport       viewport.Model
@@ -530,6 +534,10 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 	}
 	musicbrainzClient := api.NewMusicBrainzClient()
 	theaudiodbClient := api.NewTheAudioDBClient()
+	lidarrClient := api.NewLidarrClient(cfg.Lidarr.URL, cfg.Lidarr.APIKey, cfg.Lidarr.Enabled)
+	if lidarrClient.IsConfigured() {
+		logger.Printf("Lidarr API: configured (%s)", cfg.Lidarr.URL)
+	}
 	mpvBackend := mpv.NewMPVBackend()
 	cacheManager := cache.NewCacheManager(
 		cfg.GetFavoritesDir(),
@@ -572,6 +580,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 	headerWidget := widgets.NewHeader(styles.Header, "rptui - Radio Paradise")
 	footerWidget := widgets.NewFooter(styles.AccentStyle, styles.MutedStyle)
 	footerWidget.SetScrobbleServices(scrobbler.ServiceNames())
+	footerWidget.SetLidarrConfigured(lidarrClient.IsConfigured())
 	if rpAPI.IsAuthenticated() {
 		footerWidget.AddChannel99()
 	}
@@ -611,9 +620,10 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 		lyricsClient:              lyricsClient,
 		wikipediaClient:           wikipediaClient,
 		discogsClient:             discogsClient,
-		musicbrainzClient:         musicbrainzClient,
-		theaudiodbClient:          theaudiodbClient,
-		mpvBackend:                mpvBackend,
+		musicbrainzClient: musicbrainzClient,
+		theaudiodbClient: theaudiodbClient,
+		lidarrClient: lidarrClient,
+		mpvBackend: mpvBackend,
 		cacheManager:              cacheManager,
 		scrobbler:                 scrobbler,
 		bottomViewMode:            ViewPlaylist,
@@ -727,6 +737,7 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 	discogsClient := api.NewDiscogsClient(cfg.DiscogsToken, cfg.DiscogsKey, cfg.DiscogsSecret)
 	musicbrainzClient := api.NewMusicBrainzClient()
 	theaudiodbClient := api.NewTheAudioDBClient()
+	lidarrClient := api.NewLidarrClient(cfg.Lidarr.URL, cfg.Lidarr.APIKey, cfg.Lidarr.Enabled)
 	mpvBackend := mpv.NewMPVBackend()
 	cacheManager := cache.NewCacheManager(
 		cfg.GetFavoritesDir(),
@@ -743,6 +754,7 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 	headerWidget := widgets.NewHeader(styles.Header, "rptui - Radio Paradise (Offline)")
 	footerWidget := widgets.NewFooter(styles.AccentStyle, styles.MutedStyle)
 	footerWidget.SetScrobbleServices(scrobbler.ServiceNames())
+	footerWidget.SetLidarrConfigured(lidarrClient.IsConfigured())
 	nowPlayingWidget := widgets.NewNowPlaying(styles.ForegroundStyle, styles.AccentStyle, styles.MutedStyle, styles.AccentHex, styles.CursorHex, styles.ProgressBarBackground)
 	playlistWidget := widgets.NewPlaylist(styles)
 
@@ -802,18 +814,19 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 		lyricsClient:                lyricsClient,
 		wikipediaClient:             wikipediaClient,
 		discogsClient:               discogsClient,
-		musicbrainzClient:           musicbrainzClient,
-		theaudiodbClient:            theaudiodbClient,
-		mpvBackend:                  mpvBackend,
-		cacheManager:                cacheManager,
-		scrobbler:                   scrobbler,
-		bottomViewMode:              ViewPlaylist,
-		headerWidget:                headerWidget,
-		footerWidget:                footerWidget,
-		nowPlayingWidget:            nowPlayingWidget,
-		playlistWidget:              playlistWidget,
-		optionsModal:                optionsModal,
-		skipWarningModal:            skipWarningModal,
+		musicbrainzClient: musicbrainzClient,
+		theaudiodbClient: theaudiodbClient,
+		lidarrClient: lidarrClient,
+		mpvBackend: mpvBackend,
+		cacheManager: cacheManager,
+		scrobbler: scrobbler,
+		bottomViewMode: ViewPlaylist,
+		headerWidget: headerWidget,
+		footerWidget: footerWidget,
+		nowPlayingWidget: nowPlayingWidget,
+		playlistWidget: playlistWidget,
+		optionsModal: optionsModal,
+		skipWarningModal: skipWarningModal,
 		viewport:                    viewport,
 		help:                        help,
 		spinner:                     sp,
@@ -1283,14 +1296,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return handle(m.handlePollTick(msg))
 
 	case djDetectionDoneMsg:
-		if msg.hasSpeech && msg.song == m.currentSong && m.mpvBackend != nil {
+		if msg.hasSpeech && m.currentSong != nil && msg.eventID == m.currentSong.EventID && m.mpvBackend != nil {
 			pos, err := m.mpvBackend.GetPlaybackPosition()
 			if err == nil && pos.TimePos < msg.skipEnd {
-				// Absolute seek to end of detected speech
 				_ = m.mpvBackend.SeekAbsolute(msg.skipEnd)
 				if pos.TimePos <= msg.skipStart {
-					logger.Printf("DJ speech detected (%.1fs), skipping to %.1fs (confidence: %.2f)",
-						msg.skipEnd-msg.skipStart, msg.skipEnd, msg.confidence)
+					logger.Printf("DJ speech detected (%.1fs), skipping to %.1fs (confidence: %.2f)", msg.skipEnd-msg.skipStart, msg.skipEnd, msg.confidence)
 				} else {
 					logger.Printf("Currently in DJ speech, skipping to %.1fs", msg.skipEnd)
 				}
@@ -1985,6 +1996,23 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "$":
 		// Open RP donate page
 		return m, tea.Batch(setStatus(&m, "Opening RP donate page...", false), openDonatePageCmd)
+
+	case "L":
+		if !m.lidarrClient.IsConfigured() {
+			return m, setStatus(&m, "Lidarr not configured", true)
+		}
+		if m.currentSong == nil {
+			return m, setStatus(&m, "No song playing", true)
+		}
+		var lidarrURL string
+		if m.artistInfo != nil && m.artistInfo.LidarrInLidarr && m.artistInfo.LidarrArtistID > 0 {
+			lidarrURL = m.lidarrClient.OpenArtistURL(m.artistInfo.LidarrArtistID)
+		} else if m.artistInfo != nil && m.artistInfo.LidarrMBID != "" {
+			lidarrURL = m.lidarrClient.OpenSearchByMBID(m.artistInfo.LidarrMBID)
+		} else {
+			lidarrURL = m.lidarrClient.OpenSearchURL(m.currentSong.Artist)
+		}
+		return m, tea.Batch(setStatus(&m, "Opening Lidarr...", false), openLidarrURLCmd(lidarrURL))
 
 	case "F":
 		// Toggle fullscreen visualizer — only works when visualizer view is active
@@ -3419,6 +3447,36 @@ func (m Model) handleArtistFetched(msg artistFetchedMsg) (tea.Model, tea.Cmd) {
 	m.pendingArtistInfo = msg.info
 	m.pendingEventID = msg.eventID
 
+	// Sync Lidarr state from artist info to Model-level fields
+	if msg.info != nil {
+		if msg.info.LidarrInLidarr {
+			m.lidarrArtistStatus = &api.LidarrArtistStatus{
+				InLidarr:   true,
+				Monitored:  msg.info.LidarrMonitored,
+				ArtistID:   msg.info.LidarrArtistID,
+				ArtistName: msg.info.LidarrArtistName,
+			}
+			if msg.info.LidarrMonitored {
+				m.footerWidget.SetLidarrState(widgets.LidarrStateMonitored)
+			} else {
+				m.footerWidget.SetLidarrState(widgets.LidarrStateInLidarr)
+			}
+		} else if msg.info.LidarrError != "" {
+			m.lidarrArtistStatus = &api.LidarrArtistStatus{Error: msg.info.LidarrError}
+			m.footerWidget.SetLidarrState(widgets.LidarrStateError)
+		} else {
+			m.lidarrArtistStatus = &api.LidarrArtistStatus{}
+			m.footerWidget.SetLidarrState(widgets.LidarrStateNotInLidarr)
+		}
+		m.lidarrAlbums = nil
+		if len(msg.info.LidarrAlbums) > 0 {
+			m.lidarrAlbums = make(map[string]*api.LidarrAlbumStatus)
+			for title, info := range msg.info.LidarrAlbums {
+				m.lidarrAlbums[title] = &api.LidarrAlbumStatus{InLidarr: info.InLidarr, Monitored: info.Monitored}
+			}
+		}
+	}
+
 	// Always update the artist cache (for next time this artist plays)
 	if msg.info != nil && m.currentSong != nil {
 		if m.artistCache == nil {
@@ -3745,13 +3803,50 @@ func (m *Model) updateBottomView() {
 				} else {
 					lines = append(lines, indent+"No biography available.")
 				}
-				if m.artistInfo.Discography != "" {
-					lines = append(lines, "")
-					lines = append(lines, indent+"Studio Albums:")
-					discoLines := strings.Split(m.artistInfo.Discography, "\n")
-					for _, line := range discoLines {
+		if m.artistInfo.Discography != "" {
+			lines = append(lines, "")
+			// Add Lidarr artist status line if configured
+			if m.lidarrClient.IsConfigured() && (m.artistInfo.LidarrInLidarr || m.artistInfo.LidarrMBID != "") {
+				var lidarrLine string
+				if m.artistInfo.LidarrInLidarr {
+					if m.artistInfo.LidarrMonitored {
+						lidarrLine = m.styles.AccentStyle.Render("●") + " monitored"
+					} else {
+						lidarrLine = m.styles.ForegroundStyle.Render("○") + " not monitored"
+					}
+				} else if m.artistInfo.LidarrError != "" {
+					lidarrLine = m.styles.MutedStyle.Render("?") + " error: " + m.artistInfo.LidarrError
+				} else {
+					lidarrLine = m.styles.MutedStyle.Render("⊝") + " not in Lidarr"
+				}
+				lines = append(lines, indent+"Lidarr: "+lidarrLine)
+			}
+			lines = append(lines, indent+"Studio Albums:")
+			discoLines := strings.Split(m.artistInfo.Discography, "\n")
+			for _, line := range discoLines {
+				// Check Lidarr album status
+				albumTitle := line
+				if idx := strings.LastIndex(line, " ("); idx > 0 {
+					albumTitle = line[:idx]
+				}
+				if m.lidarrClient.IsConfigured() && len(m.artistInfo.LidarrAlbums) > 0 {
+					if albumInfo, ok := m.artistInfo.LidarrAlbums[albumTitle]; ok {
+						var indicator string
+						if albumInfo.Monitored {
+							indicator = m.styles.AccentStyle.Render("● ")
+						} else if albumInfo.InLidarr {
+							indicator = m.styles.ForegroundStyle.Render("○ ")
+						} else {
+							indicator = m.styles.MutedStyle.Render("⊝ ")
+						}
+						lines = append(lines, indent+" "+indicator+line)
+					} else {
 						lines = append(lines, indent+"  "+line)
 					}
+				} else {
+					lines = append(lines, indent+"  "+line)
+				}
+			}
 					if m.artistInfo.DiscoSource != "" {
 						lines = append(lines, indent+"Source: "+m.artistInfo.DiscoSource)
 					}
@@ -3882,43 +3977,35 @@ func (m *Model) updateBottomView() {
 func (m *Model) startDJDetection(song *models.Song) tea.Cmd {
 	return func() tea.Msg {
 		if !m.config.SkipDJSegments {
-			return djDetectionDoneMsg{song: song}
+			return djDetectionDoneMsg{eventID: song.EventID}
 		}
 
-		// Use song's audio file path for detection
 		audioPath := song.GaplessURL
 		if audioPath == "" {
-			return djDetectionDoneMsg{song: song}
+			return djDetectionDoneMsg{eventID: song.EventID}
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		cacheDir := filepath.Join(xdg.CacheHome, "rptui")
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		// Check availability first
-		getBinDir := func() string {
-			if runtime.GOOS == "windows" {
-				return "Scripts"
-			}
-			return "bin"
-		}
-		pythonPath := filepath.Join(xdg.CacheHome, "rptui", "env", getBinDir(), "python")
-		modelPath := filepath.Join(xdg.CacheHome, "rptui", "tvsm_models", "TVSM-cuesheet", "Models", "epoch=10-step=4058.ckpt")
 		checker := smad.NewDJChecker(
-			pythonPath,
-			filepath.Join(xdg.CacheHome, "rptui", "smad", "detector.py"),
-			modelPath,
-			filepath.Join(xdg.CacheHome, "rptui", "smad", "cache"),
+			smad.PythonPath(cacheDir),
+			smad.DetectorPath(cacheDir),
+			smad.ModelPath(cacheDir),
+			smad.CacheDir(cacheDir),
 		)
 
-		speechStart, speechEnd, confidence, hasSpeech, err := checker.Detect(ctx, audioPath)
+		speechStart, speechEnd, confidence, hasSpeech, err := checker.Detect(
+			ctx, audioPath, m.config.DJConfidence, m.config.DJCheckSeconds,
+		)
 
 		if err != nil {
 			logger.Printf("DJ detection failed: %v", err)
-			return djDetectionDoneMsg{song: song}
+			return djDetectionDoneMsg{eventID: song.EventID}
 		}
 
-		if hasSpeech && confidence >= m.config.DJConfidence {
-			// Calculate skip positions
+		if hasSpeech {
 			skipStart := speechStart - m.config.DJSafetyBuffer
 			if skipStart < 0 {
 				skipStart = 0
@@ -3930,7 +4017,7 @@ func (m *Model) startDJDetection(song *models.Song) tea.Cmd {
 			}
 
 			return djDetectionDoneMsg{
-				song:       song,
+				eventID:    song.EventID,
 				hasSpeech:  true,
 				skipStart:  skipStart,
 				skipEnd:    skipEnd,
@@ -3938,13 +4025,13 @@ func (m *Model) startDJDetection(song *models.Song) tea.Cmd {
 			}
 		}
 
-		return djDetectionDoneMsg{song: song}
+	return djDetectionDoneMsg{eventID: song.EventID}
 	}
 }
 
 // djDetectionDoneMsg is sent when DJ detection completes
 type djDetectionDoneMsg struct {
-	song       *models.Song
+	eventID    int64
 	hasSpeech  bool
 	skipStart  float64
 	skipEnd    float64
@@ -3955,11 +4042,6 @@ type djDetectionDoneMsg struct {
 // (initial load, manual skip/prev, natural transition).
 // It updates model state and returns Cmds for all async fetches.
 func (m *Model) songChangedCmds() tea.Cmd {
-	// Start DJ detection if enabled
-	if m.currentSong != nil && m.config.SkipDJSegments {
-		return m.startDJDetection(m.currentSong)
-	}
-
 	if m.currentSongIndex < 0 || m.currentSongIndex >= len(m.songs) {
 		return nil
 	}
@@ -3998,6 +4080,11 @@ func (m *Model) songChangedCmds() tea.Cmd {
 	m.pendingArtistArtLoaded = false
 	m.pendingArtistArtWidth = 0
 	m.pendingArtistArtHeight = 0
+
+	// Clear Lidarr state for new song
+	m.lidarrArtistStatus = nil
+	m.lidarrAlbums = nil
+	m.footerWidget.SetLidarrState(widgets.LidarrStateNotInLidarr)
 
 	// Clear comments for the new song, unless currently viewing them
 	if m.bottomViewMode != ViewComments {
@@ -4062,6 +4149,11 @@ func (m *Model) songChangedCmds() tea.Cmd {
 	}
 
 	var cmds []tea.Cmd
+
+	// Start DJ detection if enabled (non-blocking, result arrives via djDetectionDoneMsg)
+	if m.currentSong != nil && m.config.SkipDJSegments {
+		cmds = append(cmds, m.startDJDetection(m.currentSong))
+	}
 
 	// Clear old album art from terminal for sixel/iterm2 when song changes
 	if m.imageProtocol == termimg.Sixel || m.imageProtocol == termimg.ITerm2 {
@@ -4351,6 +4443,7 @@ func (m Model) fetchArtistCmd() tea.Cmd {
 	mbClient := m.musicbrainzClient
 	tadbClient := m.theaudiodbClient
 	wikiClient := m.wikipediaClient
+	lidarrClient := m.lidarrClient
 
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -4365,25 +4458,26 @@ func (m Model) fetchArtistCmd() tea.Cmd {
 			artist *api.TADBArtist
 			err    error
 		}
-		type mbResult struct {
-			albums []api.MBAlbum
-			err    error
-		}
+	type mbResult struct {
+		mbid   string
+		albums []api.MBAlbum
+		err    error
+	}
 
-		tadbCh := make(chan tadbResult, 1)
-		mbCh := make(chan mbResult, 1)
+	tadbCh := make(chan tadbResult, 1)
+	mbCh := make(chan mbResult, 1)
 
-		go func() {
-			a, e := tadbClient.SearchArtist(ctx, song.Artist, song.Album)
-			tadbCh <- tadbResult{a, e}
-		}()
-		go func() {
-			a, e := mbClient.GetDiscography(ctx, song.Artist, song.Album)
-			mbCh <- mbResult{a, e}
-		}()
+	go func() {
+		a, e := tadbClient.SearchArtist(ctx, song.Artist, song.Album)
+		tadbCh <- tadbResult{a, e}
+	}()
+	go func() {
+	mbid, a, e := mbClient.GetDiscography(ctx, song.Artist, song.Album)
+	mbCh <- mbResult{mbid, a, e}
+	}()
 
-		tadb := <-tadbCh
-		mb := <-mbCh
+	tadb := <-tadbCh
+	mb := <-mbCh
 
 		// Process TADB — bio, thumb, gallery
 		if tadb.err != nil {
@@ -4479,6 +4573,56 @@ func (m Model) fetchArtistCmd() tea.Cmd {
 				}
 			}
 		}
+
+	// --- Phase 4: Lidarr (if configured, reuse MBID from Phase 1) ---
+	if lidarrClient.IsConfigured() && mb.mbid != "" {
+		logger.Printf("Artist fetch: phase 4 (Lidarr) for %s (mbid=%s)", song.Artist, mb.mbid)
+		info.LidarrMBID = mb.mbid
+		lidarrStatus, lidErr := lidarrClient.GetArtistByMBID(ctx, mb.mbid)
+				if lidErr != nil {
+					logger.Printf("Lidarr: artist lookup failed for %s (mbid %s): %v", song.Artist, mb.mbid, lidErr)
+					info.LidarrError = lidarrStatus.Error
+				} else if lidarrStatus.InLidarr {
+					info.LidarrInLidarr = true
+					info.LidarrMonitored = lidarrStatus.Monitored
+					info.LidarrArtistID = lidarrStatus.ArtistID
+					info.LidarrArtistName = lidarrStatus.ArtistName
+					logger.Printf("Lidarr: %s found (id=%d, monitored=%v)", song.Artist, lidarrStatus.ArtistID, lidarrStatus.Monitored)
+
+					// Get album monitoring status if we have discography
+					if info.Discography != "" {
+						var mbTitles []string
+						for _, line := range strings.Split(info.Discography, "\n") {
+							line = strings.TrimSpace(line)
+							if line == "" {
+								continue
+							}
+							// Extract album title from "Album (Year)" format
+							if idx := strings.LastIndex(line, " ("); idx > 0 {
+								mbTitles = append(mbTitles, line[:idx])
+							} else {
+								mbTitles = append(mbTitles, line)
+							}
+						}
+						if len(mbTitles) > 0 {
+							lidarrAlbums, albErr := lidarrClient.GetArtistAlbums(ctx, lidarrStatus.ArtistID, mbTitles)
+							if albErr != nil {
+								logger.Printf("Lidarr: album lookup failed for artist %d: %v", lidarrStatus.ArtistID, albErr)
+							} else if len(lidarrAlbums) > 0 {
+								info.LidarrAlbums = make(map[string]models.LidarrAlbumInfo)
+								for title, status := range lidarrAlbums {
+									info.LidarrAlbums[title] = models.LidarrAlbumInfo{
+										InLidarr:  status.InLidarr,
+										Monitored: status.Monitored,
+									}
+								}
+							}
+						}
+					}
+	} else {
+		logger.Printf("Lidarr: %s not in Lidarr (mbid %s)", song.Artist, mb.mbid)
+	}
+	}
 
 		// --- Final fallback ---
 		if info.Bio == "" {

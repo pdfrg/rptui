@@ -77,14 +77,14 @@ func fileExists(path string) bool {
 }
 
 // Detect runs the Python TVSM script and returns (speechStart, speechEnd, confidence, hasSpeech).
-// It caches results by song file path mtime to avoid re-running on every playback.
-func (d *DJChecker) Detect(ctx context.Context, songPath string) (float64, float64, float64, bool, error) {
+// It caches results by song file path + mtime + threshold to avoid re-running on every playback.
+func (d *DJChecker) Detect(ctx context.Context, songPath string, confidenceThreshold float64, checkSeconds int) (float64, float64, float64, bool, error) {
 	avail := d.Availability()
 	if !avail.Available {
 		return 0, 0, 0, false, fmt.Errorf("DJ detection unavailable: %s", avail.Reason)
 	}
 
-	cacheKey, err := d.cacheKey(songPath)
+	cacheKey, err := d.cacheKey(songPath, confidenceThreshold, checkSeconds)
 	if err != nil {
 		return 0, 0, 0, false, fmt.Errorf("failed to compute cache key: %w", err)
 	}
@@ -92,7 +92,14 @@ func (d *DJChecker) Detect(ctx context.Context, songPath string) (float64, float
 		return cached.result.SpeechStart, cached.result.SpeechEnd, cached.result.Confidence, cached.result.HasSpeech, nil
 	}
 
-	cmd := exec.CommandContext(ctx, d.pythonPath, d.scriptPath, songPath, d.modelPath)
+	args := []string{
+		d.scriptPath,
+		songPath,
+		d.modelPath,
+		fmt.Sprintf("%.4f", confidenceThreshold),
+		fmt.Sprintf("%d", checkSeconds),
+	}
+	cmd := exec.CommandContext(ctx, d.pythonPath, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return 0, 0, 0, false, fmt.Errorf("python detection failed: %w, output: %s", err, string(out))
@@ -110,25 +117,24 @@ func (d *DJChecker) Detect(ctx context.Context, songPath string) (float64, float
 	return result.SpeechStart, result.SpeechEnd, result.Confidence, result.HasSpeech, nil
 }
 
-func (d *DJChecker) cacheKey(path string) (string, error) {
+func (d *DJChecker) cacheKey(path string, confidenceThreshold float64, checkSeconds int) (string, error) {
+	keyInput := fmt.Sprintf("%s|%.4f|%d", path, confidenceThreshold, checkSeconds)
 	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
-		// For URLs, hash the URL itself (no mtime available)
-		hash := sha256.Sum256([]byte(path))
+		hash := sha256.Sum256([]byte(keyInput))
 		return fmt.Sprintf("%x", hash), nil
 	}
-	// For local files: sha256 of file path + its mtime
 	cmd := exec.Command("sha256sum", path)
 	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("sha256sum not available: %w", err)
 	}
-	// Include mtime for invalidation
 	cmd = exec.Command("stat", "--format=%Y", path)
 	mtimeOut, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("stat not available: %w", err)
 	}
-	hash := sha256.Sum256(append(out, mtimeOut...))
+	combined := append(append(out, mtimeOut...), []byte(keyInput)...)
+	hash := sha256.Sum256(combined)
 	return fmt.Sprintf("%x", hash), nil
 }
 
@@ -146,7 +152,7 @@ func (d *DJChecker) saveCache(key string, result *DetectionResult) error {
 }
 
 func (d *DJChecker) loadCache(key string) (*cachedResult, bool) {
-	data, err := os.ReadFile(key)
+	data, err := os.ReadFile(filepath.Join(d.cacheDir, key))
 	if err != nil {
 		return nil, false
 	}
