@@ -157,7 +157,31 @@ func main() {
 
 	// Normal mode or jukebox mode
 	if setupDJSkip {
-		err := smad.Setup("", filepath.Join(xdg.CacheHome, "rptui"))
+		cacheDir := filepath.Join(xdg.CacheHome, "rptui")
+		if smad.IsSetupComplete(cacheDir) {
+			fmt.Println("DJ skip setup is already complete. Nothing to do.")
+			return
+		}
+
+		fmt.Println("This will set up DJ speech detection by:")
+		fmt.Println("  1. Creating an isolated Python virtual environment")
+		fmt.Println("  2. Installing PyTorch + audio libraries (~2.5GB download, 10-20 min)")
+		fmt.Println("  3. Downloading the TVSM speech detection model (~11MB)")
+		fmt.Println("  4. Converting the model to runtime format")
+		fmt.Println()
+		fmt.Println("Disk space required: ~2.5GB")
+		fmt.Println()
+		fmt.Print("Continue? [y/N] ")
+
+		reader := bufio.NewReader(os.Stdin)
+		input, _ := reader.ReadString('\n')
+		input = strings.TrimSpace(strings.ToLower(input))
+		if input != "y" && input != "yes" {
+			fmt.Println("Aborted.")
+			return
+		}
+
+		err := smad.Setup("", cacheDir)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error setting up DJ skip: %v\n", err)
 			os.Exit(1)
@@ -739,7 +763,8 @@ SLEEP TIMER / ALARM:
                             App starts at specified time
 
 ACTIONS:
-    --setup-dj-skip         Setup isolated Python venv with TVSM model for DJ skip
+	--setup-dj-skip     Download TVSM model for DJ speech skipping
+	                    (~2.5GB Python dependencies, 10-20 min install time)
     --lastfm-auth           Run Last.fm OAuth authentication flow and save session key
     --rp-auth               Authenticate with Radio Paradise account
                              Enables user ratings, comments, favorites sync, and My Paradise channel
