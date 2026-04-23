@@ -9,6 +9,13 @@ import (
 
 const connStateDisconnected = "disconnected"
 
+const (
+	LidarrStateNotInLidarr = 0
+	LidarrStateInLidarr    = 1
+	LidarrStateMonitored   = 2
+	LidarrStateError       = 3
+)
+
 // KeyBinding represents a keyboard shortcut
 type KeyBinding struct {
 	Key   string
@@ -33,8 +40,12 @@ type Footer struct {
 	connState    string // "connected", "disconnected", or ""
 
 	// Scrobble indicator
-	scrobbleServices     []string       // e.g. ["fm", "lb"]
+	scrobbleServices []string // e.g. ["fm", "lb"]
 	flashStatesByService map[string]int // per-service state: "fm" -> 0/1/2/3
+
+	// Lidarr indicator
+	lidarrConfigured bool
+	lidarrState int // LidarrStateNotInLidarr, LidarrStateInLidarr, LidarrStateMonitored, LidarrStateError
 }
 
 // NewFooter creates a new Footer widget
@@ -55,11 +66,12 @@ func NewFooter(accentStyle, mutedStyle lipgloss.Style) *Footer {
 			{Key: "c", Icon: "", Label: "Copy"},
 			{Key: "z", Icon: "", Label: "Sleep"},
 			{Key: "o", Icon: "", Label: "Opt"},
-			{Key: "m", Icon: "", Label: "Manage"},
-			{Key: "$", Icon: "", Label: "Support"},
-			{Key: "q", Icon: "", Label: "Quit"},
-		},
-		jukeKeys: []KeyBinding{
+		{Key: "m", Icon: "", Label: "Manage"},
+		{Key: "L", Icon: "", Label: "Lidarr"},
+		{Key: "$", Icon: "", Label: "Support"},
+		{Key: "q", Icon: "", Label: "Quit"},
+	},
+	jukeKeys: []KeyBinding{
 			{Key: "p", Icon: "󰒮", Label: ""},
 			{Key: "r", Icon: "󰜉", Label: ""},
 			{Key: "Space", Icon: "󰐎", Label: ""},
@@ -83,10 +95,11 @@ func NewFooter(accentStyle, mutedStyle lipgloss.Style) *Footer {
 			{Key: "b", Icon: "🚫", Label: ""},
 			{Key: "c", Icon: "", Label: "Copy"},
 			{Key: "o", Icon: "", Label: "Opt"},
-			{Key: "m", Icon: "", Label: "Manage"},
-			{Key: "q", Icon: "", Label: "Quit"},
-		},
-		stationKeys: []KeyBinding{
+		{Key: "m", Icon: "", Label: "Manage"},
+		{Key: "L", Icon: "", Label: "Lidarr"},
+		{Key: "q", Icon: "", Label: "Quit"},
+	},
+	stationKeys: []KeyBinding{
 			{Key: "0", Icon: "", Label: "Main"},
 			{Key: "1", Icon: "", Label: "Mellow"},
 			{Key: "2", Icon: "", Label: "RockIt"},
@@ -157,6 +170,16 @@ func (h *Footer) AddChannel99() {
 	h.stationKeys = append(h.stationKeys, KeyBinding{Key: "9", Icon: "", Label: "MyParadise"})
 }
 
+// SetLidarrConfigured sets whether Lidarr integration is configured
+func (h *Footer) SetLidarrConfigured(configured bool) {
+	h.lidarrConfigured = configured
+}
+
+// SetLidarrState sets the current Lidarr artist status for the [L] indicator
+func (h *Footer) SetLidarrState(state int) {
+	h.lidarrState = state
+}
+
 const (
 	flashOff     = 0
 	flashSolid   = 1
@@ -193,11 +216,37 @@ func (h Footer) scrobbleIndicator() string {
 	return strings.Join(parts, "")
 }
 
+func (h Footer) lidarrIndicator() string {
+	if !h.lidarrConfigured {
+		return ""
+	}
+
+	var style lipgloss.Style
+	switch h.lidarrState {
+	case LidarrStateMonitored:
+		style = h.accentStyle
+	case LidarrStateInLidarr:
+		style = h.foregroundStyle()
+	case LidarrStateError:
+		style = h.mutedStyle
+	default:
+		style = h.mutedStyle
+	}
+	return style.Render("[L]")
+}
+
+func (h Footer) foregroundStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(h.accentStyle.GetForeground())
+}
+
 // View renders the footer (two lines: controls + stations)
 func (h Footer) View() string {
 	renderLine := func(bindings []KeyBinding) string {
 		var parts []string
 		for _, kb := range bindings {
+			if kb.Key == "L" && !h.lidarrConfigured {
+				continue
+			}
 			keyPart := h.accentStyle.Render(kb.Key)
 
 			var descPart string
@@ -239,7 +288,10 @@ func (h Footer) View() string {
 	if h.jukeboxMode {
 		jukeLine := renderLine(h.jukeKeys)
 		if ind := h.scrobbleIndicator(); ind != "" {
-			jukeLine += "  " + ind
+			jukeLine += " " + ind
+		}
+		if ind := h.lidarrIndicator(); ind != "" {
+			jukeLine += " " + ind
 		}
 		return "\n" + jukeLine
 	}
@@ -251,7 +303,10 @@ func (h Footer) View() string {
 
 	// Append scrobble indicator right after station line in normal mode
 	if ind := h.scrobbleIndicator(); ind != "" {
-		stationLine += "  " + ind
+		stationLine += " " + ind
+	}
+	if ind := h.lidarrIndicator(); ind != "" {
+		stationLine += " " + ind
 	}
 
 	return stationLine + "\n" + controlsLine

@@ -33,15 +33,16 @@ func NewMusicBrainzClient() *MusicBrainzClient {
 // GetDiscography searches for an artist and returns their official studio albums.
 // rpAlbum is the current song's album name from Radio Paradise, used to validate
 // that the matched MB artist actually has this album (catches false positives).
-// Returns nil if the artist is not found or the match cannot be validated.
-func (mb *MusicBrainzClient) GetDiscography(ctx context.Context, artistName string, rpAlbum string) ([]MBAlbum, error) {
+// Returns the artist's MusicBrainz ID, albums, and error.
+// Returns nil albums if the artist is not found or the match cannot be validated.
+func (mb *MusicBrainzClient) GetDiscography(ctx context.Context, artistName string, rpAlbum string) (string, []MBAlbum, error) {
 	// Step 1: Search for artist
-	mbID, matchedName, err := mb.searchArtist(ctx, artistName)
+	mbID, matchedName, err := mb.SearchArtist(ctx, artistName)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	if mbID == "" {
-		return nil, nil // not found
+		return "", nil, nil // not found
 	}
 
 	// Respect MB rate limit between calls
@@ -56,18 +57,18 @@ func (mb *MusicBrainzClient) GetDiscography(ctx context.Context, artistName stri
 
 	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	req.Header.Set("User-Agent", mb.userAgent)
 
 	resp, err := mb.httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("musicbrainz release-groups status %d", resp.StatusCode)
+		return "", nil, fmt.Errorf("musicbrainz release-groups status %d", resp.StatusCode)
 	}
 
 	var rgResult struct {
@@ -78,7 +79,7 @@ func (mb *MusicBrainzClient) GetDiscography(ctx context.Context, artistName stri
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&rgResult); err != nil {
-		return nil, err
+		return "", nil, err
 	}
 
 	// Deduplicate by title and sort by year
@@ -126,7 +127,7 @@ func (mb *MusicBrainzClient) GetDiscography(ctx context.Context, artistName stri
 			}
 		}
 		if !hasMatch {
-			return nil, nil // match can't be validated, treat as not found
+			return "", nil, nil // match can't be validated, treat as not found
 		}
 	}
 
@@ -135,10 +136,10 @@ func (mb *MusicBrainzClient) GetDiscography(ctx context.Context, artistName stri
 		albums = append(albums, MBAlbum{Title: e.title, Year: e.year})
 	}
 
-	return albums, nil
+	return mbID, albums, nil
 }
 
-func (mb *MusicBrainzClient) searchArtist(ctx context.Context, artistName string) (mbid string, matchedName string, err error) {
+func (mb *MusicBrainzClient) SearchArtist(ctx context.Context, artistName string) (mbid string, matchedName string, err error) {
 	type artistEntry struct {
 		ID             string
 		Name           string
