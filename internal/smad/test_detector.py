@@ -20,7 +20,12 @@ AUDIO_EXTENSIONS = {".m4a", ".flac", ".mp3", ".ogg", ".wav"}
 
 DEFAULT_MODEL = os.path.join(
     os.path.expanduser("~"),
-    ".cache", "rptui", "tvsm_models", "TVSM-cuesheet", "Models", "model.pt",
+    ".cache",
+    "rptui",
+    "tvsm_models",
+    "TVSM-cuesheet",
+    "Models",
+    "model.pt",
 )
 
 
@@ -55,7 +60,9 @@ def process_file(filepath, model_path, confidence, check_seconds, min_duration):
         return False
 
     print(f"--- {basename} ({fmt_time(duration)}) ---")
-    print(f"Params: confidence={confidence} check_seconds={check_seconds} min_duration={min_duration}")
+    print(
+        f"Params: confidence={confidence} check_seconds={check_seconds} min_duration={min_duration}"
+    )
 
     start = time.time()
     result = detector.detect_speech(
@@ -89,23 +96,32 @@ def main():
 """,
     )
     parser.add_argument(
-        "paths", nargs="+", metavar="path",
+        "paths",
+        nargs="+",
+        metavar="path",
         help="audio files and/or directories to scan",
     )
     parser.add_argument(
-        "--confidence", type=float, default=0.65,
+        "--confidence",
+        type=float,
+        default=0.65,
         help="speech confidence threshold (default: 0.65)",
     )
     parser.add_argument(
-        "--check-seconds", type=int, default=30,
+        "--check-seconds",
+        type=int,
+        default=30,
         help="seconds from start/end to check (default: 30)",
     )
     parser.add_argument(
-        "--min-duration", type=float, default=5.0,
+        "--min-duration",
+        type=float,
+        default=5.0,
         help="minimum speech segment duration in seconds (default: 5.0)",
     )
     parser.add_argument(
-        "--model", default=DEFAULT_MODEL,
+        "--model",
+        default=DEFAULT_MODEL,
         help=f"path to TVSM model.pt (default: {DEFAULT_MODEL})",
     )
     args = parser.parse_args()
@@ -123,12 +139,16 @@ def main():
     speech_count = 0
     for f in files:
         print()
-        if process_file(f, args.model, args.confidence, args.check_seconds, args.min_duration):
+        if process_file(
+            f, args.model, args.confidence, args.check_seconds, args.min_duration
+        ):
             speech_count += 1
 
     print()
     print("=" * 50)
-    print(f"{len(files)} file(s) processed: {speech_count} speech, {len(files) - speech_count} clean")
+    print(
+        f"{len(files)} file(s) processed: {speech_count} speech, {len(files) - speech_count} clean"
+    )
 
 
 if __name__ == "__main__":

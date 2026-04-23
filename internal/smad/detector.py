@@ -21,13 +21,19 @@ hop_size = 512
 n_features = 128
 duration = 20
 
-# Minimum contiguous speech duration (seconds) to count as a DJ segment
+# Minimum speech duration (seconds) to count as a DJ segment after gap bridging
 # Shorter speech bursts are typically sung "spoken vocals", not DJ talk
 min_speech_duration = 5.0
 
+# Maximum gap (seconds) between speech regions to bridge into one segment
+# DJ speech often has brief musical interludes/station IDs that split detections
+max_speech_gap = 2.5
+
 
 class F2M(nn.Module):
-    def __init__(self, n_mels=128, sr=16000, f_max=None, f_min=0., n_fft=1024, onesided=True):
+    def __init__(
+        self, n_mels=128, sr=16000, f_max=None, f_min=0.0, n_fft=1024, onesided=True
+    ):
         super().__init__()
         self.n_mels = n_mels
         self.sr = sr
@@ -39,10 +45,10 @@ class F2M(nn.Module):
         self._init_buffers()
 
     def _init_buffers(self):
-        m_min = 0. if self.f_min == 0 else 2595 * np.log10(1. + (self.f_min / 700))
-        m_max = 2595 * np.log10(1. + (self.f_max / 700))
+        m_min = 0.0 if self.f_min == 0 else 2595 * np.log10(1.0 + (self.f_min / 700))
+        m_max = 2595 * np.log10(1.0 + (self.f_max / 700))
         m_pts = torch.linspace(m_min, m_max, self.n_mels + 2)
-        f_pts = (700 * (10 ** (m_pts / 2595) - 1))
+        f_pts = 700 * (10 ** (m_pts / 2595) - 1)
         bins = torch.floor(((self.n_fft - 1) * 2) * f_pts / self.sr).long()
         fb = torch.zeros(self.n_fft, self.n_mels)
         for m in range(1, self.n_mels + 1):
@@ -50,9 +56,13 @@ class F2M(nn.Module):
             f_m = bins[m].item()
             f_m_plus = bins[m + 1].item()
             if f_m_minus != f_m:
-                fb[f_m_minus:f_m, m - 1] = (torch.arange(f_m_minus, f_m) - f_m_minus).float() / (f_m - f_m_minus)
+                fb[f_m_minus:f_m, m - 1] = (
+                    torch.arange(f_m_minus, f_m) - f_m_minus
+                ).float() / (f_m - f_m_minus)
             if f_m != f_m_plus:
-                fb[f_m:f_m_plus, m - 1] = torch.div((float(f_m_plus) - torch.arange(f_m, f_m_plus)), (f_m_plus - f_m))
+                fb[f_m:f_m_plus, m - 1] = torch.div(
+                    (float(f_m_plus) - torch.arange(f_m, f_m_plus)), (f_m_plus - f_m)
+                )
         self.register_buffer("fb", fb)
 
     def forward(self, spec_f):
@@ -60,7 +70,7 @@ class F2M(nn.Module):
         return spec_m
 
 
-def pcen(x, eps=1E-6, s=0.025, alpha=0.98, delta=2, r=0.5, training=False):
+def pcen(x, eps=1e-6, s=0.025, alpha=0.98, delta=2, r=0.5, training=False):
     frames = x.split(1, -2)
     m_frames = []
     last_state = None
@@ -76,7 +86,7 @@ def pcen(x, eps=1E-6, s=0.025, alpha=0.98, delta=2, r=0.5, training=False):
         last_state = m_frame
         m_frames.append(m_frame)
     M = torch.cat(m_frames, 1)
-    pcen_ = (x / (M + eps).pow(alpha) + delta).pow(r) - delta ** r
+    pcen_ = (x / (M + eps).pow(alpha) + delta).pow(r) - delta**r
     return pcen_
 
 
@@ -89,7 +99,7 @@ class PCENTransform(nn.Module):
         if not is_mel:
             x = torch.stft(x, n_fft=1024, hop_length=512).norm(dim=-1, p=2)
             x = self.f2m(x.permute(0, 2, 1))
-        x = pcen(x, eps=1E-6, s=0.025, alpha=0.98, delta=2, r=0.5, training=False)
+        x = pcen(x, eps=1e-6, s=0.025, alpha=0.98, delta=2, r=0.5, training=False)
         return x
 
 
@@ -100,26 +110,38 @@ class CRNN(nn.Module):
             nn.Conv2d(1, 64, 3, 1, 1),
             nn.ReLU(),
             nn.MaxPool2d((2, 1)),
-            nn.BatchNorm2d(64)
+            nn.BatchNorm2d(64),
         )
         self.c2 = nn.Sequential(
             nn.Conv2d(64, 64, 11, 1, 5),
             nn.ReLU(),
             nn.MaxPool2d((2, 1)),
-            nn.BatchNorm2d(64)
+            nn.BatchNorm2d(64),
         )
         self.c3 = nn.Sequential(
             nn.Conv2d(64, 16, 11, 1, 5),
             nn.ReLU(),
             nn.MaxPool2d((2, 1)),
-            nn.BatchNorm2d(16)
+            nn.BatchNorm2d(16),
         )
         self.lstm1 = nn.Sequential(
-            nn.GRU(input_size=256, hidden_size=80, num_layers=1, bidirectional=True, batch_first=True),
+            nn.GRU(
+                input_size=256,
+                hidden_size=80,
+                num_layers=1,
+                bidirectional=True,
+                batch_first=True,
+            ),
         )
         self.b1 = nn.BatchNorm1d(160)
         self.lstm2 = nn.Sequential(
-            nn.GRU(input_size=160, hidden_size=40, num_layers=1, bidirectional=True, batch_first=True)
+            nn.GRU(
+                input_size=160,
+                hidden_size=40,
+                num_layers=1,
+                bidirectional=True,
+                batch_first=True,
+            )
         )
         self.b2 = nn.BatchNorm1d(80)
         self.last = nn.Linear(80, 2)
@@ -129,7 +151,11 @@ class CRNN(nn.Module):
         x = self.c1(x)
         x = self.c2(x)
         x = self.c3(x)
-        x = self.b1(self.lstm1(x.reshape(x.shape[0], -1, x.shape[-1]).permute(0, 2, 1))[0].permute(0, 2, 1))
+        x = self.b1(
+            self.lstm1(x.reshape(x.shape[0], -1, x.shape[-1]).permute(0, 2, 1))[
+                0
+            ].permute(0, 2, 1)
+        )
         x = self.b2(self.lstm2(x.permute(0, 2, 1))[0].permute(0, 2, 1))
         x = self.last(x.permute(0, 2, 1))
         return x.permute(0, 2, 1)
@@ -151,7 +177,9 @@ def get_audio_duration(audio_path):
         return None
 
 
-def detect_speech(audio_path, model_path, confidence_threshold, check_seconds, min_speech_duration=5.0):
+def detect_speech(
+    audio_path, model_path, confidence_threshold, check_seconds, min_speech_duration=5.0
+):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = CRNN()
     checkpoint = torch.load(model_path, map_location=device, weights_only=True)
@@ -180,7 +208,10 @@ def detect_speech(audio_path, model_path, confidence_threshold, check_seconds, m
         for i in range(n_chunk):
             chunk_start_sec = i * duration
             chunk_end_sec = (i + 1) * duration
-            in_boundary = chunk_start_sec < check_seconds or chunk_end_sec > audio_duration - check_seconds
+            in_boundary = (
+                chunk_start_sec < check_seconds
+                or chunk_end_sec > audio_duration - check_seconds
+            )
             if in_boundary:
                 chunks_to_process.append(i)
     else:
@@ -220,13 +251,15 @@ def detect_speech(audio_path, model_path, confidence_threshold, check_seconds, m
     boundary_start_limit = check_seconds
     boundary_end_limit = audio_duration - check_seconds
 
-    speech_regions = []
+    raw_regions = []
     active = False
     start = 0.0
     region_probs = []
 
     for t, speech_prob in all_speech_frames:
-        in_boundary = (check_seconds <= 0 or t < boundary_start_limit or t > boundary_end_limit)
+        in_boundary = (
+            check_seconds <= 0 or t < boundary_start_limit or t > boundary_end_limit
+        )
 
         if speech_prob >= confidence_threshold and not active and in_boundary:
             active = True
@@ -237,17 +270,41 @@ def detect_speech(audio_path, model_path, confidence_threshold, check_seconds, m
         elif (speech_prob < confidence_threshold or not in_boundary) and active:
             active = False
             avg_conf = float(np.mean(region_probs))
-            seg_duration = t - start
-            if seg_duration >= min_speech_duration:
-                speech_regions.append((start, t, avg_conf))
+            raw_regions.append((start, t, avg_conf, len(region_probs)))
             region_probs = []
 
     if active:
         avg_conf = float(np.mean(region_probs))
         t_end = min(all_speech_frames[-1][0] + frame_time, audio_duration)
-        seg_duration = t_end - start
-        if seg_duration >= min_speech_duration:
-            speech_regions.append((start, t_end, avg_conf))
+        raw_regions.append((start, t_end, avg_conf, len(region_probs)))
+
+    if not raw_regions:
+        return {
+            "has_speech": False,
+            "speech_start": 0.0,
+            "speech_end": 0.0,
+            "confidence": 0.0,
+        }
+
+    # Bridge small gaps between adjacent speech regions
+    bridged = []
+    for region in sorted(raw_regions, key=lambda x: x[0]):
+        if not bridged:
+            bridged.append(list(region))
+        else:
+            last = bridged[-1]
+            if region[0] <= last[1] + max_speech_gap:
+                new_weight = last[3] + region[3]
+                last[2] = (last[2] * last[3] + region[2] * region[3]) / new_weight
+                last[1] = max(last[1], region[1])
+                last[3] = new_weight
+            else:
+                bridged.append(list(region))
+
+    # Filter bridged regions by minimum duration
+    speech_regions = [
+        (r[0], r[1], r[2]) for r in bridged if r[1] - r[0] >= min_speech_duration
+    ]
 
     if not speech_regions:
         return {
@@ -257,19 +314,7 @@ def detect_speech(audio_path, model_path, confidence_threshold, check_seconds, m
             "confidence": 0.0,
         }
 
-    merged = []
-    for region in sorted(speech_regions, key=lambda x: x[0]):
-        if not merged:
-            merged.append(list(region))
-        else:
-            last = merged[-1]
-            if region[0] <= last[1] + 0.5:
-                last[1] = max(last[1], region[1])
-                last[2] = max(last[2], region[2])
-            else:
-                merged.append(list(region))
-
-    largest = max(merged, key=lambda x: x[1] - x[0])
+    largest = max(speech_regions, key=lambda x: x[1] - x[0])
 
     return {
         "has_speech": True,
@@ -281,7 +326,13 @@ def detect_speech(audio_path, model_path, confidence_threshold, check_seconds, m
 
 if __name__ == "__main__":
     if len(sys.argv) < 5:
-        print(json.dumps({"error": "Usage: detector.py <audio_path> <model_path> <confidence_threshold> <check_seconds>"}))
+        print(
+            json.dumps(
+                {
+                    "error": "Usage: detector.py <audio_path> <model_path> <confidence_threshold> <check_seconds>"
+                }
+            )
+        )
         sys.exit(1)
 
     audio_path = sys.argv[1]
@@ -298,7 +349,9 @@ if __name__ == "__main__":
         sys.exit(1)
 
     try:
-        result = detect_speech(audio_path, model_path, confidence_threshold, check_seconds)
+        result = detect_speech(
+            audio_path, model_path, confidence_threshold, check_seconds
+        )
         print(json.dumps(result))
     except Exception as e:
         print(json.dumps({"error": str(e)}))
