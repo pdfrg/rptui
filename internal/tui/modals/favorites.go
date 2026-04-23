@@ -242,8 +242,8 @@ func (f *Favorites) Update(msg tea.Msg) tea.Cmd {
 				}
 			} else if len(items) > 0 && f.cursor < len(items) {
 				item := items[f.cursor]
-				if f.activeTab == TabFavorites {
-					f.cacheManager.RemoveFavorite(item.EventID)
+		if f.activeTab == TabFavorites {
+			f.cacheManager.RemoveFavoriteBySong(item.ToSong())
 				} else {
 					f.cacheManager.RemoveBlocklist(item.SongID)
 				}

@@ -1823,9 +1823,9 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.currentSong != nil {
-			if m.cacheManager.IsFavorite(m.currentSong) {
-				// Remove favorite
-				if err := m.cacheManager.RemoveFavorite(m.currentSong.EventID); err == nil {
+		if m.cacheManager.IsFavorite(m.currentSong) {
+			// Remove favorite
+			if err := m.cacheManager.RemoveFavoriteBySong(m.currentSong); err == nil {
 					m.updatePlaylist()
 					return m, setStatus(&m, "Removed from favorites", false)
 				}
