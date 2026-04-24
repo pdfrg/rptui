@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# NOTE: The detect_speech logic in this file must be kept in sync with:
+# - internal/smad/setup.go (detectorScript constant)
+# - internal/smad/test_detector.py (imports this module)
+# Any changes to detection logic MUST be reflected in all three.
 import os
 import sys
 import json
@@ -22,8 +26,9 @@ n_features = 128
 duration = 20
 
 # Minimum speech duration (seconds) to count as a DJ segment after gap bridging
+# DJ talk on Radio Paradise is typically 10s+ (William's slow, soothing style)
 # Shorter speech bursts are typically sung "spoken vocals", not DJ talk
-min_speech_duration = 5.0
+min_speech_duration = 10.0
 
 # Maximum gap (seconds) between speech regions to bridge into one segment
 # DJ speech often has brief musical interludes/station IDs that split detections
@@ -177,6 +182,23 @@ def get_audio_duration(audio_path):
         return None
 
 
+def bridge_regions(regions, max_speech_gap):
+    bridged = []
+    for region in sorted(regions, key=lambda x: x[0]):
+        if not bridged:
+            bridged.append(list(region))
+        else:
+            last = bridged[-1]
+            if region[0] <= last[1] + max_speech_gap:
+                new_weight = last[3] + region[3]
+                last[2] = (last[2] * last[3] + region[2] * region[3]) / new_weight
+                last[1] = max(last[1], region[1])
+                last[3] = new_weight
+            else:
+                bridged.append(list(region))
+    return bridged
+
+
 def detect_speech(
     audio_path, model_path, confidence_threshold, check_seconds, min_speech_duration=5.0
 ):
@@ -247,6 +269,7 @@ def detect_speech(
                 t = frame_time * (chunk_offset_frames + j)
                 all_speech_frames.append((t, speech_prob))
 
+
     # Scan speech frames for contiguous regions within boundary zones
     boundary_start_limit = check_seconds
     boundary_end_limit = audio_duration - check_seconds
@@ -265,9 +288,9 @@ def detect_speech(
             active = True
             start = t
             region_probs = [speech_prob]
-        elif speech_prob >= confidence_threshold and active:
+        elif speech_prob >= confidence_threshold and active and in_boundary:
             region_probs.append(speech_prob)
-        elif (speech_prob < confidence_threshold or not in_boundary) and active:
+        elif active and (speech_prob < confidence_threshold or not in_boundary):
             active = False
             avg_conf = float(np.mean(region_probs))
             raw_regions.append((start, t, avg_conf, len(region_probs)))
@@ -286,24 +309,24 @@ def detect_speech(
             "confidence": 0.0,
         }
 
-    # Bridge small gaps between adjacent speech regions
-    bridged = []
-    for region in sorted(raw_regions, key=lambda x: x[0]):
-        if not bridged:
-            bridged.append(list(region))
-        else:
-            last = bridged[-1]
-            if region[0] <= last[1] + max_speech_gap:
-                new_weight = last[3] + region[3]
-                last[2] = (last[2] * last[3] + region[2] * region[3]) / new_weight
-                last[1] = max(last[1], region[1])
-                last[3] = new_weight
-            else:
-                bridged.append(list(region))
+    # Separate raw regions into beginning and end zones, then bridge within each
+    # zone independently. This prevents false bridges between start-of-song and
+    # end-of-song detections that span the entire track.
+    beginning_regions = [
+        r for r in raw_regions if check_seconds <= 0 or r[0] < boundary_start_limit
+    ]
+    end_regions = [
+        r for r in raw_regions if check_seconds <= 0 or r[1] > boundary_end_limit
+    ]
+
+    beginning_bridged = bridge_regions(beginning_regions, max_speech_gap)
+    end_bridged = bridge_regions(end_regions, max_speech_gap)
+
+    all_bridged = beginning_bridged + end_bridged
 
     # Filter bridged regions by minimum duration
     speech_regions = [
-        (r[0], r[1], r[2]) for r in bridged if r[1] - r[0] >= min_speech_duration
+        (r[0], r[1], r[2]) for r in all_bridged if r[1] - r[0] >= min_speech_duration
     ]
 
     if not speech_regions:
