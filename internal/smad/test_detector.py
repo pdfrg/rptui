@@ -108,20 +108,20 @@ def main():
     parser.add_argument(
         "--confidence",
         type=float,
-        default=0.65,
-        help="speech confidence threshold (default: 0.65)",
+        default=0.85,
+        help="speech confidence threshold (default: 0.85)",
     )
     parser.add_argument(
         "--check-seconds",
         type=int,
-        default=30,
-        help="seconds from start/end to check (default: 30)",
+        default=80,
+        help="seconds from end of song to check (default: 80)",
     )
     parser.add_argument(
         "--min-duration",
         type=float,
-        default=5.0,
-        help="minimum speech segment duration in seconds (default: 5.0)",
+        default=15.0,
+        help="minimum speech segment duration in seconds (default: 15.0)",
     )
     parser.add_argument(
         "--model",

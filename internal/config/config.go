@@ -81,10 +81,11 @@ type Config struct {
 	AutoBlocklistRPThreshold int  `toml:"auto_blocklist_rp_threshold" comment:"rating threshold for auto-blocklist (1-4, default: 3)\nsongs with your RP rating <= this value are automatically blocked"`
 
 	// DJ segment skipping (SMAD detection)
-	SkipDJSegments bool    `toml:"skip_dj_segments" comment:"enable automatic skipping of DJ speech at start/end of songs"`
-	DJCheckSeconds int     `toml:"dj_check_seconds" comment:"seconds from start/end of song to check for speech (default: 30)"`
-	DJConfidence float64 `toml:"dj_confidence" comment:"minimum confidence for speech detection (0.0-1.0, default: 0.65)"`
-	DJSafetyBuffer float64 `toml:"dj_safety_buffer" comment:"extra seconds to add after detected speech for safe skipping (default: 0.5)"`
+	SkipDJSegments      bool    `toml:"skip_dj_segments" comment:"enable automatic skipping of DJ speech at end of songs"`
+	DJCheckSeconds      int     `toml:"dj_check_seconds" comment:"seconds from end of song to check for DJ speech (default: 80)"`
+	DJConfidence        float64 `toml:"dj_confidence" comment:"minimum confidence for speech detection (0.0-1.0, default: 0.85)"`
+	DJSafetyBuffer      float64 `toml:"dj_safety_buffer" comment:"extra seconds to add after detected speech for safe skipping (default: 0.5)"`
+	DJMinSpeechDuration float64 `toml:"dj_min_speech_duration" comment:"minimum speech segment duration in seconds to count as DJ talk (default: 15.0)"`
 
 	// Layout mode
 	Layout string `toml:"layout" comment:"UI layout mode\nlarge: full layout with all elements (default)\nmedium: no bottom view (no playlist/lyrics/visualizer)\ncompact: no album art, no bottom view, mini footer\nnarrow: album art top-left, now playing below, mini footer (default: large)"`
@@ -167,10 +168,11 @@ func DefaultConfig() *Config {
 		NotificationsShowArt:     true,
 		AutoBlocklistRPEnabled:   false,
 		AutoBlocklistRPThreshold: 3,
-		SkipDJSegments:           false,
-		DJCheckSeconds:           30,
-		DJConfidence:             0.65,
-		DJSafetyBuffer:           0.5,
+		SkipDJSegments:      false,
+		DJCheckSeconds:      80,
+		DJConfidence:        0.85,
+		DJSafetyBuffer:      0.5,
+		DJMinSpeechDuration: 15.0,
 		Jukebox: JukeboxConfig{
 			MinFaves:          20,
 			Repeat:            false,
@@ -353,6 +355,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.DJSafetyBuffer < 0 || c.DJSafetyBuffer > 5 {
 		c.DJSafetyBuffer = defaults.DJSafetyBuffer
+	}
+	if c.DJMinSpeechDuration < 5 || c.DJMinSpeechDuration > 60 {
+		c.DJMinSpeechDuration = defaults.DJMinSpeechDuration
 	}
 }
 

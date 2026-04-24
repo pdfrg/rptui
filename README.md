@@ -47,7 +47,7 @@ While Radio Paradise offers the absolute best internet radio stations, human-cur
 - **Terminal Size Detection**: Warns if current terminal is too small for layout chosen, gives recommended size and alternate layouts(s) which fit in current terminal, allows to force fit if desired. User is always in control.
 - **Keyboard Navigation**: Hotkeys and RP stations shown in footer. Change stations with a single keypress.
 - **Sleep Timer / Alarm**: Fall asleep or wake up to the sounds of RP.
-- **DJ Speech Skipping**: Automatically detect and skip DJ interludes at the start/end of songs using a TVSM neural network. Configurable confidence threshold and boundary check. Optional one-time setup downloads the model.
+- **DJ Speech Skipping**: Automatically detect and skip DJ interludes using a TVSM neural network. Configurable confidence threshold and boundary check. Optional one-time setup downloads the model.
 
 ## RP Account Support
 - **Ratings**: Displays all your user ratings.  Submit ratings (1-10), just as in the official clients.

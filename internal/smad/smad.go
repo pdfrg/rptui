@@ -85,13 +85,13 @@ func fileExists(path string) bool {
 // key is deterministic). audioPath is the actual file passed to the Python script for scanning
 // (for HTTP songs, this is the downloaded temp file; for local files, same as cachePath).
 // artist and title are stored in the cache entry for human identification.
-func (d *DJChecker) Detect(ctx context.Context, cachePath string, audioPath string, confidenceThreshold float64, checkSeconds int, artist string, title string) (float64, float64, float64, bool, error) {
+func (d *DJChecker) Detect(ctx context.Context, cachePath string, audioPath string, confidenceThreshold float64, checkSeconds int, minSpeechDuration float64, artist string, title string) (float64, float64, float64, bool, error) {
 	avail := d.Availability()
 	if !avail.Available {
 		return 0, 0, 0, false, fmt.Errorf("DJ detection unavailable: %s", avail.Reason)
 	}
 
-	cacheKey, err := d.cacheKey(cachePath, confidenceThreshold, checkSeconds)
+	cacheKey, err := d.cacheKey(cachePath, confidenceThreshold, checkSeconds, minSpeechDuration)
 	if err != nil {
 		return 0, 0, 0, false, fmt.Errorf("failed to compute cache key: %w", err)
 	}
@@ -105,6 +105,7 @@ func (d *DJChecker) Detect(ctx context.Context, cachePath string, audioPath stri
 		d.modelPath,
 		fmt.Sprintf("%.4f", confidenceThreshold),
 		fmt.Sprintf("%d", checkSeconds),
+		fmt.Sprintf("%.1f", minSpeechDuration),
 	}
 	cmd := exec.CommandContext(ctx, d.pythonPath, args...)
 	out, err := cmd.CombinedOutput()
@@ -125,8 +126,8 @@ func (d *DJChecker) Detect(ctx context.Context, cachePath string, audioPath stri
 	return 0, 0, 0, false, fmt.Errorf("failed to parse detection result, raw: %s", string(out))
 }
 
-func (d *DJChecker) cacheKey(path string, confidenceThreshold float64, checkSeconds int) (string, error) {
-	keyInput := fmt.Sprintf("%s|%.4f|%d", path, confidenceThreshold, checkSeconds)
+func (d *DJChecker) cacheKey(path string, confidenceThreshold float64, checkSeconds int, minSpeechDuration float64) (string, error) {
+	keyInput := fmt.Sprintf("%s|%.4f|%d|%.1f", path, confidenceThreshold, checkSeconds, minSpeechDuration)
 	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
 		hash := sha256.Sum256([]byte(keyInput))
 		return fmt.Sprintf("%x", hash), nil

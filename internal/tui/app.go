@@ -1307,10 +1307,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	if msg.hasSpeech && m.currentSong != nil && msg.eventID == m.currentSong.EventID && m.mpvBackend != nil {
 		songDur := m.currentSong.GetDurationSeconds()
-		nearEnd := songDur > 0 && songDur-msg.skipEnd <= maxSpeechDistanceFromEdge
-		nearStart := msg.skipStart <= maxSpeechDistanceFromEdge
-		if !nearEnd && !nearStart {
-			logger.Printf("DJ speech: rejected (starts %.1fs from song start, ends %.1fs from song end, max %.1fs)", msg.skipStart, songDur-msg.skipEnd, maxSpeechDistanceFromEdge)
+		nearEnd := songDur > 0 && songDur-msg.skipEnd <= maxSpeechDistanceFromEnd
+		if !nearEnd {
+			logger.Printf("DJ speech: rejected (ends %.1fs from song end, max %.1fs)", songDur-msg.skipEnd, maxSpeechDistanceFromEnd)
 		} else if pos, err := m.mpvBackend.GetPlaybackPosition(); err == nil && pos.TimePos >= msg.skipStart && pos.TimePos < msg.skipEnd {
 			_ = m.mpvBackend.SeekAbsolute(msg.skipEnd)
 			logger.Printf("DJ speech: already at speech, skipping to %.1fs", msg.skipEnd)
@@ -4074,9 +4073,9 @@ func (m *Model) startDJDetection(song *models.Song) tea.Cmd {
 			smad.CacheDir(cacheDir),
 		)
 
-		speechStart, speechEnd, confidence, hasSpeech, err := checker.Detect(
-			ctx, originalURL, audioPath, m.config.DJConfidence, m.config.DJCheckSeconds, song.Artist, song.Title,
-		)
+	speechStart, speechEnd, confidence, hasSpeech, err := checker.Detect(
+		ctx, originalURL, audioPath, m.config.DJConfidence, m.config.DJCheckSeconds, m.config.DJMinSpeechDuration, song.Artist, song.Title,
+	)
 
 		if err != nil {
 			logger.Printf("DJ detection failed: %v", err)
@@ -4136,12 +4135,11 @@ type djSkipInfo struct {
 
 const djSkipFadeDuration = 1.5 // seconds of volume fade-out before DJ speech skip
 
-// maxSpeechDistanceFromEdge is the maximum distance (in seconds) from the song's
-// start or end at which detected speech is considered plausible DJ speech. RP
-// DJs talk at the very beginning or end of a track — speech starting/ending
-// more than this far from a song boundary is almost certainly a false positive
-// (e.g., sung vocals).
-const maxSpeechDistanceFromEdge = 5.0
+// maxSpeechDistanceFromEnd is the maximum distance (in seconds) from the song's
+// end at which detected speech is considered plausible DJ speech. RP DJs talk
+// at the very end of a track — speech ending more than this far from the song
+// end is almost certainly a false positive (e.g., sung vocals).
+const maxSpeechDistanceFromEnd = 3.0
 
 // songChangedCmds is the centralized handler for all song transitions
 // (initial load, manual skip/prev, natural transition).

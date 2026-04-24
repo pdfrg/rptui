@@ -25,11 +25,6 @@ hop_size = 512
 n_features = 128
 duration = 20
 
-# Minimum speech duration (seconds) to count as a DJ segment after gap bridging
-# DJ talk on Radio Paradise is typically 10s+ (William's slow, soothing style)
-# Shorter speech bursts are typically sung "spoken vocals", not DJ talk
-min_speech_duration = 10.0
-
 # Maximum gap (seconds) between speech regions to bridge into one segment
 # DJ speech often has brief musical interludes/station IDs that split detections
 max_speech_gap = 2.5
@@ -200,7 +195,7 @@ def bridge_regions(regions, max_speech_gap):
 
 
 def detect_speech(
-    audio_path, model_path, confidence_threshold, check_seconds, min_speech_duration=5.0
+    audio_path, model_path, confidence_threshold, check_seconds, min_speech_duration=15.0
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = CRNN()
@@ -223,17 +218,14 @@ def detect_speech(
     audio_pcen = pcen_transform(audio_mel)
     c_size = int(sr / hop_size * duration)
 
-    # Determine which chunks overlap with boundary regions
+    # Determine which chunks overlap with the end-of-song zone
     n_chunk = int(np.ceil(audio_pcen.shape[-1] / c_size))
-    if check_seconds > 0 and audio_duration > check_seconds * 2:
+    if check_seconds > 0 and audio_duration > check_seconds:
         chunks_to_process = []
         for i in range(n_chunk):
             chunk_start_sec = i * duration
             chunk_end_sec = (i + 1) * duration
-            in_boundary = (
-                chunk_start_sec < check_seconds
-                or chunk_end_sec > audio_duration - check_seconds
-            )
+            in_boundary = chunk_end_sec > audio_duration - check_seconds
             if in_boundary:
                 chunks_to_process.append(i)
     else:
@@ -270,8 +262,7 @@ def detect_speech(
                 all_speech_frames.append((t, speech_prob))
 
 
-    # Scan speech frames for contiguous regions within boundary zones
-    boundary_start_limit = check_seconds
+    # Scan speech frames for contiguous regions within the end-of-song zone
     boundary_end_limit = audio_duration - check_seconds
 
     raw_regions = []
@@ -280,9 +271,7 @@ def detect_speech(
     region_probs = []
 
     for t, speech_prob in all_speech_frames:
-        in_boundary = (
-            check_seconds <= 0 or t < boundary_start_limit or t > boundary_end_limit
-        )
+        in_boundary = check_seconds <= 0 or t > boundary_end_limit
 
         if speech_prob >= confidence_threshold and not active and in_boundary:
             active = True
@@ -309,24 +298,12 @@ def detect_speech(
             "confidence": 0.0,
         }
 
-    # Separate raw regions into beginning and end zones, then bridge within each
-    # zone independently. This prevents false bridges between start-of-song and
-    # end-of-song detections that span the entire track.
-    beginning_regions = [
-        r for r in raw_regions if check_seconds <= 0 or r[0] < boundary_start_limit
-    ]
-    end_regions = [
-        r for r in raw_regions if check_seconds <= 0 or r[1] > boundary_end_limit
-    ]
-
-    beginning_bridged = bridge_regions(beginning_regions, max_speech_gap)
-    end_bridged = bridge_regions(end_regions, max_speech_gap)
-
-    all_bridged = beginning_bridged + end_bridged
+    # Bridge adjacent speech regions within the end zone
+    bridged = bridge_regions(raw_regions, max_speech_gap)
 
     # Filter bridged regions by minimum duration
     speech_regions = [
-        (r[0], r[1], r[2]) for r in all_bridged if r[1] - r[0] >= min_speech_duration
+        (r[0], r[1], r[2]) for r in bridged if r[1] - r[0] >= min_speech_duration
     ]
 
     if not speech_regions:
@@ -348,12 +325,10 @@ def detect_speech(
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 5:
+    if len(sys.argv) < 6:
         print(
             json.dumps(
-                {
-                    "error": "Usage: detector.py <audio_path> <model_path> <confidence_threshold> <check_seconds>"
-                }
+                {"error": "Usage: detector.py <audio_path> <model_path> <confidence_threshold> <check_seconds> <min_speech_duration>"}
             )
         )
         sys.exit(1)
@@ -370,10 +345,15 @@ if __name__ == "__main__":
     except ValueError:
         print(json.dumps({"error": "Invalid check_seconds value"}))
         sys.exit(1)
+    try:
+        min_speech_duration = float(sys.argv[5])
+    except ValueError:
+        print(json.dumps({"error": "Invalid min_speech_duration value"}))
+        sys.exit(1)
 
     try:
         result = detect_speech(
-            audio_path, model_path, confidence_threshold, check_seconds
+            audio_path, model_path, confidence_threshold, check_seconds, min_speech_duration
         )
         print(json.dumps(result))
     except Exception as e:
