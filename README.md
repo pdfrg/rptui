@@ -144,7 +144,9 @@ However, these are absolutely NOT required.  The config options guarantee a clea
 
 ## Attribution
 
-Audio visualizations: [cliamp](https://github.com/bjarneo/cliamp).  Awesome music player with retro Winamp style in the terminal.
+DJ speech detection: [TVSM-dataset](https://github.com/biboamy/TVSM-dataset) — TVSM CRNN neural network for speech detection in music.
+
+Audio visualizations: [cliamp](https://github.com/bjarneo/cliamp). Awesome music player with retro Winamp style in the terminal.
 
 ## Documentation
 
