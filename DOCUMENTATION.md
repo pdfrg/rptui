@@ -159,10 +159,11 @@ The config file is located at `~/.config/rptui/config.toml`. It is created autom
 
 | Setting | Type | Description |
 |---------|------|-------------|
-| `skip_dj_segments` | bool | Enable automatic skipping of DJ speech at start/end of songs |
-| `dj_check_seconds` | int | Seconds from start/end of song to check for speech (5-120, default: 30) |
-| `dj_confidence` | float | Minimum confidence for speech detection (0.1-0.99, default: 0.65) |
+| `skip_dj_segments` | bool | Enable automatic skipping of DJ speech at end of songs |
+| `dj_check_seconds` | int | Seconds from end of song to check for DJ speech (5-120, default: 80) |
+| `dj_confidence` | float | Minimum confidence for speech detection (0.1-0.99, default: 0.85) |
 | `dj_safety_buffer` | float | Extra seconds to add after detected speech for safe skipping (0-5, default: 0.5) |
+| `dj_min_speech_duration` | float | Minimum speech segment duration in seconds to count as DJ talk (5-60, default: 15.0) |
 
 ### Lidarr Integration
 
@@ -437,7 +438,7 @@ listenbrainz_token = "your-token"
 
 ## DJ Speech Skipping (Optional)
 
-Uses a TVSM CRNN neural network to detect DJ speech at the start/end of songs and automatically seeks past it.
+Uses a TVSM CRNN neural network to detect DJ speech within songs and automatically seeks past it.
 
 ### Setup
 
@@ -452,11 +453,11 @@ A confirmation prompt is shown before proceeding. If setup is already complete, 
 
 ### How It Works
 
-- Only the first and last `dj_check_seconds` (default: 30) of each song are analyzed — the middle of a song is never checked
-- Speech segments shorter than 5 seconds are ignored (filters out brief spoken-vocal moments that aren't DJ talk)
-- A `dj_safety_buffer` (default: 0.5s) is added after the detected speech end for safe skipping
-- Results are cached per-song, so re-playing a song doesn't re-run detection
-- Detection runs in the background and doesn't block playback or other song-change logic
+- Only the last `dj_check_seconds` (default: 80) of each song are analyzed. RP DJ interludes are always at song end.
+- Speech segments shorter than 15 seconds are ignored (filters out brief spoken-vocal moments that aren't DJ talk). Some speech segments are >60s.
+- A `dj_safety_buffer` (default: 0.5s) is added before and after the detected speech to ensure segment is skipped (no jarring partial spoken word effect).
+- Results are cached per-song, so re-playing a song doesn't re-run detection.
+- Detection runs in the background and doesn't block playback or other song-change logic.
 
 ### Config
 
@@ -464,33 +465,10 @@ Enable in `config.toml`:
 
 ```toml
 skip_dj_segments = true
-dj_check_seconds = 30
-dj_confidence = 0.65
+dj_check_seconds = 80
+dj_confidence = 0.85
 dj_safety_buffer = 0.5
-```
-
-### Testing
-
-A test script is available at `internal/smad/test_detector.py` for verifying detection on audio files:
-
-```bash
-# Single file
-~/.cache/rptui/env/bin/python internal/smad/test_detector.py --model ~/.cache/rptui/tvsm_models/TVSM-cuesheet/Models/model.pt Song.m4a
-
-# Directory (processes all .m4a/.flac/.mp3 files recursively)
-~/.cache/rptui/env/bin/python internal/smad/test_detector.py --model ~/.cache/rptui/tvsm_models/TVSM-cuesheet/Models/model.pt ~/.cache/rptui/favorites/
-
-# Adjust parameters
-~/.cache/rptui/env/bin/python internal/smad/test_detector.py --model ~/.cache/rptui/tvsm_models/TVSM-cuesheet/Models/model.pt --confidence 0.5 --check-seconds 60 Song.m4a
-
-# Help
-~/.cache/rptui/env/bin/python internal/smad/test_detector.py -h
-```
-
-For convenience, you can add a shell alias to your `~/.bash_aliases` or equivalent:
-
-```bash
-alias test-dj='~/.cache/rptui/env/bin/python ~/Projects/rptui-bubbletea/internal/smad/test_detector.py --model ~/.cache/rptui/tvsm_models/TVSM-cuesheet/Models/model.pt'
+dj_min_speech_duration = 15.0
 ```
 
 ## Lidarr Integration (Optional)
