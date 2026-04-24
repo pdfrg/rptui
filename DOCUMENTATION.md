@@ -401,6 +401,14 @@ Only visible in the footer when scrobbling is enabled and successfully authorize
 At song completion, will display in accent color for 5 seconds on success, flash 5 seconds on failure.  Check log on failure.
 When both configured, each updates independently.
 
+`[L]`
+
+Only visible in the footer when Lidarr is enabled.
+For artists not in your Lidarr library, displays in muted text.
+For artists in Lidarr AND monitored, displays in accent colored text (same color as hotkeys).
+For artists in Lidarr and NOT monitored, displays in normal (foreground) text (same color as inactive playlist entries).
+
+
 ## Scrobbling (Optional)
 
 To enable scrobbling, you will need to configure at least one service:
@@ -507,7 +515,7 @@ Get the API key from Lidarr > Settings > General.
 When a song changes, rptui looks up the current artist in Lidarr via their MusicBrainz ID:
 
 - **If the artist IS in your Lidarr library**: Shows monitored (●) or not monitored (○) status in the artist view and footer. Press `L` to open the artist page in Lidarr.
-- **If the artist is NOT in your Lidarr library**: Shows "not in Lidarr" (⊝) status. Press `L` to open the "Add New Artist" search page in Lidarr. Artists are never added automatically — the Lidarr page opens for your review and confirmation.
+- **If the artist is NOT in your Lidarr library**: Shows "not in Lidarr" (⊝) status. Press `L` to open the "Add New Artist" search page in Lidarr. Artists are never added automatically. The Lidarr page opens for your review and confirmation.
 
 Album monitoring status is also shown in the artist discography when available.
 

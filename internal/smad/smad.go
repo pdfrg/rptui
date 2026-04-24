@@ -15,12 +15,16 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
-// DetectionResult mirrors the Python script's JSON output.
+// DetectionResult mirrors the Python script's JSON output with optional song metadata.
 type DetectionResult struct {
 	HasSpeech   bool    `toml:"has_speech" json:"has_speech"`
 	SpeechStart float64 `toml:"speech_start" json:"speech_start"`
 	SpeechEnd   float64 `toml:"speech_end" json:"speech_end"`
 	Confidence  float64 `toml:"confidence" json:"confidence"`
+	Artist      string  `toml:"artist,omitempty" json:"-"`
+	Title       string  `toml:"title,omitempty" json:"-"`
+	SongPath    string  `toml:"song_path,omitempty" json:"-"`
+	Err         string  `toml:"error,omitempty" json:"error,omitempty"`
 }
 
 type Availability struct {
@@ -77,14 +81,17 @@ func fileExists(path string) bool {
 }
 
 // Detect runs the Python TVSM script and returns (speechStart, speechEnd, confidence, hasSpeech).
-// It caches results by song file path + mtime + threshold to avoid re-running on every playback.
-func (d *DJChecker) Detect(ctx context.Context, songPath string, confidenceThreshold float64, checkSeconds int) (float64, float64, float64, bool, error) {
+// cachePath is used for cache key computation (use the original URL for HTTP songs so the cache
+// key is deterministic). audioPath is the actual file passed to the Python script for scanning
+// (for HTTP songs, this is the downloaded temp file; for local files, same as cachePath).
+// artist and title are stored in the cache entry for human identification.
+func (d *DJChecker) Detect(ctx context.Context, cachePath string, audioPath string, confidenceThreshold float64, checkSeconds int, artist string, title string) (float64, float64, float64, bool, error) {
 	avail := d.Availability()
 	if !avail.Available {
 		return 0, 0, 0, false, fmt.Errorf("DJ detection unavailable: %s", avail.Reason)
 	}
 
-	cacheKey, err := d.cacheKey(songPath, confidenceThreshold, checkSeconds)
+	cacheKey, err := d.cacheKey(cachePath, confidenceThreshold, checkSeconds)
 	if err != nil {
 		return 0, 0, 0, false, fmt.Errorf("failed to compute cache key: %w", err)
 	}
@@ -94,27 +101,28 @@ func (d *DJChecker) Detect(ctx context.Context, songPath string, confidenceThres
 
 	args := []string{
 		d.scriptPath,
-		songPath,
+		audioPath,
 		d.modelPath,
 		fmt.Sprintf("%.4f", confidenceThreshold),
 		fmt.Sprintf("%d", checkSeconds),
 	}
 	cmd := exec.CommandContext(ctx, d.pythonPath, args...)
 	out, err := cmd.CombinedOutput()
+
+	var result DetectionResult
+	if parseErr := json.Unmarshal(out, &result); parseErr == nil && result.Err == "" {
+		result.Artist = artist
+		result.Title = title
+		result.SongPath = cachePath
+		if err := d.saveCache(cacheKey, &result); err != nil {
+		}
+		return result.SpeechStart, result.SpeechEnd, result.Confidence, result.HasSpeech, nil
+	}
+
 	if err != nil {
 		return 0, 0, 0, false, fmt.Errorf("python detection failed: %w, output: %s", err, string(out))
 	}
-
-	var result DetectionResult
-	if err := json.Unmarshal(out, &result); err != nil {
-		return 0, 0, 0, false, fmt.Errorf("failed to parse detection result: %w, raw: %s", err, string(out))
-	}
-
-	if err := d.saveCache(cacheKey, &result); err != nil {
-		// non-critical: cache write failed, but we can still use the result
-	}
-
-	return result.SpeechStart, result.SpeechEnd, result.Confidence, result.HasSpeech, nil
+	return 0, 0, 0, false, fmt.Errorf("failed to parse detection result, raw: %s", string(out))
 }
 
 func (d *DJChecker) cacheKey(path string, confidenceThreshold float64, checkSeconds int) (string, error) {

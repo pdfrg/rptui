@@ -392,7 +392,10 @@ type Model struct {
 	jukeboxPlayed    int                // number of songs played so far (current song included)
 	jukeboxTotal     int                // total songs in this jukebox session
 	jukeboxBatchSize int                // how many songs to queue at once
-	crossfading      bool               // whether currently doing a crossfade volume ramp
+	crossfading bool // whether currently doing a crossfade volume ramp
+
+	// DJ speech skip (deferred until playback reaches speech boundary)
+	pendingDJSkip *djSkipInfo
 
 	// Offline mode
 	offlineMode                 bool   // whether offline mode is active
@@ -881,6 +884,9 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 
 // Init initializes the TUI model
 func (m Model) Init() tea.Cmd {
+	cacheDir := filepath.Join(xdg.CacheHome, "rptui")
+	smad.CleanupStaleTempFiles(smad.TmpDir(cacheDir), 1*time.Hour)
+
 	cmds := []tea.Cmd{
 		tickProgressCmd(),
 		tickPollCmd(),
@@ -1296,17 +1302,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return handle(m.handlePollTick(msg))
 
 	case djDetectionDoneMsg:
-		if msg.hasSpeech && m.currentSong != nil && msg.eventID == m.currentSong.EventID && m.mpvBackend != nil {
-			pos, err := m.mpvBackend.GetPlaybackPosition()
-			if err == nil && pos.TimePos < msg.skipEnd {
-				_ = m.mpvBackend.SeekAbsolute(msg.skipEnd)
-				if pos.TimePos <= msg.skipStart {
-					logger.Printf("DJ speech detected (%.1fs), skipping to %.1fs (confidence: %.2f)", msg.skipEnd-msg.skipStart, msg.skipEnd, msg.confidence)
-				} else {
-					logger.Printf("Currently in DJ speech, skipping to %.1fs", msg.skipEnd)
-				}
-			}
+		if msg.tempFile != "" {
+			os.Remove(msg.tempFile)
 		}
+	if msg.hasSpeech && m.currentSong != nil && msg.eventID == m.currentSong.EventID && m.mpvBackend != nil {
+		songDur := m.currentSong.GetDurationSeconds()
+		nearEnd := songDur > 0 && songDur-msg.skipEnd <= maxSpeechDistanceFromEdge
+		nearStart := msg.skipStart <= maxSpeechDistanceFromEdge
+		if !nearEnd && !nearStart {
+			logger.Printf("DJ speech: rejected (starts %.1fs from song start, ends %.1fs from song end, max %.1fs)", msg.skipStart, songDur-msg.skipEnd, maxSpeechDistanceFromEdge)
+		} else if pos, err := m.mpvBackend.GetPlaybackPosition(); err == nil && pos.TimePos >= msg.skipStart && pos.TimePos < msg.skipEnd {
+			_ = m.mpvBackend.SeekAbsolute(msg.skipEnd)
+			logger.Printf("DJ speech: already at speech, skipping to %.1fs", msg.skipEnd)
+		} else if err == nil && pos.TimePos < msg.skipStart {
+			m.pendingDJSkip = &djSkipInfo{
+				skipStart:  msg.skipStart,
+				skipEnd:    msg.skipEnd,
+				confidence: msg.confidence,
+				eventID:    msg.eventID,
+			}
+			logger.Printf("DJ speech detected (%.1fs at %.1fs), deferring skip (confidence: %.2f)", msg.skipEnd-msg.skipStart, msg.skipStart, msg.confidence)
+		}
+	}
 
 	case sleepTimerTickMsg:
 		return handle(m.handleSleepTimerTick(msg))
@@ -3159,6 +3176,43 @@ func (m Model) handleProgressTick(msg progressTickMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// DJ speech skip: fade out and seek when playback approaches speech boundary
+	if m.pendingDJSkip != nil && err == nil {
+		if m.currentSong != nil && m.currentSong.EventID == m.pendingDJSkip.eventID {
+			skip := m.pendingDJSkip
+			if m.playbackPos.TimePos >= skip.skipStart {
+				// Reached speech boundary — seek past it and fade back in
+				_ = m.mpvBackend.SeekAbsolute(skip.skipEnd)
+				logger.Printf("DJ speech: skipping to %.1fs (confidence: %.2f)", skip.skipEnd, skip.confidence)
+				m.pendingDJSkip = nil
+				go m.fadeVolumeIn(100.0, djSkipFadeDuration)
+				cmds = append(cmds, setStatus(&m, "", false))
+			} else if m.playbackPos.TimePos >= skip.skipStart-djSkipFadeDuration {
+				// Approaching speech — start fade-out
+				if !skip.fading {
+					skip.fading = true
+					logger.Printf("DJ speech: fade-out starting, speech at %.1fs", skip.skipStart)
+					cmds = append(cmds, setStatus(&m, "Skipping speech...", false))
+				}
+				timeUntilSpeech := skip.skipStart - m.playbackPos.TimePos
+				vol := (timeUntilSpeech / djSkipFadeDuration) * 100.0
+				if vol < 5 {
+					vol = 5
+				}
+				m.mpvBackend.SetVolume(vol)
+			} else if skip.fading {
+				// User seeked backward past fade start — restore volume
+				skip.fading = false
+				m.mpvBackend.SetVolume(100.0)
+				cmds = append(cmds, setStatus(&m, "", false))
+			}
+		} else {
+			// Song changed while skip was pending — restore volume and clear
+			m.mpvBackend.SetVolume(100.0)
+			m.pendingDJSkip = nil
+		}
+	}
+
 	// Start polling when on last song with ≤2 min remaining (skip in jukebox and offline mode)
 	if !m.jukeboxMode && !m.offlineMode && !m.pollingNextBlock && m.currentSongIndex >= len(m.songs)-1 && m.currentSong != nil && err == nil {
 		songDuration := float64(m.currentSong.Duration) / 1000.0
@@ -3974,20 +4028,44 @@ func (m *Model) updateBottomView() {
 
 // startDJDetection starts background DJ speech detection for a song.
 // Returns a cmd that runs the detection and updates song state when done.
+// For HTTP URLs (streaming songs), the 64k AAC version is downloaded to a
+// temp file first since librosa cannot read HTTP URLs. The temp file is
+// cleaned up after the detection result is processed.
 func (m *Model) startDJDetection(song *models.Song) tea.Cmd {
 	return func() tea.Msg {
 		if !m.config.SkipDJSegments {
 			return djDetectionDoneMsg{eventID: song.EventID}
 		}
 
-		audioPath := song.GaplessURL
-		if audioPath == "" {
+		originalURL := song.GaplessURL
+		if originalURL == "" {
 			return djDetectionDoneMsg{eventID: song.EventID}
 		}
 
-		cacheDir := filepath.Join(xdg.CacheHome, "rptui")
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
+		var tempFile string
+		audioPath := originalURL
+	cacheDir := filepath.Join(xdg.CacheHome, "rptui")
+
+	if strings.HasPrefix(originalURL, "http://") || strings.HasPrefix(originalURL, "https://") {
+			detectURL, err := smad.DetectionURL(originalURL)
+			if err != nil {
+				logger.Printf("DJ detection: failed to derive 64k URL: %v", err)
+				return djDetectionDoneMsg{eventID: song.EventID}
+			}
+
+			dlCtx, dlCancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer dlCancel()
+
+			tempFile, err = smad.DownloadAudioFile(dlCtx, detectURL, smad.TmpDir(cacheDir))
+			if err != nil {
+				logger.Printf("DJ detection: failed to download %s: %v", detectURL, err)
+				return djDetectionDoneMsg{eventID: song.EventID}
+			}
+			audioPath = tempFile
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
 
 		checker := smad.NewDJChecker(
 			smad.PythonPath(cacheDir),
@@ -3997,11 +4075,14 @@ func (m *Model) startDJDetection(song *models.Song) tea.Cmd {
 		)
 
 		speechStart, speechEnd, confidence, hasSpeech, err := checker.Detect(
-			ctx, audioPath, m.config.DJConfidence, m.config.DJCheckSeconds,
+			ctx, originalURL, audioPath, m.config.DJConfidence, m.config.DJCheckSeconds, song.Artist, song.Title,
 		)
 
 		if err != nil {
 			logger.Printf("DJ detection failed: %v", err)
+			if tempFile != "" {
+				os.Remove(tempFile)
+			}
 			return djDetectionDoneMsg{eventID: song.EventID}
 		}
 
@@ -4022,9 +4103,13 @@ func (m *Model) startDJDetection(song *models.Song) tea.Cmd {
 				skipStart:  skipStart,
 				skipEnd:    skipEnd,
 				confidence: confidence,
+				tempFile:   tempFile,
 			}
 		}
 
+	if tempFile != "" {
+		os.Remove(tempFile)
+	}
 	return djDetectionDoneMsg{eventID: song.EventID}
 	}
 }
@@ -4036,7 +4121,27 @@ type djDetectionDoneMsg struct {
 	skipStart  float64
 	skipEnd    float64
 	confidence float64
+	tempFile   string
 }
+
+// djSkipInfo holds a pending DJ speech skip, deferred until playback reaches
+// the speech boundary. A 1.5s volume fade-out starts just before the speech.
+type djSkipInfo struct {
+	skipStart  float64
+	skipEnd    float64
+	confidence float64
+	eventID    int64
+	fading     bool // true once fade-out has started
+}
+
+const djSkipFadeDuration = 1.5 // seconds of volume fade-out before DJ speech skip
+
+// maxSpeechDistanceFromEdge is the maximum distance (in seconds) from the song's
+// start or end at which detected speech is considered plausible DJ speech. RP
+// DJs talk at the very beginning or end of a track — speech starting/ending
+// more than this far from a song boundary is almost certainly a false positive
+// (e.g., sung vocals).
+const maxSpeechDistanceFromEdge = 5.0
 
 // songChangedCmds is the centralized handler for all song transitions
 // (initial load, manual skip/prev, natural transition).
@@ -4080,6 +4185,7 @@ func (m *Model) songChangedCmds() tea.Cmd {
 	m.pendingArtistArtLoaded = false
 	m.pendingArtistArtWidth = 0
 	m.pendingArtistArtHeight = 0
+	m.pendingDJSkip = nil
 
 	// Clear Lidarr state for new song
 	m.lidarrArtistStatus = nil

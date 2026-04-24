@@ -42,12 +42,12 @@ While Radio Paradise offers the absolute best internet radio stations, human-cur
 - **Offline Mode**: Cache any station for any duration.  Playback anytime, even while offline.  Album art included.
 - **Network Status Handling**: Smart prompts offer to change modes when network change detected, so that music keeps playing. 
 - **Desktop Integration**: MPRIS metadata, media key support, desktop notifications with optional album art, save album art to file for desktop widget use.
-- **Lidarr Integration**: See artist monitoring status in the artist view and footer. Press `L` to open the artist in Lidarr — if already in your library, opens their artist page; if not, opens "Add New Artist" for your confirmation (nothing is added automatically).
+- **Lidarr Integration**: Love something you heard on RP? Easily add to your own library with Lidarr! Just press `L` to open the artist in Lidarr. If already in your library, opens their artist page. If not, opens "Add New Artist" for your confirmation (nothing is added automatically).
 - **Four Smart Layouts**: `large` (default, full dashboard with multiple bottom views available), `medium`, `compact`, and `narrow` (perfect vertical sidebar).
 - **Terminal Size Detection**: Warns if current terminal is too small for layout chosen, gives recommended size and alternate layouts(s) which fit in current terminal, allows to force fit if desired. User is always in control.
 - **Keyboard Navigation**: Hotkeys and RP stations shown in footer. Change stations with a single keypress.
 - **Sleep Timer / Alarm**: Fall asleep or wake up to the sounds of RP.
-- **DJ Speech Skipping**: Automatically detect and skip DJ interludes at the start/end of songs using a TVSM neural network. Configurable confidence threshold and boundary check. One-time setup downloads the model (~2.5GB Python dependencies).
+- **DJ Speech Skipping**: Automatically detect and skip DJ interludes at the start/end of songs using a TVSM neural network. Configurable confidence threshold and boundary check. Optional one-time setup downloads the model.
 
 ## RP Account Support
 - **Ratings**: Displays all your user ratings.  Submit ratings (1-10), just as in the official clients.

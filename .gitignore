@@ -22,6 +22,7 @@ discogs.txt
 AGENTS.md
 grok-readme.md
 session-*.md
+.kilo/
 
 # Planning documents
 docs/
@@ -31,3 +32,6 @@ releases/
 
 # Current release builds (multiplatform)
 dist/
+
+# Caches
+*__pycache__*
