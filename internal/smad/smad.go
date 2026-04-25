@@ -17,14 +17,15 @@ import (
 
 // DetectionResult mirrors the Python script's JSON output with optional song metadata.
 type DetectionResult struct {
-	HasSpeech   bool    `toml:"has_speech" json:"has_speech"`
-	SpeechStart float64 `toml:"speech_start" json:"speech_start"`
-	SpeechEnd   float64 `toml:"speech_end" json:"speech_end"`
-	Confidence  float64 `toml:"confidence" json:"confidence"`
-	Artist      string  `toml:"artist,omitempty" json:"-"`
-	Title       string  `toml:"title,omitempty" json:"-"`
-	SongPath    string  `toml:"song_path,omitempty" json:"-"`
-	Err         string  `toml:"error,omitempty" json:"error,omitempty"`
+	HasSpeech    bool    `toml:"has_speech" json:"has_speech"`
+	SpeechStart  float64 `toml:"speech_start" json:"speech_start"`
+	SpeechEnd    float64 `toml:"speech_end" json:"speech_end"`
+	Confidence   float64 `toml:"confidence" json:"confidence"`
+	SongDuration float64 `toml:"song_duration,omitempty" json:"song_duration,omitempty"`
+	Artist       string  `toml:"artist,omitempty" json:"-"`
+	Title        string  `toml:"title,omitempty" json:"-"`
+	SongPath     string  `toml:"song_path,omitempty" json:"-"`
+	Err          string  `toml:"error,omitempty" json:"error,omitempty"`
 }
 
 type Availability struct {
