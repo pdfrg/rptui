@@ -2020,10 +2020,10 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.currentSong == nil {
 			return m, setStatus(&m, "No song playing", true)
 		}
-		var lidarrURL string
-		if m.artistInfo != nil && m.artistInfo.LidarrInLidarr && m.artistInfo.LidarrArtistID > 0 {
-			lidarrURL = m.lidarrClient.OpenArtistURL(m.artistInfo.LidarrArtistID)
-		} else if m.artistInfo != nil && m.artistInfo.LidarrMBID != "" {
+	var lidarrURL string
+	if m.artistInfo != nil && m.artistInfo.LidarrInLidarr && m.artistInfo.LidarrMBID != "" {
+		lidarrURL = m.lidarrClient.OpenArtistURL(m.artistInfo.LidarrMBID)
+	} else if m.artistInfo != nil && m.artistInfo.LidarrMBID != "" {
 			lidarrURL = m.lidarrClient.OpenSearchByMBID(m.artistInfo.LidarrMBID)
 		} else {
 			lidarrURL = m.lidarrClient.OpenSearchURL(m.currentSong.Artist)

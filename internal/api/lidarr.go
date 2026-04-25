@@ -164,9 +164,11 @@ func (lc *LidarrClient) GetArtistAlbums(ctx context.Context, artistID int, mbAlb
 	return result, nil
 }
 
-// OpenArtistURL returns the URL to open an artist page in Lidarr's web UI
-func (lc *LidarrClient) OpenArtistURL(artistID int) string {
-	return fmt.Sprintf("%s/artist/%d", lc.baseURL, artistID)
+// OpenArtistURL returns the URL to open an artist page in Lidarr's web UI.
+// Lidarr v3+ uses the MusicBrainz ID (foreignArtistId) in web UI routes,
+// not the internal numeric database ID.
+func (lc *LidarrClient) OpenArtistURL(mbid string) string {
+	return fmt.Sprintf("%s/artist/%s", lc.baseURL, url.PathEscape(mbid))
 }
 
 // OpenSearchURL returns the URL to open Lidarr's add/search page
