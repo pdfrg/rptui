@@ -237,6 +237,7 @@ def detect_speech(
             "speech_start": 0.0,
             "speech_end": 0.0,
             "confidence": 0.0,
+            "song_duration": round(audio_duration, 3),
         }
 
     # Process each boundary chunk independently and collect speech frames
@@ -296,6 +297,7 @@ def detect_speech(
             "speech_start": 0.0,
             "speech_end": 0.0,
             "confidence": 0.0,
+            "song_duration": round(audio_duration, 3),
         }
 
     # Bridge adjacent speech regions within the end zone
@@ -307,12 +309,13 @@ def detect_speech(
     ]
 
     if not speech_regions:
-        return {
-            "has_speech": False,
-            "speech_start": 0.0,
-            "speech_end": 0.0,
-            "confidence": 0.0,
-        }
+    return {
+        "has_speech": False,
+        "speech_start": 0.0,
+        "speech_end": 0.0,
+        "confidence": 0.0,
+        "song_duration": round(audio_duration, 3),
+    }
 
     largest = max(speech_regions, key=lambda x: x[1] - x[0])
 
@@ -321,6 +324,7 @@ def detect_speech(
         "speech_start": largest[0],
         "speech_end": largest[1],
         "confidence": largest[2],
+        "song_duration": round(audio_duration, 3),
     }
 
 

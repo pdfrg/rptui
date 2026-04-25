@@ -243,15 +243,16 @@ def detect_speech(
     else:
         chunks_to_process = list(range(n_chunk))
 
-    if not chunks_to_process:
-        return {
-            "has_speech": False,
-            "speech_start": 0.0,
-            "speech_end": 0.0,
-            "confidence": 0.0,
-        }
+	if not chunks_to_process:
+		return {
+			"has_speech": False,
+			"speech_start": 0.0,
+			"speech_end": 0.0,
+			"confidence": 0.0,
+			"song_duration": round(audio_duration, 3),
+		}
 
-    # Process each boundary chunk independently and collect speech frames
+	# Process each boundary chunk independently and collect speech frames
     frame_time = 1 / ((sr / hop_size) / 6)
     all_speech_frames = []
 
@@ -302,15 +303,16 @@ def detect_speech(
         t_end = min(all_speech_frames[-1][0] + frame_time, audio_duration)
         raw_regions.append((start, t_end, avg_conf, len(region_probs)))
 
-    if not raw_regions:
-        return {
-            "has_speech": False,
-            "speech_start": 0.0,
-            "speech_end": 0.0,
-            "confidence": 0.0,
-        }
+	if not raw_regions:
+		return {
+			"has_speech": False,
+			"speech_start": 0.0,
+			"speech_end": 0.0,
+			"confidence": 0.0,
+			"song_duration": round(audio_duration, 3),
+		}
 
-    # Bridge adjacent speech regions within the end zone
+	# Bridge adjacent speech regions within the end zone
     bridged = bridge_regions(raw_regions, max_speech_gap)
 
     # Filter bridged regions by minimum duration
@@ -318,22 +320,24 @@ def detect_speech(
         (r[0], r[1], r[2]) for r in bridged if r[1] - r[0] >= min_speech_duration
     ]
 
-    if not speech_regions:
-        return {
-            "has_speech": False,
-            "speech_start": 0.0,
-            "speech_end": 0.0,
-            "confidence": 0.0,
-        }
+	if not speech_regions:
+		return {
+			"has_speech": False,
+			"speech_start": 0.0,
+			"speech_end": 0.0,
+			"confidence": 0.0,
+			"song_duration": round(audio_duration, 3),
+		}
 
-    largest = max(speech_regions, key=lambda x: x[1] - x[0])
+	largest = max(speech_regions, key=lambda x: x[1] - x[0])
 
-    return {
-        "has_speech": True,
-        "speech_start": largest[0],
-        "speech_end": largest[1],
-        "confidence": largest[2],
-    }
+	return {
+		"has_speech": True,
+		"speech_start": largest[0],
+		"speech_end": largest[1],
+		"confidence": largest[2],
+		"song_duration": round(audio_duration, 3),
+	}
 
 
 if __name__ == "__main__":

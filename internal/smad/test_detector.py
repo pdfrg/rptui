@@ -76,10 +76,13 @@ def process_file(filepath, model_path, confidence, check_seconds, min_duration):
 
     if result["has_speech"]:
         seg_len = result["speech_end"] - result["speech_start"]
+        near_end = result["song_duration"] - result["speech_end"]
         print(
             f"Speech detected: {fmt_time(result['speech_start'])} - "
             f"{fmt_time(result['speech_end'])} ({seg_len:.1f}s, "
-            f"confidence {result['confidence']:.2f})"
+            f"confidence {result['confidence']:.2f}, "
+            f"song_duration {result['song_duration']:.1f}s, "
+            f"speech ends {near_end:.1f}s from end)"
         )
     else:
         print("No speech detected")
