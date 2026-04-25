@@ -51,7 +51,10 @@ func (mb *MusicBrainzClient) GetDiscography(ctx context.Context, artistName stri
 	// Step 2: Fetch release groups — official studio albums only
 	// primarytype:Album matches the MB website "Album" filter
 	// NOT secondarytype:* excludes anything with a secondary type (compilation, live, remix, etc.)
-	mbQuery := fmt.Sprintf("arid:%s AND primarytype:Album NOT secondarytype:*", mbID)
+	// AND status:official excludes bootlegs — bootleg is a release-level status, not a secondary type,
+	// so bootleg release groups (e.g. "Ellie" by The White Stripes) pass the primarytype/secondarytype
+	// filters but have status=Bootleg on their releases.
+	mbQuery := fmt.Sprintf("arid:%s AND primarytype:Album NOT secondarytype:* AND status:official", mbID)
 	reqURL := fmt.Sprintf("https://musicbrainz.org/ws/2/release-group/?query=%s&fmt=json&limit=100",
 		strings.ReplaceAll(mbQuery, " ", "%20"))
 
