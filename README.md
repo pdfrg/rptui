@@ -70,6 +70,7 @@ See [SCREENSHOTS.md](SCREENSHOTS.md) for the full gallery, including all built-i
 
 - **mpv** — Required for audio playback
 - **Go 1.22+** — To build from source
+- **Any NerdFont** — For proper display of symbols
 
 ### Recommended Dependencies (Linux)
 
