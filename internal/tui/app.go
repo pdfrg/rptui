@@ -3609,6 +3609,7 @@ func (m Model) handleCommentsFetched(msg commentsFetchedMsg) (tea.Model, tea.Cmd
 		m.commentsTotal = msg.total
 		m.commentsPage = 0
 		m.commentsSongID = msg.songID
+		m.viewport.GotoTop()
 		if len(msg.comments) == 0 {
 			m.commentsStatus = "No comments for this song"
 		}
