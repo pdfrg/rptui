@@ -309,13 +309,13 @@ def detect_speech(
     ]
 
     if not speech_regions:
-    return {
-        "has_speech": False,
-        "speech_start": 0.0,
-        "speech_end": 0.0,
-        "confidence": 0.0,
-        "song_duration": round(audio_duration, 3),
-    }
+        return {
+            "has_speech": False,
+            "speech_start": 0.0,
+            "speech_end": 0.0,
+            "confidence": 0.0,
+            "song_duration": round(audio_duration, 3),
+        }
 
     largest = max(speech_regions, key=lambda x: x[1] - x[0])
 
