@@ -237,7 +237,7 @@ func (n NowPlaying) View(
 			rating = fmt.Sprintf("%.1f", avg)
 		}
 	}
-	if isFavorite {
+	if isFavorite && userRating == "" {
 		rating = "★ " + rating
 	}
 
