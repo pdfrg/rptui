@@ -3618,10 +3618,15 @@ func (m Model) handleCommentsFetched(msg commentsFetchedMsg) (tea.Model, tea.Cmd
 	return m, nil
 }
 
+const MaxPlaylistSize = 16
+
 // prunePlaylist removes old songs from previous blocks, keeping up to 3 before
 // the currently playing song for prev-song functionality.
 // Only prunes songs that belong to an older block than the current song.
 // For channel 99 (no real blocks), prunes by position only.
+// As a fallback, if the playlist exceeds MaxPlaylistSize, prunes already-played
+// songs from the front regardless of block membership (e.g. long block + many
+// enqueued favorites).
 func (m *Model) prunePlaylist() {
 	if m.currentSongIndex < 0 || m.currentSongIndex >= len(m.songs) {
 		return
@@ -3643,31 +3648,46 @@ func (m *Model) prunePlaylist() {
 
 	currentBlockID := m.songs[m.currentSongIndex].BlockID
 
-	// Find how many old-block songs precede the current song
+	// Block-based pruning: remove songs from older blocks that are more
+	// than 3 positions before the current song.
 	keepStart := m.currentSongIndex - 3
-	if keepStart <= 0 {
-		return
-	}
-
-	// Only prune if the song at keepStart-1 is from an older block
-	// Walk forward from 0 to find the prune boundary: stop at the first
-	// song that is either from the current block or within 3 of current
-	pruneEnd := 0
-	for i := 0; i < keepStart; i++ {
-		if m.songs[i].BlockID >= currentBlockID {
-			break
+	if keepStart > 0 {
+		pruneEnd := 0
+		for i := 0; i < keepStart; i++ {
+			if m.songs[i].BlockID >= currentBlockID {
+				break
+			}
+			pruneEnd = i + 1
 		}
-		pruneEnd = i + 1
+		if pruneEnd > 0 {
+			m.songs = m.songs[pruneEnd:]
+			m.currentSongIndex -= pruneEnd
+			m.playlistStartIdx -= pruneEnd
+			logger.Printf("Pruned %d old-block songs, currentIdx=%d, playlistStartIdx=%d", pruneEnd, m.currentSongIndex, m.playlistStartIdx)
+		}
 	}
 
-	if pruneEnd <= 0 {
-		return
+	// Overflow pruning: if playlist still exceeds MaxPlaylistSize after
+	// block-based pruning, prune already-played songs from the front
+	// regardless of block membership. This handles the edge case where a
+	// long block plus many enqueued favorites keeps the playlist growing
+	// because no old-block songs were available to prune.
+	if len(m.songs) > MaxPlaylistSize {
+		keepStart := m.currentSongIndex - 3
+		if keepStart < 0 {
+			keepStart = 0
+		}
+		pruneCount := len(m.songs) - MaxPlaylistSize
+		if pruneCount > keepStart {
+			pruneCount = keepStart
+		}
+		if pruneCount > 0 {
+			m.songs = m.songs[pruneCount:]
+			m.currentSongIndex -= pruneCount
+			m.playlistStartIdx -= pruneCount
+			logger.Printf("Overflow pruned %d songs (playlist was %d, currentIdx=%d)", pruneCount, len(m.songs)+pruneCount, m.currentSongIndex)
+		}
 	}
-
-	m.songs = m.songs[pruneEnd:]
-	m.currentSongIndex -= pruneEnd
-	m.playlistStartIdx -= pruneEnd
-	logger.Printf("Pruned %d old-block songs, currentIdx=%d, playlistStartIdx=%d", pruneEnd, m.currentSongIndex, m.playlistStartIdx)
 }
 
 // updatePlaylist updates the playlist table
