@@ -74,7 +74,11 @@ CONFIGURATION:
 
 ## Configuration File
 
-The config file is located at `~/.config/rptui/config.toml`. It is created automatically on first run with default values.
+On Linux, the config file generally is located at `~/.config/rptui/config.toml`. It is created automatically on first run with default values.
+
+**To force-update your config file format to the latest version,**
+**or to fix formatting problems caused by accidental or erroneous edits,**
+**simply change stations from within the app to force an overwrite.**
 
 ### General Settings
 
