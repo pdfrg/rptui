@@ -3186,6 +3186,26 @@ func (m Model) handleProgressTick(msg progressTickMsg) (tea.Model, tea.Cmd) {
 				m.pendingDJSkip = nil
 				go m.fadeVolumeIn(100.0, djSkipFadeDuration)
 				cmds = append(cmds, setStatus(&m, "", false))
+
+				// Re-fetch playback position so downstream checks (polling
+				// trigger, favorite queue) see the post-seek position within
+				// this same tick instead of the stale pre-seek value.
+				if newPos, newErr := m.mpvBackend.GetPlaybackPosition(); newErr == nil {
+					m.playbackPos = newPos
+				}
+
+				// DJ skip lands <1s from song end — too short for the normal
+				// 10s-remaining check to fire.  If this is the last song and
+				// we're still waiting for a new block from the API, proactively
+				// queue a favorite so MPV has something to transition to.
+				if m.currentSongIndex >= len(m.songs)-1 && m.pollingNextBlock && !m.offlineMode {
+					favCount, _ := m.cacheManager.GetFavoriteCount()
+					if favCount >= m.config.MinFavorites && time.Since(m.lastFavoriteQueuedAt) >= 30*time.Second {
+						if cmd := m.queueNextFavorite(); cmd != nil {
+							cmds = append(cmds, cmd)
+						}
+					}
+				}
 			} else if m.playbackPos.TimePos >= skip.skipStart-djSkipFadeDuration {
 				// Approaching speech — start fade-out
 				if !skip.fading {
@@ -4374,8 +4394,10 @@ func (m *Model) checkAndQueueFavorite() tea.Cmd {
 	if favCount < m.config.MinFavorites {
 		return nil
 	}
-	if !m.mpvBackend.IsRunning() {
-		return nil
+	if !m.mpvBackend.IsRunning() && !m.mpvBackend.IsPaused() {
+		if !(m.pollingNextBlock && m.currentSongIndex >= len(m.songs)-1) {
+			return nil
+		}
 	}
 	if time.Since(m.lastFavoriteQueuedAt) < 30*time.Second {
 		return nil
