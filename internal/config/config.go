@@ -83,7 +83,7 @@ type Config struct {
 	// DJ segment skipping (SMAD detection)
 	SkipDJSegments      bool    `toml:"skip_dj_segments" comment:"enable automatic skipping of DJ speech at end of songs"`
 	DJCheckSeconds      int     `toml:"dj_check_seconds" comment:"seconds from end of song to check for DJ speech (default: 80)"`
-	DJConfidence        float64 `toml:"dj_confidence" comment:"minimum confidence for speech detection (0.0-1.0, default: 0.85)"`
+	DJConfidence float64 `toml:"dj_confidence" comment:"minimum confidence for speech detection (0.0-1.0, default: 0.88)"`
 	DJSafetyBuffer      float64 `toml:"dj_safety_buffer" comment:"extra seconds to add after detected speech for safe skipping (default: 0.5)"`
 	DJMinSpeechDuration float64 `toml:"dj_min_speech_duration" comment:"minimum speech segment duration in seconds to count as DJ talk (default: 15.0)"`
 
@@ -170,7 +170,7 @@ func DefaultConfig() *Config {
 		AutoBlocklistRPThreshold: 3,
 		SkipDJSegments:      false,
 		DJCheckSeconds:      80,
-		DJConfidence:        0.85,
+	DJConfidence: 0.88,
 		DJSafetyBuffer:      0.5,
 		DJMinSpeechDuration: 15.0,
 		Jukebox: JukeboxConfig{

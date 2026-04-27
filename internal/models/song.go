@@ -3,6 +3,7 @@ package models
 
 import (
 	"fmt"
+	"regexp"
 )
 
 // Song represents a song with all its metadata
@@ -100,6 +101,18 @@ func getInt64(data map[string]any, key string, defaultVal int64) int64 {
 		}
 	}
 	return defaultVal
+}
+
+var blockIDRe = regexp.MustCompile(`/(\d+)/\d+/g/\d+-\d+\.`)
+
+func ParseBlockID(gaplessURL string) int64 {
+	m := blockIDRe.FindStringSubmatch(gaplessURL)
+	if len(m) < 2 {
+		return 0
+	}
+	var id int64
+	fmt.Sscanf(m[1], "%d", &id)
+	return id
 }
 
 // GetDurationSeconds returns the duration in seconds
