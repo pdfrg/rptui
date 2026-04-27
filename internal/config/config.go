@@ -81,7 +81,7 @@ type Config struct {
 	AutoBlocklistRPThreshold int  `toml:"auto_blocklist_rp_threshold" comment:"rating threshold for auto-blocklist (1-4, default: 3)\nsongs with your RP rating <= this value are automatically blocked"`
 
 	// DJ segment skipping (SMAD detection)
-	SkipDJSegments      bool    `toml:"skip_dj_segments" comment:"enable automatic skipping of DJ speech at end of songs"`
+	SkipDJSegments bool   `toml:"skip_dj_segments" comment:"enable automatic skipping of DJ speech at end of songs\nif enabled without enough favorites (min_favorites), may cause brief gaps in playback at block boundaries"`
 	DJCheckSeconds      int     `toml:"dj_check_seconds" comment:"seconds from end of song to check for DJ speech (default: 80)"`
 	DJConfidence float64 `toml:"dj_confidence" comment:"minimum confidence for speech detection (0.0-1.0, default: 0.88)"`
 	DJSafetyBuffer      float64 `toml:"dj_safety_buffer" comment:"extra seconds to add after detected speech for safe skipping (default: 0.5)"`
