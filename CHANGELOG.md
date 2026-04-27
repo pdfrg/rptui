@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.2.0] - 2025-04-27
+
+### Added
+
+- **DJ speech detection and skipping**: Automatic detection of DJ talk at song ends using the TVSM neural network model, with configurable confidence threshold, check zone, and minimum speech duration; auto-skip or manual review modes
+- **Lidarr integration**: Artist/album monitoring status display with direct link to Lidarr artist pages using MusicBrainz IDs
+- **CI/CD**: GitHub Actions workflows for testing and GoReleaser-based releases (draft mode)
+- **Overflow pruning**: Automatic playlist pruning when queue exceeds 16 songs
+- **Song duration in DJ cache**: Detection cache entries now include song duration for easier manual inspection
+- **Block-position pre-filter**: Improved DJ detection with block-position pre-filtering and threshold tuning
+
+### Fixed
+
+- **DJ skip bypass**: Prevented DJ skip from bypassing the favorite queue on the last song
+- **Viewport scroll**: Reset viewport scroll when comments are fetched for a new song while not in comments view
+- **Favorite star prefix**: Skip favorite star prefix when authenticated to prevent truncation of user rating
+- **Duplicate favorites**: Use SongID/Artist-Album-Title for identity instead of EventID to prevent duplicate favorites
+- **DJ detection boundary enforcement**: Fixed boundary enforcement, duplicate handler, and resilience in speech detection
+- **DJ detection model architecture**: Rewrote DJ speech detection with correct model architecture (F2M, PCENTransform, CRNN)
+- **Gap bridging**: Added gap bridging to DJ speech detector for fragmented speech regions
+- **Lidarr artist URL**: Use MusicBrainz ID instead of numeric ID, filter bootlegs from discography
+- **Cross-platform browser opening**: Replaced hardcoded `xdg-open` with cross-platform `OpenBrowser()` (Linux, macOS, Windows)
+
+### Changed
+
+- **DJ detection refactor**: Removed beginning-zone scan, extended end-zone to 80s, added min_speech_duration config option, end-of-file validation
+- **Detector script embedding**: Replaced duplicated Python script constant with `//go:embed` for single source of truth
+- **CI Go version**: Updated from 1.22 to 1.26 to match go.mod
+
 ## [v1.1.0] - 2025-04-21
 
 ### Added

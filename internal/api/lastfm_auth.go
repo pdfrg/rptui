@@ -6,9 +6,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
-	"os/exec"
-	"runtime"
 	"time"
 )
 
@@ -33,7 +30,7 @@ func LastFMDoAuth() (string, error) {
 	authURL := fmt.Sprintf("https://www.last.fm/api/auth/?api_key=%s&token=%s", LastFMAPIKey, token)
 	fmt.Printf("Opening browser for authorization...\n")
 	fmt.Printf("If the browser doesn't open, visit this URL:\n  %s\n\n", authURL)
-	openBrowser(authURL)
+	OpenBrowser(authURL)
 
 	// Step 3: Poll for session key (user must authorize in browser first)
 	fmt.Println("Waiting for authorization (press Ctrl+C to cancel)...")
@@ -153,21 +150,4 @@ func lastFMPollSession(client *http.Client, token string) (string, error) {
 func signLastFMParams(params map[string]string) string {
 	client := &LastFMClient{sharedSecret: LastFMSharedSecret}
 	return client.sign(params)
-}
-
-// openBrowser opens a URL in the default browser.
-func openBrowser(url string) {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "linux":
-		cmd = exec.Command("xdg-open", url)
-	case "darwin":
-		cmd = exec.Command("open", url)
-	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
-	default:
-		return
-	}
-	cmd.Stderr = os.Stderr
-	cmd.Start() // Don't wait — fire and forget
 }

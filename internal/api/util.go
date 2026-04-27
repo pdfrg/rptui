@@ -1,7 +1,9 @@
 package api
 
 import (
+	"os/exec"
 	"regexp"
+	"runtime"
 	"strings"
 )
 
@@ -125,4 +127,20 @@ func AlbumNamesMatch(a, b string) bool {
 		return true
 	}
 	return false
+}
+
+// OpenBrowser opens a URL in the default browser (fire-and-forget).
+func OpenBrowser(url string) {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "linux":
+		cmd = exec.Command("xdg-open", url)
+	case "darwin":
+		cmd = exec.Command("open", url)
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	default:
+		return
+	}
+	cmd.Start()
 }

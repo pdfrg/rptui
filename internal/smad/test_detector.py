@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
-# NOTE: The detect_speech logic in this file must be kept in sync with:
-# - internal/smad/detector.py (canonical source)
-# - internal/smad/setup.go (detectorScript constant)
-# Any changes to detection logic MUST be reflected in all three.
+# NOTE: This file imports detector.py (canonical source) for testing.
+# detector.py is embedded into the Go binary via //go:embed in setup.go.
 """Test DJ speech detection on audio files.
 
 Usage:

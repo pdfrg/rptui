@@ -2,8 +2,10 @@ package models
 
 // LidarrAlbumInfo represents an album's status in Lidarr
 type LidarrAlbumInfo struct {
-	InLidarr  bool
-	Monitored bool
+	InLidarr        bool
+	Monitored       bool
+	HasFiles        bool
+	PercentOfTracks float64
 }
 
 // ArtistInfo represents aggregated artist information from various sources.
