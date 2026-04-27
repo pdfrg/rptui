@@ -231,15 +231,13 @@ func tickPollCmd() tea.Cmd {
 
 // openDonatePageCmd opens the Radio Paradise donate page in the default browser
 func openDonatePageCmd() tea.Msg {
-	cmd := exec.Command("xdg-open", "https://radioparadise.com/donate")
-	cmd.Start()
+	api.OpenBrowser("https://radioparadise.com/donate")
 	return nil
 }
 
 func openLidarrURLCmd(url string) tea.Cmd {
 	return func() tea.Msg {
-		cmd := exec.Command("xdg-open", url)
-		cmd.Start()
+		api.OpenBrowser(url)
 		return nil
 	}
 }

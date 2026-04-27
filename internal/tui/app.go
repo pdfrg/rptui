@@ -3545,7 +3545,7 @@ func (m Model) handleArtistFetched(msg artistFetchedMsg) (tea.Model, tea.Cmd) {
 		if len(msg.info.LidarrAlbums) > 0 {
 			m.lidarrAlbums = make(map[string]*api.LidarrAlbumStatus)
 			for title, info := range msg.info.LidarrAlbums {
-				m.lidarrAlbums[title] = &api.LidarrAlbumStatus{InLidarr: info.InLidarr, Monitored: info.Monitored}
+				m.lidarrAlbums[title] = &api.LidarrAlbumStatus{InLidarr: info.InLidarr, Monitored: info.Monitored, HasFiles: info.HasFiles, PercentOfTracks: info.PercentOfTracks}
 			}
 		}
 	}
@@ -3913,7 +3913,15 @@ func (m *Model) updateBottomView() {
 				} else {
 					lidarrLine = m.styles.MutedStyle.Render("⊝") + " not in Lidarr"
 				}
-				lines = append(lines, indent+"Lidarr: "+lidarrLine)
+				lines = append(lines, indent+"Lidarr artist: "+lidarrLine)
+		if len(m.artistInfo.LidarrAlbums) > 0 {
+			lines = append(lines, indent+m.styles.AccentStyle.Render("●")+" downloaded")
+			lines = append(lines, indent+m.styles.AccentStyle.Render("◐")+" partial")
+			lines = append(lines, indent+m.styles.ForegroundStyle.Render("○")+" wanted")
+			lines = append(lines, indent+m.styles.MutedStyle.Render("○")+" unmonitored")
+			lines = append(lines, indent+m.styles.MutedStyle.Render("⊝")+" not in Lidarr")
+			lines = append(lines, "")
+		}
 			}
 			lines = append(lines, indent+"Studio Albums:")
 			discoLines := strings.Split(m.artistInfo.Discography, "\n")
@@ -3923,16 +3931,20 @@ func (m *Model) updateBottomView() {
 				if idx := strings.LastIndex(line, " ("); idx > 0 {
 					albumTitle = line[:idx]
 				}
-				if m.lidarrClient.IsConfigured() && len(m.artistInfo.LidarrAlbums) > 0 {
-					if albumInfo, ok := m.artistInfo.LidarrAlbums[albumTitle]; ok {
-						var indicator string
-						if albumInfo.Monitored {
-							indicator = m.styles.AccentStyle.Render("● ")
-						} else if albumInfo.InLidarr {
-							indicator = m.styles.ForegroundStyle.Render("○ ")
-						} else {
-							indicator = m.styles.MutedStyle.Render("⊝ ")
-						}
+		if m.lidarrClient.IsConfigured() && len(m.artistInfo.LidarrAlbums) > 0 {
+				if albumInfo, ok := m.artistInfo.LidarrAlbums[albumTitle]; ok {
+					var indicator string
+					if albumInfo.PercentOfTracks == 100 {
+						indicator = m.styles.AccentStyle.Render("● ")
+					} else if albumInfo.PercentOfTracks > 0 {
+						indicator = m.styles.AccentStyle.Render("◐ ")
+					} else if albumInfo.Monitored {
+						indicator = m.styles.ForegroundStyle.Render("○ ")
+					} else if albumInfo.InLidarr {
+						indicator = m.styles.MutedStyle.Render("○ ")
+					} else {
+						indicator = m.styles.MutedStyle.Render("⊝ ")
+					}
 						lines = append(lines, indent+" "+indicator+line)
 					} else {
 						lines = append(lines, indent+"  "+line)
@@ -4777,10 +4789,12 @@ func (m Model) fetchArtistCmd() tea.Cmd {
 							} else if len(lidarrAlbums) > 0 {
 								info.LidarrAlbums = make(map[string]models.LidarrAlbumInfo)
 								for title, status := range lidarrAlbums {
-									info.LidarrAlbums[title] = models.LidarrAlbumInfo{
-										InLidarr:  status.InLidarr,
-										Monitored: status.Monitored,
-									}
+			info.LidarrAlbums[title] = models.LidarrAlbumInfo{
+				InLidarr:        status.InLidarr,
+				Monitored:       status.Monitored,
+				HasFiles:        status.HasFiles,
+				PercentOfTracks: status.PercentOfTracks,
+			}
 								}
 							}
 						}

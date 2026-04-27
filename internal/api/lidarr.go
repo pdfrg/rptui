@@ -30,8 +30,10 @@ type LidarrArtistStatus struct {
 
 // LidarrAlbumStatus represents an album's status in Lidarr
 type LidarrAlbumStatus struct {
-	InLidarr  bool // true if album exists in Lidarr
-	Monitored bool // true if album is monitored
+	InLidarr        bool    // true if album exists in Lidarr
+	Monitored       bool    // true if album is monitored
+	HasFiles        bool    // true if any track files exist on disk
+	PercentOfTracks float64 // percentage of tracks downloaded (0–100)
 }
 
 // NewLidarrClient creates a new Lidarr API client.
@@ -135,6 +137,11 @@ func (lc *LidarrClient) GetArtistAlbums(ctx context.Context, artistID int, mbAlb
 	var albums []struct {
 		Title      string `json:"title"`
 		Monitored  bool   `json:"monitored"`
+		Statistics struct {
+			TrackFileCount  int     `json:"trackFileCount"`
+			TrackCount      int     `json:"trackCount"`
+			PercentOfTracks float64 `json:"percentOfTracks"`
+		} `json:"statistics"`
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&albums); err != nil {
@@ -142,23 +149,32 @@ func (lc *LidarrClient) GetArtistAlbums(ctx context.Context, artistID int, mbAlb
 	}
 
 	// Build lookup map from Lidarr album titles (lowercase for comparison)
-	lidarrAlbums := make(map[string]bool)
-	lidarrMonitored := make(map[string]bool)
+	type albumInfo struct {
+		monitored       bool
+		hasFiles        bool
+		percentOfTracks float64
+	}
+	lidarrLookup := make(map[string]albumInfo)
 	for _, a := range albums {
 		key := strings.ToLower(strings.TrimSpace(a.Title))
-		lidarrAlbums[key] = true
-		lidarrMonitored[key] = a.Monitored
+		lidarrLookup[key] = albumInfo{
+			monitored:       a.Monitored,
+			hasFiles:        a.Statistics.TrackFileCount > 0,
+			percentOfTracks: a.Statistics.PercentOfTracks,
+		}
 	}
 
 	// Match against MB album titles
 	result := make(map[string]*LidarrAlbumStatus)
 	for _, title := range mbAlbumTitles {
 		key := strings.ToLower(strings.TrimSpace(title))
-		status := &LidarrAlbumStatus{
-			InLidarr:  lidarrAlbums[key],
-			Monitored: lidarrMonitored[key],
+		info, inLidarr := lidarrLookup[key]
+		result[title] = &LidarrAlbumStatus{
+			InLidarr:        inLidarr,
+			Monitored:       info.monitored,
+			HasFiles:        info.hasFiles,
+			PercentOfTracks: info.percentOfTracks,
 		}
-		result[title] = status
 	}
 
 	return result, nil

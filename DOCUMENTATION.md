@@ -337,12 +337,15 @@ bindd = SUPER, R, rptui, exec, xdg-terminal-exec --app-id=rptui.large -e /path/t
 windowrule = match:class rptui.large, size 1060 850, float on, center on
 ```
 
-**Desktop integration (available from launchers and menus)**
+**Linux desktop integration (available from launchers and menus)**
 
 ```
 # Use your preferred editor
 nano ~/.local/share/applications/rptui.desktop
 ```
+**NOTE: Requires xdg-terminal-exec. Available on Arch, OpenSUSE and Ubuntu 24.10+ and derivatives.**
+Alternatively, the desktop entry can be edited to use your preferred terminal directly, though
+syntax will likely need to be modified.  Check your terminal's options, e.g. `kitty --help`.
 
 Copy / paste / edit paths as needed:
 
@@ -473,6 +476,27 @@ dj_safety_buffer = 0.5
 dj_min_speech_duration = 15.0
 ```
 
+**Config notes**
+- `dj_check_seconds`: In ~48 hours of Main Mix testing, there were no DJ speech segments >80s.
+However, longer segments are certainly possible.  To catch more, increase value.
+Detection is performed in 20s chunks, so values of 100, 120, etc. are advised.
+- `dj_confidence`: Almost all confirmed DJ speech segments have very high confidence (>0.95).
+However, occasionally a confirmed segment will have confidence ~0.90.  Unfortunately, for songs
+with lyrics that "sound spoken", confidence values can be as high as ~0.94.  Lyrics rarely 
+continue to song end, which existing skip logic relies on (speech segment ends <1.5s from song end).
+- `dj_safety_buffer`: Speech detection rarely omits the very beginning of the segment.  
+To avoid hearing a brief speech "blip", leave at 0.5s.  However, this can also skip the last
+0.5s of actual music.  To hear as much of the music as possible, change to 0.
+- `dj_min_speech_duration`: In testing, no confirmed DJ speech segments were <15s. Almost all
+were 20s+.  This setting could miss brief announcements, but reducing value also increases
+possibility of "false positives".
+
+All DJ speech testing has been performed and optimized for Main Mix, RockIt!, and Mellow Mix
+(all DJ'd by William).  Other stations with other DJs may have different characteristics
+(shorter and/or longer DJ speech segments).  If so, changes to `dj_check_seconds` and/or
+`dj_min_speech_duration` would be advised.  Please report.  Consideration could be given
+for station-specific default settings.
+
 ## Lidarr Integration (Optional)
 
 Shows artist and album monitoring status from your [Lidarr](https://lidarr.audio/) music collection manager.
@@ -497,7 +521,13 @@ When a song changes, rptui looks up the current artist in Lidarr via their Music
 - **If the artist IS in your Lidarr library**: Shows monitored (●) or not monitored (○) status in the artist view and footer. Press `L` to open the artist page in Lidarr.
 - **If the artist is NOT in your Lidarr library**: Shows "not in Lidarr" (⊝) status. Press `L` to open the "Add New Artist" search page in Lidarr. Artists are never added automatically. The Lidarr page opens for your review and confirmation.
 
-Album monitoring status is also shown in the artist discography when available.
+Album download status is shown next to each album in the artist discography:
+
+- ● **downloaded** — all tracks present on disk
+- ◐ **partial** — some but not all tracks downloaded
+- ○ **wanted** — monitored but no files yet
+- ○ **unmonitored** — in Lidarr but not monitored, no files
+- ⊝ **not in Lidarr** — album not in your Lidarr library
 
 ## Artist Image Gallery
 
