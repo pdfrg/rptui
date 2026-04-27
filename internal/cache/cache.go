@@ -498,18 +498,18 @@ func (cs *CachedSong) ToSong() *models.Song {
 		url = cs.AudioPath
 	}
 	return &models.Song{
-		Title: cs.Title,
-		Artist: cs.Artist,
-		Album: cs.Album,
-		Year: cs.Year,
-		Duration: cs.Duration,
-		EventID: cs.EventID,
-		SongID: cs.SongID,
-		GaplessURL: url,
-		CoverLarge: cs.CoverLarge,
-		Rating: cs.Rating,
+		Title:          cs.Title,
+		Artist:         cs.Artist,
+		Album:          cs.Album,
+		Year:           cs.Year,
+		Duration:       cs.Duration,
+		EventID:        cs.EventID,
+		SongID:         cs.SongID,
+		GaplessURL:     url,
+		CoverLarge:     cs.CoverLarge,
+		Rating:         cs.Rating,
 		ListenerRating: cs.ListenerRating,
-		BlockID: models.ParseBlockID(cs.GaplessURL),
+		BlockID:        models.ParseBlockID(cs.GaplessURL),
 	}
 }
 

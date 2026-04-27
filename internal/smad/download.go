@@ -25,8 +25,9 @@ const detectionBitrate = "1"
 // ~27MB for FLAC, while still being perfectly adequate for speech detection.
 //
 // Examples:
-//   .../x/1534/3/g/1534-1.m4a  →  .../x/1534/1/g/1534-1.m4a
-//   .../x/1534/4/g/1534-1.flac →  .../x/1534/1/g/1534-1.m4a
+//
+//	.../x/1534/3/g/1534-1.m4a  →  .../x/1534/1/g/1534-1.m4a
+//	.../x/1534/4/g/1534-1.flac →  .../x/1534/1/g/1534-1.m4a
 func DetectionURL(gaplessURL string) (string, error) {
 	if !strings.HasPrefix(gaplessURL, "http://") && !strings.HasPrefix(gaplessURL, "https://") {
 		return "", fmt.Errorf("not an HTTP URL: %s", gaplessURL)

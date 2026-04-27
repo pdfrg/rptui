@@ -21,11 +21,11 @@ type LidarrClient struct {
 
 // LidarrArtistStatus represents an artist's status in Lidarr
 type LidarrArtistStatus struct {
-	InLidarr   bool    // true if artist exists in Lidarr
-	Monitored  bool    // true if artist is monitored
-	ArtistID   int     // Lidarr's internal artist ID
-	ArtistName string  // Lidarr's matched artist name
-	Error      string  // error message if lookup failed
+	InLidarr   bool   // true if artist exists in Lidarr
+	Monitored  bool   // true if artist is monitored
+	ArtistID   int    // Lidarr's internal artist ID
+	ArtistName string // Lidarr's matched artist name
+	Error      string // error message if lookup failed
 }
 
 // LidarrAlbumStatus represents an album's status in Lidarr
@@ -46,9 +46,9 @@ func NewLidarrClient(baseURL, apiKey string, enabled bool) *LidarrClient {
 	}
 
 	return &LidarrClient{
-		baseURL: baseURL,
-		apiKey:  apiKey,
-		enabled: enabled,
+		baseURL:    baseURL,
+		apiKey:     apiKey,
+		enabled:    enabled,
 		httpClient: &http.Client{Timeout: 15 * time.Second},
 	}
 }
@@ -93,9 +93,9 @@ func (lc *LidarrClient) GetArtistByMBID(ctx context.Context, mbid string) (*Lida
 	}
 
 	var artists []struct {
-		ID          int    `json:"id"`
-		ArtistName  string `json:"artistName"`
-		Monitored   bool   `json:"monitored"`
+		ID         int    `json:"id"`
+		ArtistName string `json:"artistName"`
+		Monitored  bool   `json:"monitored"`
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&artists); err != nil {

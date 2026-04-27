@@ -40,12 +40,12 @@ type Footer struct {
 	connState    string // "connected", "disconnected", or ""
 
 	// Scrobble indicator
-	scrobbleServices []string // e.g. ["fm", "lb"]
+	scrobbleServices     []string       // e.g. ["fm", "lb"]
 	flashStatesByService map[string]int // per-service state: "fm" -> 0/1/2/3
 
 	// Lidarr indicator
 	lidarrConfigured bool
-	lidarrState int // LidarrStateNotInLidarr, LidarrStateInLidarr, LidarrStateMonitored, LidarrStateError
+	lidarrState      int // LidarrStateNotInLidarr, LidarrStateInLidarr, LidarrStateMonitored, LidarrStateError
 }
 
 // NewFooter creates a new Footer widget
@@ -66,12 +66,12 @@ func NewFooter(accentStyle, mutedStyle lipgloss.Style) *Footer {
 			{Key: "c", Icon: "", Label: "Copy"},
 			{Key: "z", Icon: "", Label: "Sleep"},
 			{Key: "o", Icon: "", Label: "Opt"},
-		{Key: "m", Icon: "", Label: "Manage"},
-		{Key: "L", Icon: "", Label: "Lidarr"},
-		{Key: "$", Icon: "", Label: "Support"},
-		{Key: "q", Icon: "", Label: "Quit"},
-	},
-	jukeKeys: []KeyBinding{
+			{Key: "m", Icon: "", Label: "Manage"},
+			{Key: "L", Icon: "", Label: "Lidarr"},
+			{Key: "$", Icon: "", Label: "Support"},
+			{Key: "q", Icon: "", Label: "Quit"},
+		},
+		jukeKeys: []KeyBinding{
 			{Key: "p", Icon: "󰒮", Label: ""},
 			{Key: "r", Icon: "󰜉", Label: ""},
 			{Key: "Space", Icon: "󰐎", Label: ""},
@@ -95,11 +95,11 @@ func NewFooter(accentStyle, mutedStyle lipgloss.Style) *Footer {
 			{Key: "b", Icon: "🚫", Label: ""},
 			{Key: "c", Icon: "", Label: "Copy"},
 			{Key: "o", Icon: "", Label: "Opt"},
-		{Key: "m", Icon: "", Label: "Manage"},
-		{Key: "L", Icon: "", Label: "Lidarr"},
-		{Key: "q", Icon: "", Label: "Quit"},
-	},
-	stationKeys: []KeyBinding{
+			{Key: "m", Icon: "", Label: "Manage"},
+			{Key: "L", Icon: "", Label: "Lidarr"},
+			{Key: "q", Icon: "", Label: "Quit"},
+		},
+		stationKeys: []KeyBinding{
 			{Key: "0", Icon: "", Label: "Main"},
 			{Key: "1", Icon: "", Label: "Mellow"},
 			{Key: "2", Icon: "", Label: "RockIt"},
