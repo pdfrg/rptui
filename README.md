@@ -1,4 +1,4 @@
-[![CI](https://github.com/pdfrg/rptui/actions/workflows/ci.yml/badge.svg)](https://github.com/pdfrg/rptui/actions/workflows/ci.yml)
+[![CI](https://github.com/pdfrg/rptui/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/pdfrg/rptui/actions/workflows/ci.yml)
 
 # RadioParadise TUI
 
