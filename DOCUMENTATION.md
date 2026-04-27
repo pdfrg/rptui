@@ -527,8 +527,8 @@ Album download status is shown next to each album in the artist discography:
 
 - ● **downloaded** — all tracks present on disk
 - ◐ **partial** — some but not all tracks downloaded
-- ○ **wanted** — monitored but no files yet
-- ○ **unmonitored** — in Lidarr but not monitored, no files
+- ○ **wanted** — monitored but no files yet (normal color)
+- ○ **unmonitored** — in Lidarr but not monitored, no files (muted color)
 - ⊝ **not in Lidarr** — album not in your Lidarr library
 
 ## Artist Image Gallery
