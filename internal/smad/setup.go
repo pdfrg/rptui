@@ -15,7 +15,7 @@ import (
 var detectorScript string
 
 const (
-	ckptModelURL = "https://github.com/biboamy/TVSM-dataset/raw/refs/heads/master/Models/TVSM-cuesheet/epoch=10-step=4058.ckpt"
+	ckptModelURL  = "https://github.com/biboamy/TVSM-dataset/raw/refs/heads/master/Models/TVSM-cuesheet/epoch=10-step=4058.ckpt"
 	ckptModelFile = "epoch=10-step=4058.ckpt"
 	ptModelFile   = "model.pt"
 	modelsDirName = "tvsm_models"

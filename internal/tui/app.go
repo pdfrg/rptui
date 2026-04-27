@@ -213,18 +213,18 @@ type Model struct {
 	themeWatcher *config.ThemeWatcher
 
 	// API Clients
-	rpAPI *api.RadioParadiseAPI
-	authClient *api.RPAuthClient
-	commentsClient *api.RPCommentsClient
-	ratingsClient *api.RPRatingsClient
-	lyricsClient *api.LRCLibClient
-	wikipediaClient *api.WikipediaClient
-	discogsClient *api.DiscogsClient
+	rpAPI             *api.RadioParadiseAPI
+	authClient        *api.RPAuthClient
+	commentsClient    *api.RPCommentsClient
+	ratingsClient     *api.RPRatingsClient
+	lyricsClient      *api.LRCLibClient
+	wikipediaClient   *api.WikipediaClient
+	discogsClient     *api.DiscogsClient
 	musicbrainzClient *api.MusicBrainzClient
-	theaudiodbClient *api.TheAudioDBClient
-	lidarrClient *api.LidarrClient
-	mpvBackend *mpv.MPVBackend
-	cacheManager *cache.CacheManager
+	theaudiodbClient  *api.TheAudioDBClient
+	lidarrClient      *api.LidarrClient
+	mpvBackend        *mpv.MPVBackend
+	cacheManager      *cache.CacheManager
 
 	// State
 	songs            []*models.Song
@@ -285,8 +285,8 @@ type Model struct {
 	pendingArtistArtHeight int
 
 	// Lidarr state
-	lidarrArtistStatus *api.LidarrArtistStatus // current song's Lidarr artist status
-	lidarrAlbums map[string]*api.LidarrAlbumStatus // current artist's album status in Lidarr
+	lidarrArtistStatus *api.LidarrArtistStatus           // current song's Lidarr artist status
+	lidarrAlbums       map[string]*api.LidarrAlbumStatus // current artist's album status in Lidarr
 
 	// Bubbles components
 	viewport       viewport.Model
@@ -392,7 +392,7 @@ type Model struct {
 	jukeboxPlayed    int                // number of songs played so far (current song included)
 	jukeboxTotal     int                // total songs in this jukebox session
 	jukeboxBatchSize int                // how many songs to queue at once
-	crossfading bool // whether currently doing a crossfade volume ramp
+	crossfading      bool               // whether currently doing a crossfade volume ramp
 
 	// DJ speech skip (deferred until playback reaches speech boundary)
 	pendingDJSkip *djSkipInfo
@@ -623,10 +623,10 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 		lyricsClient:              lyricsClient,
 		wikipediaClient:           wikipediaClient,
 		discogsClient:             discogsClient,
-		musicbrainzClient: musicbrainzClient,
-		theaudiodbClient: theaudiodbClient,
-		lidarrClient: lidarrClient,
-		mpvBackend: mpvBackend,
+		musicbrainzClient:         musicbrainzClient,
+		theaudiodbClient:          theaudiodbClient,
+		lidarrClient:              lidarrClient,
+		mpvBackend:                mpvBackend,
 		cacheManager:              cacheManager,
 		scrobbler:                 scrobbler,
 		bottomViewMode:            ViewPlaylist,
@@ -817,19 +817,19 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 		lyricsClient:                lyricsClient,
 		wikipediaClient:             wikipediaClient,
 		discogsClient:               discogsClient,
-		musicbrainzClient: musicbrainzClient,
-		theaudiodbClient: theaudiodbClient,
-		lidarrClient: lidarrClient,
-		mpvBackend: mpvBackend,
-		cacheManager: cacheManager,
-		scrobbler: scrobbler,
-		bottomViewMode: ViewPlaylist,
-		headerWidget: headerWidget,
-		footerWidget: footerWidget,
-		nowPlayingWidget: nowPlayingWidget,
-		playlistWidget: playlistWidget,
-		optionsModal: optionsModal,
-		skipWarningModal: skipWarningModal,
+		musicbrainzClient:           musicbrainzClient,
+		theaudiodbClient:            theaudiodbClient,
+		lidarrClient:                lidarrClient,
+		mpvBackend:                  mpvBackend,
+		cacheManager:                cacheManager,
+		scrobbler:                   scrobbler,
+		bottomViewMode:              ViewPlaylist,
+		headerWidget:                headerWidget,
+		footerWidget:                footerWidget,
+		nowPlayingWidget:            nowPlayingWidget,
+		playlistWidget:              playlistWidget,
+		optionsModal:                optionsModal,
+		skipWarningModal:            skipWarningModal,
 		viewport:                    viewport,
 		help:                        help,
 		spinner:                     sp,
@@ -1305,24 +1305,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.tempFile != "" {
 			os.Remove(msg.tempFile)
 		}
-	if msg.hasSpeech && m.currentSong != nil && msg.eventID == m.currentSong.EventID && m.mpvBackend != nil {
-		songDur := m.currentSong.GetDurationSeconds()
-		nearEnd := songDur > 0 && songDur-msg.skipEnd <= maxSpeechDistanceFromEnd
-		if !nearEnd {
-			logger.Printf("DJ speech: rejected (ends %.1fs from song end, max %.1fs)", songDur-msg.skipEnd, maxSpeechDistanceFromEnd)
-		} else if pos, err := m.mpvBackend.GetPlaybackPosition(); err == nil && pos.TimePos >= msg.skipStart && pos.TimePos < msg.skipEnd {
-			_ = m.mpvBackend.SeekAbsolute(msg.skipEnd)
-			logger.Printf("DJ speech: already at speech, skipping to %.1fs", msg.skipEnd)
-		} else if err == nil && pos.TimePos < msg.skipStart {
-			m.pendingDJSkip = &djSkipInfo{
-				skipStart:  msg.skipStart,
-				skipEnd:    msg.skipEnd,
-				confidence: msg.confidence,
-				eventID:    msg.eventID,
+		if msg.hasSpeech && m.currentSong != nil && msg.eventID == m.currentSong.EventID && m.mpvBackend != nil {
+			songDur := m.currentSong.GetDurationSeconds()
+			nearEnd := songDur > 0 && songDur-msg.skipEnd <= maxSpeechDistanceFromEnd
+			if !nearEnd {
+				logger.Printf("DJ speech: rejected (ends %.1fs from song end, max %.1fs)", songDur-msg.skipEnd, maxSpeechDistanceFromEnd)
+			} else if pos, err := m.mpvBackend.GetPlaybackPosition(); err == nil && pos.TimePos >= msg.skipStart && pos.TimePos < msg.skipEnd {
+				_ = m.mpvBackend.SeekAbsolute(msg.skipEnd)
+				logger.Printf("DJ speech: already at speech, skipping to %.1fs", msg.skipEnd)
+			} else if err == nil && pos.TimePos < msg.skipStart {
+				m.pendingDJSkip = &djSkipInfo{
+					skipStart:  msg.skipStart,
+					skipEnd:    msg.skipEnd,
+					confidence: msg.confidence,
+					eventID:    msg.eventID,
+				}
+				logger.Printf("DJ speech detected (%.1fs at %.1fs), deferring skip (confidence: %.2f)", msg.skipEnd-msg.skipStart, msg.skipStart, msg.confidence)
 			}
-			logger.Printf("DJ speech detected (%.1fs at %.1fs), deferring skip (confidence: %.2f)", msg.skipEnd-msg.skipStart, msg.skipStart, msg.confidence)
 		}
-	}
 
 	case sleepTimerTickMsg:
 		return handle(m.handleSleepTimerTick(msg))
@@ -1839,9 +1839,9 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.currentSong != nil {
-		if m.cacheManager.IsFavorite(m.currentSong) {
-			// Remove favorite
-			if err := m.cacheManager.RemoveFavoriteBySong(m.currentSong); err == nil {
+			if m.cacheManager.IsFavorite(m.currentSong) {
+				// Remove favorite
+				if err := m.cacheManager.RemoveFavoriteBySong(m.currentSong); err == nil {
 					m.updatePlaylist()
 					return m, setStatus(&m, "Removed from favorites", false)
 				}
@@ -2020,10 +2020,10 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.currentSong == nil {
 			return m, setStatus(&m, "No song playing", true)
 		}
-	var lidarrURL string
-	if m.artistInfo != nil && m.artistInfo.LidarrInLidarr && m.artistInfo.LidarrMBID != "" {
-		lidarrURL = m.lidarrClient.OpenArtistURL(m.artistInfo.LidarrMBID)
-	} else if m.artistInfo != nil && m.artistInfo.LidarrMBID != "" {
+		var lidarrURL string
+		if m.artistInfo != nil && m.artistInfo.LidarrInLidarr && m.artistInfo.LidarrMBID != "" {
+			lidarrURL = m.lidarrClient.OpenArtistURL(m.artistInfo.LidarrMBID)
+		} else if m.artistInfo != nil && m.artistInfo.LidarrMBID != "" {
 			lidarrURL = m.lidarrClient.OpenSearchByMBID(m.artistInfo.LidarrMBID)
 		} else {
 			lidarrURL = m.lidarrClient.OpenSearchURL(m.currentSong.Artist)
@@ -3897,62 +3897,62 @@ func (m *Model) updateBottomView() {
 				} else {
 					lines = append(lines, indent+"No biography available.")
 				}
-		if m.artistInfo.Discography != "" {
-			lines = append(lines, "")
-			// Add Lidarr artist status line if configured
-			if m.lidarrClient.IsConfigured() && (m.artistInfo.LidarrInLidarr || m.artistInfo.LidarrMBID != "") {
-				var lidarrLine string
-				if m.artistInfo.LidarrInLidarr {
-					if m.artistInfo.LidarrMonitored {
-						lidarrLine = m.styles.AccentStyle.Render("●") + " monitored"
-					} else {
-						lidarrLine = m.styles.ForegroundStyle.Render("○") + " not monitored"
+				if m.artistInfo.Discography != "" {
+					lines = append(lines, "")
+					// Add Lidarr artist status line if configured
+					if m.lidarrClient.IsConfigured() && (m.artistInfo.LidarrInLidarr || m.artistInfo.LidarrMBID != "") {
+						var lidarrLine string
+						if m.artistInfo.LidarrInLidarr {
+							if m.artistInfo.LidarrMonitored {
+								lidarrLine = m.styles.AccentStyle.Render("●") + " monitored"
+							} else {
+								lidarrLine = m.styles.ForegroundStyle.Render("○") + " not monitored"
+							}
+						} else if m.artistInfo.LidarrError != "" {
+							lidarrLine = m.styles.MutedStyle.Render("?") + " error: " + m.artistInfo.LidarrError
+						} else {
+							lidarrLine = m.styles.MutedStyle.Render("⊝") + " not in Lidarr"
+						}
+						lines = append(lines, indent+"Lidarr artist: "+lidarrLine)
+						if len(m.artistInfo.LidarrAlbums) > 0 {
+							lines = append(lines, indent+m.styles.AccentStyle.Render("●")+" downloaded")
+							lines = append(lines, indent+m.styles.AccentStyle.Render("◐")+" partial")
+							lines = append(lines, indent+m.styles.ForegroundStyle.Render("○")+" wanted")
+							lines = append(lines, indent+m.styles.MutedStyle.Render("○")+" unmonitored")
+							lines = append(lines, indent+m.styles.MutedStyle.Render("⊝")+" not in Lidarr")
+							lines = append(lines, "")
+						}
 					}
-				} else if m.artistInfo.LidarrError != "" {
-					lidarrLine = m.styles.MutedStyle.Render("?") + " error: " + m.artistInfo.LidarrError
-				} else {
-					lidarrLine = m.styles.MutedStyle.Render("⊝") + " not in Lidarr"
-				}
-				lines = append(lines, indent+"Lidarr artist: "+lidarrLine)
-		if len(m.artistInfo.LidarrAlbums) > 0 {
-			lines = append(lines, indent+m.styles.AccentStyle.Render("●")+" downloaded")
-			lines = append(lines, indent+m.styles.AccentStyle.Render("◐")+" partial")
-			lines = append(lines, indent+m.styles.ForegroundStyle.Render("○")+" wanted")
-			lines = append(lines, indent+m.styles.MutedStyle.Render("○")+" unmonitored")
-			lines = append(lines, indent+m.styles.MutedStyle.Render("⊝")+" not in Lidarr")
-			lines = append(lines, "")
-		}
-			}
-			lines = append(lines, indent+"Studio Albums:")
-			discoLines := strings.Split(m.artistInfo.Discography, "\n")
-			for _, line := range discoLines {
-				// Check Lidarr album status
-				albumTitle := line
-				if idx := strings.LastIndex(line, " ("); idx > 0 {
-					albumTitle = line[:idx]
-				}
-		if m.lidarrClient.IsConfigured() && len(m.artistInfo.LidarrAlbums) > 0 {
-				if albumInfo, ok := m.artistInfo.LidarrAlbums[albumTitle]; ok {
-					var indicator string
-					if albumInfo.PercentOfTracks == 100 {
-						indicator = m.styles.AccentStyle.Render("● ")
-					} else if albumInfo.PercentOfTracks > 0 {
-						indicator = m.styles.AccentStyle.Render("◐ ")
-					} else if albumInfo.Monitored {
-						indicator = m.styles.ForegroundStyle.Render("○ ")
-					} else if albumInfo.InLidarr {
-						indicator = m.styles.MutedStyle.Render("○ ")
-					} else {
-						indicator = m.styles.MutedStyle.Render("⊝ ")
+					lines = append(lines, indent+"Studio Albums:")
+					discoLines := strings.Split(m.artistInfo.Discography, "\n")
+					for _, line := range discoLines {
+						// Check Lidarr album status
+						albumTitle := line
+						if idx := strings.LastIndex(line, " ("); idx > 0 {
+							albumTitle = line[:idx]
+						}
+						if m.lidarrClient.IsConfigured() && len(m.artistInfo.LidarrAlbums) > 0 {
+							if albumInfo, ok := m.artistInfo.LidarrAlbums[albumTitle]; ok {
+								var indicator string
+								if albumInfo.PercentOfTracks == 100 {
+									indicator = m.styles.AccentStyle.Render("● ")
+								} else if albumInfo.PercentOfTracks > 0 {
+									indicator = m.styles.AccentStyle.Render("◐ ")
+								} else if albumInfo.Monitored {
+									indicator = m.styles.ForegroundStyle.Render("○ ")
+								} else if albumInfo.InLidarr {
+									indicator = m.styles.MutedStyle.Render("○ ")
+								} else {
+									indicator = m.styles.MutedStyle.Render("⊝ ")
+								}
+								lines = append(lines, indent+" "+indicator+line)
+							} else {
+								lines = append(lines, indent+"  "+line)
+							}
+						} else {
+							lines = append(lines, indent+"  "+line)
+						}
 					}
-						lines = append(lines, indent+" "+indicator+line)
-					} else {
-						lines = append(lines, indent+"  "+line)
-					}
-				} else {
-					lines = append(lines, indent+"  "+line)
-				}
-			}
 					if m.artistInfo.DiscoSource != "" {
 						lines = append(lines, indent+"Source: "+m.artistInfo.DiscoSource)
 					}
@@ -4096,9 +4096,9 @@ func (m *Model) startDJDetection(song *models.Song) tea.Cmd {
 
 		var tempFile string
 		audioPath := originalURL
-	cacheDir := filepath.Join(xdg.CacheHome, "rptui")
+		cacheDir := filepath.Join(xdg.CacheHome, "rptui")
 
-	if strings.HasPrefix(originalURL, "http://") || strings.HasPrefix(originalURL, "https://") {
+		if strings.HasPrefix(originalURL, "http://") || strings.HasPrefix(originalURL, "https://") {
 			detectURL, err := smad.DetectionURL(originalURL)
 			if err != nil {
 				logger.Printf("DJ detection: failed to derive 64k URL: %v", err)
@@ -4114,10 +4114,10 @@ func (m *Model) startDJDetection(song *models.Song) tea.Cmd {
 				return djDetectionDoneMsg{eventID: song.EventID}
 			}
 			audioPath = tempFile
-	}
+		}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
 
 		checker := smad.NewDJChecker(
 			smad.PythonPath(cacheDir),
@@ -4126,9 +4126,9 @@ func (m *Model) startDJDetection(song *models.Song) tea.Cmd {
 			smad.CacheDir(cacheDir),
 		)
 
-	speechStart, speechEnd, confidence, hasSpeech, err := checker.Detect(
-		ctx, originalURL, audioPath, m.config.DJConfidence, m.config.DJCheckSeconds, m.config.DJMinSpeechDuration, song.Artist, song.Title,
-	)
+		speechStart, speechEnd, confidence, hasSpeech, err := checker.Detect(
+			ctx, originalURL, audioPath, m.config.DJConfidence, m.config.DJCheckSeconds, m.config.DJMinSpeechDuration, song.Artist, song.Title,
+		)
 
 		if err != nil {
 			logger.Printf("DJ detection failed: %v", err)
@@ -4159,10 +4159,10 @@ func (m *Model) startDJDetection(song *models.Song) tea.Cmd {
 			}
 		}
 
-	if tempFile != "" {
-		os.Remove(tempFile)
-	}
-	return djDetectionDoneMsg{eventID: song.EventID}
+		if tempFile != "" {
+			os.Remove(tempFile)
+		}
+		return djDetectionDoneMsg{eventID: song.EventID}
 	}
 }
 
@@ -4636,26 +4636,26 @@ func (m Model) fetchArtistCmd() tea.Cmd {
 			artist *api.TADBArtist
 			err    error
 		}
-	type mbResult struct {
-		mbid   string
-		albums []api.MBAlbum
-		err    error
-	}
+		type mbResult struct {
+			mbid   string
+			albums []api.MBAlbum
+			err    error
+		}
 
-	tadbCh := make(chan tadbResult, 1)
-	mbCh := make(chan mbResult, 1)
+		tadbCh := make(chan tadbResult, 1)
+		mbCh := make(chan mbResult, 1)
 
-	go func() {
-		a, e := tadbClient.SearchArtist(ctx, song.Artist, song.Album)
-		tadbCh <- tadbResult{a, e}
-	}()
-	go func() {
-	mbid, a, e := mbClient.GetDiscography(ctx, song.Artist, song.Album)
-	mbCh <- mbResult{mbid, a, e}
-	}()
+		go func() {
+			a, e := tadbClient.SearchArtist(ctx, song.Artist, song.Album)
+			tadbCh <- tadbResult{a, e}
+		}()
+		go func() {
+			mbid, a, e := mbClient.GetDiscography(ctx, song.Artist, song.Album)
+			mbCh <- mbResult{mbid, a, e}
+		}()
 
-	tadb := <-tadbCh
-	mb := <-mbCh
+		tadb := <-tadbCh
+		mb := <-mbCh
 
 		// Process TADB — bio, thumb, gallery
 		if tadb.err != nil {
@@ -4752,57 +4752,57 @@ func (m Model) fetchArtistCmd() tea.Cmd {
 			}
 		}
 
-	// --- Phase 4: Lidarr (if configured, reuse MBID from Phase 1) ---
-	if lidarrClient.IsConfigured() && mb.mbid != "" {
-		logger.Printf("Artist fetch: phase 4 (Lidarr) for %s (mbid=%s)", song.Artist, mb.mbid)
-		info.LidarrMBID = mb.mbid
-		lidarrStatus, lidErr := lidarrClient.GetArtistByMBID(ctx, mb.mbid)
-				if lidErr != nil {
-					logger.Printf("Lidarr: artist lookup failed for %s (mbid %s): %v", song.Artist, mb.mbid, lidErr)
-					info.LidarrError = lidarrStatus.Error
-				} else if lidarrStatus.InLidarr {
-					info.LidarrInLidarr = true
-					info.LidarrMonitored = lidarrStatus.Monitored
-					info.LidarrArtistID = lidarrStatus.ArtistID
-					info.LidarrArtistName = lidarrStatus.ArtistName
-					logger.Printf("Lidarr: %s found (id=%d, monitored=%v)", song.Artist, lidarrStatus.ArtistID, lidarrStatus.Monitored)
+		// --- Phase 4: Lidarr (if configured, reuse MBID from Phase 1) ---
+		if lidarrClient.IsConfigured() && mb.mbid != "" {
+			logger.Printf("Artist fetch: phase 4 (Lidarr) for %s (mbid=%s)", song.Artist, mb.mbid)
+			info.LidarrMBID = mb.mbid
+			lidarrStatus, lidErr := lidarrClient.GetArtistByMBID(ctx, mb.mbid)
+			if lidErr != nil {
+				logger.Printf("Lidarr: artist lookup failed for %s (mbid %s): %v", song.Artist, mb.mbid, lidErr)
+				info.LidarrError = lidarrStatus.Error
+			} else if lidarrStatus.InLidarr {
+				info.LidarrInLidarr = true
+				info.LidarrMonitored = lidarrStatus.Monitored
+				info.LidarrArtistID = lidarrStatus.ArtistID
+				info.LidarrArtistName = lidarrStatus.ArtistName
+				logger.Printf("Lidarr: %s found (id=%d, monitored=%v)", song.Artist, lidarrStatus.ArtistID, lidarrStatus.Monitored)
 
-					// Get album monitoring status if we have discography
-					if info.Discography != "" {
-						var mbTitles []string
-						for _, line := range strings.Split(info.Discography, "\n") {
-							line = strings.TrimSpace(line)
-							if line == "" {
-								continue
-							}
-							// Extract album title from "Album (Year)" format
-							if idx := strings.LastIndex(line, " ("); idx > 0 {
-								mbTitles = append(mbTitles, line[:idx])
-							} else {
-								mbTitles = append(mbTitles, line)
-							}
+				// Get album monitoring status if we have discography
+				if info.Discography != "" {
+					var mbTitles []string
+					for _, line := range strings.Split(info.Discography, "\n") {
+						line = strings.TrimSpace(line)
+						if line == "" {
+							continue
 						}
-						if len(mbTitles) > 0 {
-							lidarrAlbums, albErr := lidarrClient.GetArtistAlbums(ctx, lidarrStatus.ArtistID, mbTitles)
-							if albErr != nil {
-								logger.Printf("Lidarr: album lookup failed for artist %d: %v", lidarrStatus.ArtistID, albErr)
-							} else if len(lidarrAlbums) > 0 {
-								info.LidarrAlbums = make(map[string]models.LidarrAlbumInfo)
-								for title, status := range lidarrAlbums {
-			info.LidarrAlbums[title] = models.LidarrAlbumInfo{
-				InLidarr:        status.InLidarr,
-				Monitored:       status.Monitored,
-				HasFiles:        status.HasFiles,
-				PercentOfTracks: status.PercentOfTracks,
-			}
+						// Extract album title from "Album (Year)" format
+						if idx := strings.LastIndex(line, " ("); idx > 0 {
+							mbTitles = append(mbTitles, line[:idx])
+						} else {
+							mbTitles = append(mbTitles, line)
+						}
+					}
+					if len(mbTitles) > 0 {
+						lidarrAlbums, albErr := lidarrClient.GetArtistAlbums(ctx, lidarrStatus.ArtistID, mbTitles)
+						if albErr != nil {
+							logger.Printf("Lidarr: album lookup failed for artist %d: %v", lidarrStatus.ArtistID, albErr)
+						} else if len(lidarrAlbums) > 0 {
+							info.LidarrAlbums = make(map[string]models.LidarrAlbumInfo)
+							for title, status := range lidarrAlbums {
+								info.LidarrAlbums[title] = models.LidarrAlbumInfo{
+									InLidarr:        status.InLidarr,
+									Monitored:       status.Monitored,
+									HasFiles:        status.HasFiles,
+									PercentOfTracks: status.PercentOfTracks,
 								}
 							}
 						}
 					}
-	} else {
-		logger.Printf("Lidarr: %s not in Lidarr (mbid %s)", song.Artist, mb.mbid)
-	}
-	}
+				}
+			} else {
+				logger.Printf("Lidarr: %s not in Lidarr (mbid %s)", song.Artist, mb.mbid)
+			}
+		}
 
 		// --- Final fallback ---
 		if info.Bio == "" {
