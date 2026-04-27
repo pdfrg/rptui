@@ -161,7 +161,7 @@ The config file is located at `~/.config/rptui/config.toml`. It is created autom
 |---------|------|-------------|
 | `skip_dj_segments` | bool | Enable automatic skipping of DJ speech at end of songs |
 | `dj_check_seconds` | int | Seconds from end of song to check for DJ speech (5-120, default: 80) |
-| `dj_confidence` | float | Minimum confidence for speech detection (0.1-0.99, default: 0.85) |
+| `dj_confidence` | float | Minimum confidence for speech detection (0.1-0.99, default: 0.88) |
 | `dj_safety_buffer` | float | Extra seconds to add after detected speech for safe skipping (0-5, default: 0.5) |
 | `dj_min_speech_duration` | float | Minimum speech segment duration in seconds to count as DJ talk (5-60, default: 15.0) |
 
@@ -454,7 +454,9 @@ A confirmation prompt is shown before proceeding. If setup is already complete, 
 ### How It Works
 
 - Only the last `dj_check_seconds` (default: 80) of each song are analyzed. RP DJ interludes are always at song end.
+- Detection only runs on the **last song in each RP programming block** — DJs only speak at block boundaries. Favorites and jukebox songs are always checked since they lack block context, but results are cached permanently so detection only runs once per song.
 - Speech segments shorter than 15 seconds are ignored (filters out brief spoken-vocal moments that aren't DJ talk). Some speech segments are >60s.
+- Detected speech must end within 1.5s of the song's end — RP DJs talk at the very end of a track, so speech ending further from the end is rejected as a false positive (e.g., sung vocals).
 - A `dj_safety_buffer` (default: 0.5s) is added before and after the detected speech to ensure segment is skipped (no jarring partial spoken word effect).
 - Results are cached per-song, so re-playing a song doesn't re-run detection.
 - Detection runs in the background and doesn't block playback or other song-change logic.
@@ -466,7 +468,7 @@ Enable in `config.toml`:
 ```toml
 skip_dj_segments = true
 dj_check_seconds = 80
-dj_confidence = 0.85
+dj_confidence = 0.88
 dj_safety_buffer = 0.5
 dj_min_speech_duration = 15.0
 ```

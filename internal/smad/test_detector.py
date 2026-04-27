@@ -109,10 +109,10 @@ def main():
         help="audio files and/or directories to scan",
     )
     parser.add_argument(
-        "--confidence",
-        type=float,
-        default=0.85,
-        help="speech confidence threshold (default: 0.85)",
+    "--confidence",
+    type=float,
+    default=0.88,
+    help="speech confidence threshold (default: 0.88)",
     )
     parser.add_argument(
         "--check-seconds",

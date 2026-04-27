@@ -4160,7 +4160,25 @@ const djSkipFadeDuration = 1.5 // seconds of volume fade-out before DJ speech sk
 // end at which detected speech is considered plausible DJ speech. RP DJs talk
 // at the very end of a track — speech ending more than this far from the song
 // end is almost certainly a false positive (e.g., sung vocals).
-const maxSpeechDistanceFromEnd = 3.0
+const maxSpeechDistanceFromEnd = 1.5
+
+func (m *Model) isLastSongInBlock() bool {
+	if m.currentSongIndex < 0 || m.currentSongIndex >= len(m.songs) {
+		return false
+	}
+	song := m.songs[m.currentSongIndex]
+	if song.IsFromFavorite {
+		return true
+	}
+	if song.BlockID == 0 {
+		return true
+	}
+	if m.currentSongIndex == len(m.songs)-1 {
+		return true
+	}
+	nextSong := m.songs[m.currentSongIndex+1]
+	return nextSong.BlockID != song.BlockID
+}
 
 // songChangedCmds is the centralized handler for all song transitions
 // (initial load, manual skip/prev, natural transition).
@@ -4275,8 +4293,9 @@ func (m *Model) songChangedCmds() tea.Cmd {
 
 	var cmds []tea.Cmd
 
-	// Start DJ detection if enabled (non-blocking, result arrives via djDetectionDoneMsg)
-	if m.currentSong != nil && m.config.SkipDJSegments {
+	// Start DJ detection if enabled and song is last in its block
+	// (RP DJs only talk at block boundaries; non-last songs are skipped)
+	if m.currentSong != nil && m.config.SkipDJSegments && m.isLastSongInBlock() {
 		cmds = append(cmds, m.startDJDetection(m.currentSong))
 	}
 
