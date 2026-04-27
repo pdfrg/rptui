@@ -321,11 +321,13 @@ Customize command to point to the rptui binary on your system, or just 'rptui' i
 Size is in the format (width height). Adjust to your preferences.
 Sizes below are recommended minimums, based on use of 11pt font in the terminal.
 For large (default) and medium, more narrow will work, but some keybindings won't be shown in the footer.
+The 1150 px width shown below accomodates all optional configurations (Lidarr and RP auth).  
+If these are not enabled, smaller values will show the entire footer.
 For different terminal font sizes, optimal width and height values can vary widely.
 
 ```
 bindd = SUPER SHIFT, R, rptui, exec, xdg-terminal-exec --app-id=rptui.medium -e /path/to/rptui/rptui --layout medium
-windowrule = match:class rptui.medium, size 1060 460, float on, center on
+windowrule = match:class rptui.medium, size 1150 460, float on, center on
 
 bindd = SUPER ALT SHIFT, R, rptui, exec, xdg-terminal-exec --app-id=rptui.compact -e /path/to/rptui/rptui --layout compact
 windowrule = match:class rptui.compact, size 370 400, float on, center on
@@ -334,7 +336,7 @@ bindd = SUPER CTRL SHIFT, R, rptui, exec, xdg-terminal-exec --app-id=rptui.narro
 windowrule = match:class rptui.narrow, size 370 750, float on, center on
 
 bindd = SUPER, R, rptui, exec, xdg-terminal-exec --app-id=rptui.large -e /path/to/rptui/rptui --layout large
-windowrule = match:class rptui.large, size 1060 850, float on, center on
+windowrule = match:class rptui.large, size 1150 850, float on, center on
 ```
 
 **Linux desktop integration (available from launchers and menus)**
