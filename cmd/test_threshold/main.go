@@ -100,9 +100,6 @@ func contrastRatio(h1, h2 string) float64 {
 	return (l1 + 0.05) / (l2 + 0.05)
 }
 
-var accentFallbackIdx = "4"
-var cursorFallbackIdxs = []string{"6", "3", "5", "1"}
-
 // needsSimilar checks if distance indicates truly similar colors (not just same luminance)
 // Threshold of 20 catches genuinely similar colors without false positives from hue differences
 func needsSimilar(dist float64) bool {

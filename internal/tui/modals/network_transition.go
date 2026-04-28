@@ -44,9 +44,8 @@ func NewNetworkTransition(styles *config.ThemeStyles, variant int, caches []cach
 
 // Update handles messages
 func (n *NetworkTransition) Update(msg tea.Msg) tea.Cmd {
-	switch msg := msg.(type) {
-	case tea.KeyPressMsg:
-		key := msg.String()
+	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
+		key := keyMsg.String()
 
 		// Going offline: handle cache selection (1-9) or dismiss (n)
 		if n.variant == NetworkGoingOffline {

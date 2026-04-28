@@ -1,0 +1,24 @@
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - errcheck
+    - staticcheck
+    - gosimple
+    - ineffassign
+    - gocritic
+    - revive
+
+linters-settings:
+  errcheck:
+    check-type-assertions: false
+    check-blank: false
+  gocritic:
+    disabled-checks:
+      - singleCaseSwitch
+      - ifElseChain
+  revive:
+    rules:
+      - name: unused-parameter
+        disabled: true

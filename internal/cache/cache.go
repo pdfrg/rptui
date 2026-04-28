@@ -59,7 +59,7 @@ func (cs *CachedSong) UnmarshalJSON(data []byte) error {
 
 	switch v := aux.EventID.(type) {
 	case string:
-		fmt.Sscanf(v, "%d", &cs.EventID)
+		_, _ = fmt.Sscanf(v, "%d", &cs.EventID)
 	case float64:
 		cs.EventID = int64(v)
 	case int64:
@@ -168,18 +168,6 @@ func (c *CacheManager) saveMetadata(dir string, songs []CachedSong) error {
 		return fmt.Errorf("failed to write metadata: %w", err)
 	}
 	return nil
-}
-
-// songIdentityKey returns a stable identity key for deduplication.
-// Priority: SongID (stable across replays), then Artist-Album-Title, then EventID.
-func songIdentityKey(s *models.Song) string {
-	if s.SongID != 0 {
-		return fmt.Sprintf("sid:%d", s.SongID)
-	}
-	if s.Artist != "" || s.Album != "" || s.Title != "" {
-		return fmt.Sprintf("aat:%s-%s-%s", s.Artist, s.Album, s.Title)
-	}
-	return fmt.Sprintf("eid:%d", s.EventID)
 }
 
 // cachedSongIdentityKey returns a stable identity key for a CachedSong.
@@ -682,12 +670,14 @@ func (c *CacheManager) dedupFavorites(favorites []CachedSong) []CachedSong {
 
 // formatBytes formats bytes into human-readable string
 func formatBytes(b int64) string {
-	if b < 1024 {
+	switch {
+	case b < 1024:
 		return fmt.Sprintf("%d B", b)
-	} else if b < 1024*1024 {
+	case b < 1024*1024:
 		return fmt.Sprintf("%.1f KB", float64(b)/1024)
-	} else if b < 1024*1024*1024 {
+	case b < 1024*1024*1024:
 		return fmt.Sprintf("%.1f MB", float64(b)/(1024*1024))
+	default:
+		return fmt.Sprintf("%.2f GB", float64(b)/(1024*1024*1024))
 	}
-	return fmt.Sprintf("%.2f GB", float64(b)/(1024*1024*1024))
 }

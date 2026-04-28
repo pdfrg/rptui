@@ -95,8 +95,8 @@ func getInt64(data map[string]any, key string, defaultVal int64) int64 {
 			return int64(val)
 		case string:
 			// Handle string numbers (e.g., "2850087")
-			var result int64
-			fmt.Sscanf(val, "%d", &result)
+		var result int64
+		_, _ = fmt.Sscanf(val, "%d", &result)
 			return result
 		}
 	}
@@ -111,7 +111,7 @@ func ParseBlockID(gaplessURL string) int64 {
 		return 0
 	}
 	var id int64
-	fmt.Sscanf(m[1], "%d", &id)
+	_, _ = fmt.Sscanf(m[1], "%d", &id)
 	return id
 }
 

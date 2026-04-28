@@ -272,7 +272,7 @@ func newPipeWireTap() *AudioTap {
 
 	go tap.readLoop()
 	// Drain stderr so pw-record doesn't block
-	go io.Copy(io.Discard, tap.stderr)
+	go func() { _, _ = io.Copy(io.Discard, tap.stderr) }()
 
 	return tap
 }
@@ -359,7 +359,7 @@ func newPulseAudioTap() *AudioTap {
 
 	go tap.readLoop()
 	// Drain stderr so parecord doesn't block
-	go io.Copy(io.Discard, tap.stderr)
+	go func() { _, _ = io.Copy(io.Discard, tap.stderr) }()
 
 	return tap
 }
@@ -578,8 +578,8 @@ func (t *AudioTap) Close() {
 		return
 	}
 	t.closed = true
-	t.cmd.Process.Kill()
-	t.cmd.Wait()
+	_ = t.cmd.Process.Kill()
+	_ = t.cmd.Wait()
 	<-t.done
 }
 

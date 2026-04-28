@@ -70,7 +70,7 @@ func (r Rating) View() string {
 
 	accentStyle := r.styles.AccentStyle
 	mutedStyle := r.styles.MutedStyle
-	cursorStyle := r.styles.CursorStyle.Copy()
+	cursorStyle := r.styles.CursorStyle
 
 	var lines []string
 

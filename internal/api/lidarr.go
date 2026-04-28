@@ -41,9 +41,7 @@ type LidarrAlbumStatus struct {
 // apiKey is the Lidarr API key from Settings > General
 func NewLidarrClient(baseURL, apiKey string, enabled bool) *LidarrClient {
 	// Normalize URL (remove trailing slash)
-	if strings.HasSuffix(baseURL, "/") {
-		baseURL = strings.TrimSuffix(baseURL, "/")
-	}
+	baseURL = strings.TrimSuffix(baseURL, "/")
 
 	return &LidarrClient{
 		baseURL:    baseURL,

@@ -245,12 +245,12 @@ func testArtist(ctx context.Context, artist string, verbose, discogOnly bool) *T
 					results = append(results, scoredResult{item.Title, score})
 					if verbose {
 						r.Steps = append(r.Steps, fmt.Sprintf("      %s score=%.2f", item.Title, score))
-					}
-				}
-			}
+	}
 		}
+	}
+	}
 
-		sort.Slice(results, func(i, j int) bool {
+	sort.Slice(results, func(i, j int) bool {
 			return results[i].score > results[j].score
 		})
 
@@ -296,9 +296,8 @@ func testArtist(ctx context.Context, artist string, verbose, discogOnly bool) *T
 					r.ThumbURL = s.Thumbnail.Source
 					r.Discography = discog
 					r.DiscogSection = section
-					r.DiscogAlbums = count
-					needDiscogCheck = false
-					break
+			r.DiscogAlbums = count
+			break
 				}
 				r.Steps = append(r.Steps, "    -> musician but no discography either")
 			} else {
@@ -1091,10 +1090,10 @@ func fetchRPArtists(ctx context.Context, channelsStr string) []string {
 
 	for _, chStr := range channels {
 		chStr = strings.TrimSpace(chStr)
-		var ch int
-		fmt.Sscanf(chStr, "%d", &ch)
+	var ch int
+	_, _ = fmt.Sscanf(chStr, "%d", &ch)
 
-		rpAPI := api.NewRadioParadiseAPI(ch, 3)
+	rpAPI := api.NewRadioParadiseAPI(ch, 3)
 		playlist, err := rpAPI.GetPlaylist(ctx)
 		if err != nil {
 			log.Printf("Failed to fetch playlist for channel %d: %v", ch, err)
@@ -1143,16 +1142,12 @@ func printSummary(results map[string]*TestResult) {
 			}
 			if r.Discography != "" {
 				hasDiscog++
-			} else {
-				if r.PageTitle != "" {
-					if r.DiscogSection == "" {
-						noDiscogSection = append(noDiscogSection, r.Artist)
-					} else {
-						noDiscogAlbums = append(noDiscogAlbums, r.Artist)
-					}
-				}
-			}
-		}
+		} else if r.DiscogSection == "" {
+			noDiscogSection = append(noDiscogSection, r.Artist)
+	} else {
+		noDiscogAlbums = append(noDiscogAlbums, r.Artist)
+	}
+	}
 	}
 
 	pct := func(n int) float64 { return float64(n) / float64(total) * 100 }

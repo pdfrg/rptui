@@ -97,7 +97,7 @@ func (s *SleepTimer) getSelectedDuration() time.Duration {
 func (s *SleepTimer) View() string {
 	var b strings.Builder
 
-	headerStyle := s.styles.AccentStyle.Copy().
+	headerStyle := s.styles.AccentStyle.
 		Bold(true).
 		AlignHorizontal(lipgloss.Center)
 
@@ -121,7 +121,7 @@ func (s *SleepTimer) View() string {
 		style := s.styles.MutedStyle
 
 		if i == s.cursor {
-			style = s.styles.AccentStyle.Copy().Bold(true)
+			style = s.styles.AccentStyle.Bold(true)
 		}
 
 		prefix := "  "

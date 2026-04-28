@@ -163,8 +163,7 @@ func (f *Favorites) Update(msg tea.Msg) tea.Cmd {
 		return cmd
 	}
 
-	switch msg := msg.(type) {
-	case tea.KeyPressMsg:
+	if key, ok := msg.(tea.KeyPressMsg); ok {
 		f.toastMessage = ""
 		visible := f.visibleRows()
 
@@ -172,7 +171,7 @@ func (f *Favorites) Update(msg tea.Msg) tea.Cmd {
 		offlineItems := f.activeOfflineItems()
 		items := f.filteredItems()
 
-		switch msg.String() {
+		switch key.String() {
 		case "esc", "q":
 			if f.searchInput.Value() != "" {
 				f.searchInput.SetValue("")
@@ -234,7 +233,7 @@ func (f *Favorites) Update(msg tea.Msg) tea.Cmd {
 				// Delete offline cache
 				if len(f.offlineList) > 0 && f.cursor < len(f.offlineList) {
 					entry := f.offlineList[f.cursor]
-					cache.DeleteCache(f.offlineDir, entry.Name)
+					_ = cache.DeleteCache(f.offlineDir, entry.Name)
 					f.loadData()
 					if f.cursor >= len(f.offlineList) && f.cursor > 0 {
 						f.cursor--
@@ -243,9 +242,9 @@ func (f *Favorites) Update(msg tea.Msg) tea.Cmd {
 			} else if len(items) > 0 && f.cursor < len(items) {
 				item := items[f.cursor]
 				if f.activeTab == TabFavorites {
-					f.cacheManager.RemoveFavoriteBySong(item.ToSong())
+					_ = f.cacheManager.RemoveFavoriteBySong(item.ToSong())
 				} else {
-					f.cacheManager.RemoveBlocklist(item.SongID)
+					_ = f.cacheManager.RemoveBlocklist(item.SongID)
 				}
 				f.loadData()
 				items = f.filteredItems()
@@ -431,8 +430,8 @@ func (f Favorites) View() string {
 
 				if i == f.cursor {
 					prefix := cursorStyle.Render("▸ ")
-					line := f.styles.ForegroundStyle.Copy().
-						Render(row)
+		line := f.styles.ForegroundStyle.
+			Render(row)
 					b.WriteString(prefix + line)
 				} else {
 					b.WriteString("  " + mutedStyle.Render(row))
@@ -477,8 +476,8 @@ func (f Favorites) View() string {
 
 			if i == f.cursor {
 				prefix := cursorStyle.Render("▸ ")
-				line := f.styles.ForegroundStyle.Copy().
-					Render(row)
+		line := f.styles.ForegroundStyle.
+			Render(row)
 				b.WriteString(prefix + line)
 			} else {
 				b.WriteString("  " + mutedStyle.Render(row))
@@ -524,8 +523,8 @@ func (f Favorites) View() string {
 	b.WriteString(centerStyled(helpText, contentWidth))
 
 	if f.toastMessage != "" {
-		toast := f.styles.CursorStyle.Copy().
-			Render(f.toastMessage)
+	toast := f.styles.CursorStyle.
+		Render(f.toastMessage)
 		b.WriteString("\n")
 		b.WriteString(centerStyled(toast, contentWidth))
 	}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -524,7 +525,7 @@ func handleCacheRecording(requests []CacheRequest) {
 
 		// Create block fetcher function
 		blockFetcher := func(st, br int) (cache.BlockInfo, error) {
-			block, err := rpAPI.GetBlock(nil)
+			block, err := rpAPI.GetBlock(context.TODO())
 			if err != nil {
 				return cache.BlockInfo{}, err
 			}
@@ -631,8 +632,8 @@ func handleOfflineMode(cacheName string, layoutOverride string) {
 			fmt.Printf("\nPlease enter 1-%d to select: ", len(caches))
 			reader := bufio.NewReader(os.Stdin)
 			line, _ := reader.ReadString('\n')
-			var choice int
-			fmt.Sscanf(strings.TrimSpace(line), "%d", &choice)
+	var choice int
+	_, _ = fmt.Sscanf(strings.TrimSpace(line), "%d", &choice)
 
 			if choice < 1 || choice > len(caches) {
 				fmt.Fprintf(os.Stderr, "Invalid selection.\n")
@@ -838,8 +839,8 @@ func parseAlarmTime(s string) (time.Time, error) {
 	for _, p := range patterns {
 		match := p.regex.FindStringSubmatch(s)
 		if len(match) >= 3 {
-			fmt.Sscanf(match[1], "%d", &hour)
-			fmt.Sscanf(match[2], "%d", &minute)
+		_, _ = fmt.Sscanf(match[1], "%d", &hour)
+		_, _ = fmt.Sscanf(match[2], "%d", &minute)
 
 			// Check for AM/PM
 			if len(match) >= 4 && match[3] != "" {
@@ -899,9 +900,7 @@ func handleAlarmMode(alarmTime time.Time) {
 
 	lastPrint := time.Now().Add(-1 * time.Second)
 
-	for {
-		select {
-		case <-ticker.C:
+	for range ticker.C {
 			now := time.Now()
 
 			// Check if alarm time reached
@@ -927,8 +926,7 @@ func handleAlarmMode(alarmTime time.Time) {
 				fmt.Fprintf(os.Stderr, "\r%c %s remaining  ", spinners[spinnerIdx%len(spinners)], timeStr)
 
 				spinnerIdx++
-				lastPrint = now
-			}
+		lastPrint = now
 		}
 	}
 }

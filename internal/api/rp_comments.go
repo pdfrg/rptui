@@ -90,7 +90,7 @@ func (c *RPCommentsClient) GetComments(songID int64, numComments int, order stri
 	}
 
 	var totalComments int
-	fmt.Sscanf(raw.TotalComments, "%d", &totalComments)
+	_, _ = fmt.Sscanf(raw.TotalComments, "%d", &totalComments)
 
 	comments := make([]Comment, 0, len(raw.Comments))
 	for _, rc := range raw.Comments {
@@ -159,7 +159,7 @@ func (c *RPCommentsClient) GetCommentsWithOffset(songID int64, numComments int, 
 	}
 
 	var totalComments int
-	fmt.Sscanf(raw.TotalComments, "%d", &totalComments)
+	_, _ = fmt.Sscanf(raw.TotalComments, "%d", &totalComments)
 
 	comments := make([]Comment, 0, len(raw.Comments))
 	for _, rc := range raw.Comments {
@@ -242,7 +242,7 @@ func stripHTML(html string) string {
 	// Decode numeric entities
 	text = htmlEntityPattern.ReplaceAllStringFunc(text, func(match string) string {
 		var code int
-		fmt.Sscanf(match, "&#%d;", &code)
+		_, _ = fmt.Sscanf(match, "&#%d;", &code)
 		if code > 0 && code < 0x10FFFF {
 			return string(rune(code))
 		}

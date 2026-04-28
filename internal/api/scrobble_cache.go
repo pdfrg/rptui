@@ -63,7 +63,7 @@ func (c *ScrobbleCache) Add(entry ScrobbleEntry) error {
 	var entries []ScrobbleEntry
 	data, err := os.ReadFile(c.cachePath())
 	if err == nil {
-		json.Unmarshal(data, &entries) // ignore parse errors, start fresh
+		_ = json.Unmarshal(data, &entries)
 	}
 
 	entries = append(entries, entry)
