@@ -34,7 +34,6 @@ type MPVBackend struct {
 	lastPlaybackPosition PlaybackPosition
 	socketPath           string
 	socketTimeout        time.Duration
-
 }
 
 // PlaybackPosition holds time and percent position

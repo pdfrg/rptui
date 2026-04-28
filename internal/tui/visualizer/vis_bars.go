@@ -103,8 +103,8 @@ func (v *Visualizer) interpolateColor(c1, c2 string, t float64) string {
 
 func parseHex(hex string) (int, int, int) {
 	if len(hex) == 7 && hex[0] == '#' {
-	var r, g, b int
-	_, _ = fmt.Sscanf(hex[1:], "%02x%02x%02x", &r, &g, &b)
+		var r, g, b int
+		_, _ = fmt.Sscanf(hex[1:], "%02x%02x%02x", &r, &g, &b)
 		return r, g, b
 	}
 	return 128, 128, 128

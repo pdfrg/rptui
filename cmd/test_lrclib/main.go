@@ -615,8 +615,8 @@ func fetchRPTracks(ctx context.Context, channelsStr string) []TestTrack {
 
 	for _, chStr := range channels {
 		chStr = strings.TrimSpace(chStr)
-	var ch int
-	_, _ = fmt.Sscanf(chStr, "%d", &ch)
+		var ch int
+		_, _ = fmt.Sscanf(chStr, "%d", &ch)
 
 		rpAPI := api.NewRadioParadiseAPI(ch, 3)
 		playlist, err := rpAPI.GetPlaylist(ctx)

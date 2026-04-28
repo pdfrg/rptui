@@ -430,8 +430,8 @@ func (f Favorites) View() string {
 
 				if i == f.cursor {
 					prefix := cursorStyle.Render("▸ ")
-		line := f.styles.ForegroundStyle.
-			Render(row)
+					line := f.styles.ForegroundStyle.
+						Render(row)
 					b.WriteString(prefix + line)
 				} else {
 					b.WriteString("  " + mutedStyle.Render(row))
@@ -476,8 +476,8 @@ func (f Favorites) View() string {
 
 			if i == f.cursor {
 				prefix := cursorStyle.Render("▸ ")
-		line := f.styles.ForegroundStyle.
-			Render(row)
+				line := f.styles.ForegroundStyle.
+					Render(row)
 				b.WriteString(prefix + line)
 			} else {
 				b.WriteString("  " + mutedStyle.Render(row))
@@ -523,8 +523,8 @@ func (f Favorites) View() string {
 	b.WriteString(centerStyled(helpText, contentWidth))
 
 	if f.toastMessage != "" {
-	toast := f.styles.CursorStyle.
-		Render(f.toastMessage)
+		toast := f.styles.CursorStyle.
+			Render(f.toastMessage)
 		b.WriteString("\n")
 		b.WriteString(centerStyled(toast, contentWidth))
 	}

@@ -227,8 +227,8 @@ type Model struct {
 	isPlaying        bool
 	isPaused         bool
 	bottomViewMode   int
-	imageBase          string
-	skipWarningShown   bool // track if skip warning has been shown this session
+	imageBase        string
+	skipWarningShown bool // track if skip warning has been shown this session
 	mutedForBlocked  bool // MPV muted to silence a blocklisted last song
 
 	// Current song info
@@ -298,8 +298,6 @@ type Model struct {
 	artistArtHeight  int   // height in terminal rows
 
 	artistArtCache map[string]artistArtCacheEntry // keyed by lowercase artist name
-
-
 
 	// Custom Widgets
 	headerWidget     *widgets.Header
@@ -556,8 +554,8 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 		} else {
 			songIDs := make(map[int64]string)
 			for _, s := range songs {
-		var songID int64
-		_, _ = fmt.Sscanf(s.SongID, "%d", &songID)
+				var songID int64
+				_, _ = fmt.Sscanf(s.SongID, "%d", &songID)
 				if songID > 0 {
 					songIDs[songID] = s.Title
 				}
@@ -603,40 +601,40 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 	sp.Style = styles.AccentStyle
 
 	m := &Model{
-		config:                    cfg,
-		theme:                     theme,
-		styles:                    styles,
-		themeWatcher:              themeWatcher,
-		rpAPI:                     rpAPI,
-		authClient:                authClient,
-		commentsClient:            commentsClient,
-		ratingsClient:             ratingsClient,
-		lyricsClient:              lyricsClient,
-		wikipediaClient:           wikipediaClient,
-		discogsClient:             discogsClient,
-		musicbrainzClient:         musicbrainzClient,
-		theaudiodbClient:          theaudiodbClient,
-		lidarrClient:              lidarrClient,
-		mpvBackend:                mpvBackend,
-		cacheManager:              cacheManager,
-		scrobbler:                 scrobbler,
-		bottomViewMode:            ViewPlaylist,
-		headerWidget:              headerWidget,
-		footerWidget:              footerWidget,
-		nowPlayingWidget:          nowPlayingWidget,
-		playlistWidget:            playlistWidget,
-		optionsModal:              optionsModal,
-		skipWarningModal:          skipWarningModal,
-		viewport:                  viewport,
-		help:                      help,
-		spinner:                   sp,
-		cellRatio:                 cellRatio,
-	imageProtocol: imageProtocol,
-		downloadResults:           make(chan favoriteDownloadMsg, 1),
-		jukeboxMode:               startJukebox,
-		jukeboxBatchSize:          10,
-		commentsPerPage:           20,
-		networkTransitionModal:    nil,
+		config:                 cfg,
+		theme:                  theme,
+		styles:                 styles,
+		themeWatcher:           themeWatcher,
+		rpAPI:                  rpAPI,
+		authClient:             authClient,
+		commentsClient:         commentsClient,
+		ratingsClient:          ratingsClient,
+		lyricsClient:           lyricsClient,
+		wikipediaClient:        wikipediaClient,
+		discogsClient:          discogsClient,
+		musicbrainzClient:      musicbrainzClient,
+		theaudiodbClient:       theaudiodbClient,
+		lidarrClient:           lidarrClient,
+		mpvBackend:             mpvBackend,
+		cacheManager:           cacheManager,
+		scrobbler:              scrobbler,
+		bottomViewMode:         ViewPlaylist,
+		headerWidget:           headerWidget,
+		footerWidget:           footerWidget,
+		nowPlayingWidget:       nowPlayingWidget,
+		playlistWidget:         playlistWidget,
+		optionsModal:           optionsModal,
+		skipWarningModal:       skipWarningModal,
+		viewport:               viewport,
+		help:                   help,
+		spinner:                sp,
+		cellRatio:              cellRatio,
+		imageProtocol:          imageProtocol,
+		downloadResults:        make(chan favoriteDownloadMsg, 1),
+		jukeboxMode:            startJukebox,
+		jukeboxBatchSize:       10,
+		commentsPerPage:        20,
+		networkTransitionModal: nil,
 	}
 
 	// Determine layout mode
@@ -1107,8 +1105,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.playlistWidget.UpdateStyles(m.styles)
 				m.headerWidget.UpdateStyles(m.styles.Header)
 				m.footerWidget.UpdateStyles(m.styles.AccentStyle, m.styles.MutedStyle)
-	m.viewport.Style = m.styles.ForegroundStyle.
-		Background(m.styles.BackgroundStyle.GetBackground())
+				m.viewport.Style = m.styles.ForegroundStyle.
+					Background(m.styles.BackgroundStyle.GetBackground())
 				m.spinner.Style = m.styles.AccentStyle
 			}
 		}
@@ -1456,9 +1454,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.headerWidget.UpdateStyles(m.styles.Header)
 		m.footerWidget.UpdateStyles(m.styles.AccentStyle, m.styles.MutedStyle)
 
-	m.viewport.Style = m.styles.ForegroundStyle.
-		Background(m.styles.BackgroundStyle.GetBackground())
-	m.spinner.Style = m.styles.AccentStyle
+		m.viewport.Style = m.styles.ForegroundStyle.
+			Background(m.styles.BackgroundStyle.GetBackground())
+		m.spinner.Style = m.styles.AccentStyle
 
 		// Update visualizer theme colors
 		if m.vis != nil {
@@ -1722,9 +1720,9 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.vis.RequestRefresh()
 			cmds = append(cmds, tickVisCmd())
 			cmds = append(cmds, setStatus(&m, "Visualizer: "+source, false))
-	} else if m.vis != nil {
-		m.vis.Close()
-	}
+		} else if m.vis != nil {
+			m.vis.Close()
+		}
 
 		// Fetch lyrics/artist if needed when entering those views
 		if m.bottomViewMode == ViewLyrics || m.bottomViewMode == ViewSyncedLyrics {
@@ -2854,8 +2852,8 @@ func (m Model) handleBlockFetched(msg blockFetchedMsg) (tea.Model, tea.Cmd) {
 
 			// Unmute if we muted for a blocked song, and skip past it
 			if m.mutedForBlocked {
-	_ = m.mpvBackend.SetMute(false)
-	_ = m.mpvBackend.SkipNext()
+				_ = m.mpvBackend.SetMute(false)
+				_ = m.mpvBackend.SkipNext()
 				m.mutedForBlocked = false
 				logger.Printf("Unmuted and skipped past blocklisted song")
 			}
@@ -3208,12 +3206,12 @@ func (m Model) handleProgressTick(msg progressTickMsg) (tea.Model, tea.Cmd) {
 			} else if skip.fading {
 				// User seeked backward past fade start — restore volume
 				skip.fading = false
-	_ = m.mpvBackend.SetVolume(100.0)
+				_ = m.mpvBackend.SetVolume(100.0)
 				cmds = append(cmds, setStatus(&m, "", false))
 			}
 		} else {
 			// Song changed while skip was pending — restore volume and clear
-	_ = m.mpvBackend.SetVolume(100.0)
+			_ = m.mpvBackend.SetVolume(100.0)
 			m.pendingDJSkip = nil
 		}
 	}
@@ -4000,8 +3998,8 @@ func (m *Model) updateBottomView() {
 				// Format: <time> <username>
 				// <quoted text if any>
 				// <message>
-	timeStyle := m.styles.AccentStyle
-	userStyle := m.styles.CursorStyle
+				timeStyle := m.styles.AccentStyle
+				userStyle := m.styles.CursorStyle
 				header := timeStyle.Render(c.PostedTime) + " " + userStyle.Render(c.Username)
 				lines = append(lines, header)
 				if c.QuotedText != "" {
@@ -5015,8 +5013,8 @@ func (m Model) View() tea.View {
 			if !fits || suboptimal {
 				// Store state in package variables for persistence across renders
 				layoutCheckDone = true
-	layoutPromptActive = true
-	fittingLayouts := getFittingLayouts(m.width, m.height)
+				layoutPromptActive = true
+				fittingLayouts := getFittingLayouts(m.width, m.height)
 
 				// Build prompt with initial choice + warning + fitting options + quit
 				var prompt string

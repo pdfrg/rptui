@@ -370,7 +370,7 @@ func NewThemeStyles(theme *ColorTheme, transparentBackground bool, disableTheme 
 	if transparentBackground || disableTheme {
 		_, termBG, _, err := GetTerminalColors()
 		if err == nil && termBG != "" && len(termBG) == 7 && termBG[0] == '#' {
-		progressBarBg = termBG
+			progressBarBg = termBG
 		} else {
 			progressBarBg = "#222222"
 		}

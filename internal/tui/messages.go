@@ -170,8 +170,8 @@ func (m Model) checkStationsCmd() tea.Msg {
 	chMap := make(map[int]string)
 	for _, ch := range rpChannels {
 		if ch.Downloadable {
-		var id int
-		_, _ = fmt.Sscanf(ch.Chan, "%d", &id)
+			var id int
+			_, _ = fmt.Sscanf(ch.Chan, "%d", &id)
 			chMap[id] = ch.Title
 		}
 	}
