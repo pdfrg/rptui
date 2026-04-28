@@ -632,8 +632,8 @@ func handleOfflineMode(cacheName string, layoutOverride string) {
 			fmt.Printf("\nPlease enter 1-%d to select: ", len(caches))
 			reader := bufio.NewReader(os.Stdin)
 			line, _ := reader.ReadString('\n')
-	var choice int
-	_, _ = fmt.Sscanf(strings.TrimSpace(line), "%d", &choice)
+			var choice int
+			_, _ = fmt.Sscanf(strings.TrimSpace(line), "%d", &choice)
 
 			if choice < 1 || choice > len(caches) {
 				fmt.Fprintf(os.Stderr, "Invalid selection.\n")
@@ -839,8 +839,8 @@ func parseAlarmTime(s string) (time.Time, error) {
 	for _, p := range patterns {
 		match := p.regex.FindStringSubmatch(s)
 		if len(match) >= 3 {
-		_, _ = fmt.Sscanf(match[1], "%d", &hour)
-		_, _ = fmt.Sscanf(match[2], "%d", &minute)
+			_, _ = fmt.Sscanf(match[1], "%d", &hour)
+			_, _ = fmt.Sscanf(match[2], "%d", &minute)
 
 			// Check for AM/PM
 			if len(match) >= 4 && match[3] != "" {
@@ -901,32 +901,32 @@ func handleAlarmMode(alarmTime time.Time) {
 	lastPrint := time.Now().Add(-1 * time.Second)
 
 	for range ticker.C {
-			now := time.Now()
+		now := time.Now()
 
-			// Check if alarm time reached
-			if now.After(alarmTime) || now.Equal(alarmTime) {
-				fmt.Fprintln(os.Stderr, "\rAlarm time reached! Starting Radio Paradise...")
-				return
+		// Check if alarm time reached
+		if now.After(alarmTime) || now.Equal(alarmTime) {
+			fmt.Fprintln(os.Stderr, "\rAlarm time reached! Starting Radio Paradise...")
+			return
+		}
+
+		// Print spinner every second
+		if now.Sub(lastPrint) >= time.Second {
+			remaining := alarmTime.Sub(now)
+			hrs := int(remaining.Hours())
+			mins := int(remaining.Minutes()) % 60
+			secs := int(remaining.Seconds()) % 60
+
+			var timeStr string
+			if hrs > 0 {
+				timeStr = fmt.Sprintf("%d:%02d:%02d", hrs, mins, secs)
+			} else {
+				timeStr = fmt.Sprintf("%d:%02d", mins, secs)
 			}
 
-			// Print spinner every second
-			if now.Sub(lastPrint) >= time.Second {
-				remaining := alarmTime.Sub(now)
-				hrs := int(remaining.Hours())
-				mins := int(remaining.Minutes()) % 60
-				secs := int(remaining.Seconds()) % 60
+			fmt.Fprintf(os.Stderr, "\r%c %s remaining  ", spinners[spinnerIdx%len(spinners)], timeStr)
 
-				var timeStr string
-				if hrs > 0 {
-					timeStr = fmt.Sprintf("%d:%02d:%02d", hrs, mins, secs)
-				} else {
-					timeStr = fmt.Sprintf("%d:%02d", mins, secs)
-				}
-
-				fmt.Fprintf(os.Stderr, "\r%c %s remaining  ", spinners[spinnerIdx%len(spinners)], timeStr)
-
-				spinnerIdx++
-		lastPrint = now
+			spinnerIdx++
+			lastPrint = now
 		}
 	}
 }

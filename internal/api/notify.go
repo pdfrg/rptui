@@ -100,8 +100,8 @@ func sendMacOSNotification(title, body string, withImage bool, cfg *config.Confi
 	go func() {
 		cmd := exec.Command("osascript", "-e", script)
 		cmd.Stderr = os.Stderr
-	_ = cmd.Start()
-	_ = cmd.Wait()
+		_ = cmd.Start()
+		_ = cmd.Wait()
 	}()
 }
 
