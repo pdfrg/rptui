@@ -72,6 +72,8 @@ See [SCREENSHOTS.md](SCREENSHOTS.md) for the full gallery, including all built-i
 - **Go 1.26+** — To build from source
 - **Any NerdFont** — For proper display of symbols
 
+If you are unsure how to install mpv or a NerdFont, please see [HELP.md](HELP.md).
+
 ### Recommended Dependencies (Linux)
 
 - **mpv-mpris** — MPRIS support for media keys and desktop integration
