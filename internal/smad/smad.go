@@ -116,8 +116,7 @@ func (d *DJChecker) Detect(ctx context.Context, cachePath string, audioPath stri
 		result.Artist = artist
 		result.Title = title
 		result.SongPath = cachePath
-		if err := d.saveCache(cacheKey, &result); err != nil {
-		}
+		_ = d.saveCache(cacheKey, &result)
 		return result.SpeechStart, result.SpeechEnd, result.Confidence, result.HasSpeech, nil
 	}
 

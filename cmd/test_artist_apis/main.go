@@ -943,7 +943,7 @@ func printSummary(results []ArtistResult) {
 			mbFail++
 		} else {
 			mbOK++
-			if strings.ToLower(r.MusicBrainz.MatchedName) != strings.ToLower(r.Artist) {
+			if !strings.EqualFold(r.MusicBrainz.MatchedName, r.Artist) {
 				mbWrongMatch++
 			}
 		}

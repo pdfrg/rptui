@@ -33,10 +33,15 @@ jobs:
       - name: Run tests
         run: go test ./...
 
-      - name: Run go vet
-        run: go vet ./...
+    - name: Run go vet
+      run: go vet ./...
 
-      - name: Check formatting
+    - name: Run golangci-lint
+      uses: golangci/golangci-lint-action@v7
+      with:
+        version: v1.64
+
+    - name: Check formatting
         run: |
           if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
             echo "The following files need to be formatted:"

@@ -634,10 +634,10 @@ func fetchRPArtists(ctx context.Context, channelsStr string) map[string][]string
 
 	for _, chStr := range channels {
 		chStr = strings.TrimSpace(chStr)
-		var ch int
-		fmt.Sscanf(chStr, "%d", &ch)
+	var ch int
+	_, _ = fmt.Sscanf(chStr, "%d", &ch)
 
-		rpAPI := api.NewRadioParadiseAPI(ch, 3)
+	rpAPI := api.NewRadioParadiseAPI(ch, 3)
 		playlist, err := rpAPI.GetPlaylist(ctx)
 		if err != nil {
 			fmt.Printf("Failed to fetch playlist for channel %d: %v\n", ch, err)

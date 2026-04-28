@@ -78,7 +78,7 @@ func sendLinuxNotification(title, body string, withImage bool, cfg *config.Confi
 	go func() {
 		cmd := exec.Command("notify-send", args...)
 		stderr, _ := cmd.StderrPipe()
-		cmd.Start()
+		_ = cmd.Start()
 		err := cmd.Wait()
 		if err != nil {
 			errBytes, _ := io.ReadAll(stderr)
@@ -100,8 +100,8 @@ func sendMacOSNotification(title, body string, withImage bool, cfg *config.Confi
 	go func() {
 		cmd := exec.Command("osascript", "-e", script)
 		cmd.Stderr = os.Stderr
-		cmd.Start()
-		cmd.Wait()
+	_ = cmd.Start()
+	_ = cmd.Wait()
 	}()
 }
 
@@ -154,7 +154,7 @@ $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
 			notifyLogger.Printf("Windows notification: title='%s', withImage=%v, imagePath='%s'", title, withImage, usedImagePath)
 		}
 		stderr, _ := cmd.StderrPipe()
-		cmd.Start()
+		_ = cmd.Start()
 		err := cmd.Wait()
 		if err != nil {
 			errBytes, _ := io.ReadAll(stderr)

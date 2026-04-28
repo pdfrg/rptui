@@ -170,8 +170,8 @@ func (m Model) checkStationsCmd() tea.Msg {
 	chMap := make(map[int]string)
 	for _, ch := range rpChannels {
 		if ch.Downloadable {
-			var id int
-			fmt.Sscanf(ch.Chan, "%d", &id)
+		var id int
+		_, _ = fmt.Sscanf(ch.Chan, "%d", &id)
 			chMap[id] = ch.Title
 		}
 	}
@@ -330,30 +330,6 @@ func startJukeboxCmd() tea.Cmd {
 func startOfflineCmd() tea.Cmd {
 	return func() tea.Msg {
 		return offlineStartMsg{}
-	}
-}
-
-// fetchCommentsCmd fetches comments for the given song
-func fetchCommentsCmd(client *api.RPCommentsClient, songID int64) tea.Cmd {
-	return func() tea.Msg {
-		if client == nil || songID == 0 {
-			return commentsFetchedMsg{songID: songID, err: fmt.Errorf("no comments available")}
-		}
-		resp, err := client.GetComments(songID, 20, "oldest")
-		if err != nil {
-			return commentsFetchedMsg{songID: songID, err: err}
-		}
-		comments := make([]*api.Comment, len(resp.Comments))
-		for i := range resp.Comments {
-			comments[i] = &resp.Comments[i]
-		}
-		return commentsFetchedMsg{
-			songID:   songID,
-			comments: comments,
-			total:    resp.TotalComments,
-			more:     resp.MoreComments,
-			offset:   resp.MoreOffset,
-		}
 	}
 }
 

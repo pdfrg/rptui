@@ -688,12 +688,14 @@ func FormatDuration(seconds int64) string {
 
 // FormatBytes formats bytes into human-readable string
 func FormatBytes(b int64) string {
-	if b < 1024 {
+	switch {
+	case b < 1024:
 		return fmt.Sprintf("%d B", b)
-	} else if b < 1024*1024 {
+	case b < 1024*1024:
 		return fmt.Sprintf("%.1f KB", float64(b)/1024)
-	} else if b < 1024*1024*1024 {
+	case b < 1024*1024*1024:
 		return fmt.Sprintf("%.1f MB", float64(b)/(1024*1024))
+	default:
+		return fmt.Sprintf("%.2f GB", float64(b)/(1024*1024*1024))
 	}
-	return fmt.Sprintf("%.2f GB", float64(b)/(1024*1024*1024))
 }

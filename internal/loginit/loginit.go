@@ -16,7 +16,7 @@ var LogFile string
 
 func init() {
 	stateDir := filepath.Join(xdg.StateHome, "rptui")
-	os.MkdirAll(stateDir, 0755)
+	_ = os.MkdirAll(stateDir, 0755)
 	LogFile = filepath.Join(stateDir, "rptui.log")
 
 	f, err := os.OpenFile(LogFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)

@@ -283,7 +283,8 @@ func NewThemeStyles(theme *ColorTheme, transparentBackground bool, disableTheme 
 	// Even if the hex exactly matches your terminal background, lipgloss will
 	// unconditionally overdraw every character cell with a solid rectangle.
 
-	if disableTheme {
+	switch {
+	case disableTheme:
 		// Get terminal colors
 		termFG, _, palette, err := GetTerminalColors()
 		if err != nil {
@@ -316,7 +317,7 @@ func NewThemeStyles(theme *ColorTheme, transparentBackground bool, disableTheme 
 		cursorStr = palette[cursorIdx]
 		accentStr = palette[accentIdx]
 		mutedStr = palette[mutedIdx]
-	} else if transparentBackground {
+	case transparentBackground:
 		// Use terminal's default background only (keep theme foreground colors)
 		// DO NOT query terminal background color at all
 		fg = lipgloss.Color(theme.Foreground)
@@ -329,7 +330,7 @@ func NewThemeStyles(theme *ColorTheme, transparentBackground bool, disableTheme 
 		accentStr = theme.Accent
 		mutedStr = theme.Muted
 		cursorStr = theme.Cursor
-	} else {
+	default:
 		bg = lipgloss.Color(theme.Background)
 		fg = lipgloss.Color(theme.Foreground)
 		accent = lipgloss.Color(theme.Accent)
@@ -343,7 +344,7 @@ func NewThemeStyles(theme *ColorTheme, transparentBackground bool, disableTheme 
 		cursorStr = theme.Cursor
 	}
 
-	// Build styles
+	// Build base styles WITHOUT background first
 	backgroundStyle := lipgloss.NewStyle()
 	foregroundStyle := lipgloss.NewStyle().Foreground(fg)
 	accentStyle := lipgloss.NewStyle().Foreground(accent)
@@ -351,41 +352,6 @@ func NewThemeStyles(theme *ColorTheme, transparentBackground bool, disableTheme 
 	cursorStyle := lipgloss.NewStyle().Foreground(cursor)
 	headerStyle := lipgloss.NewStyle().Foreground(muted).Bold(true)
 	footerStyle := lipgloss.NewStyle().Foreground(accent).Bold(true)
-
-	// Only apply background when we are actually using a solid theme background
-	if _, isNoColor := bg.(lipgloss.NoColor); !isNoColor {
-		backgroundStyle = backgroundStyle.Background(bg)
-		foregroundStyle = foregroundStyle.Background(bg)
-		accentStyle = accentStyle.Background(bg)
-		mutedStyle = mutedStyle.Background(bg)
-		cursorStyle = cursorStyle.Background(bg)
-		headerStyle = headerStyle.Background(bg)
-		footerStyle = footerStyle.Background(bg)
-	}
-
-	// Special case: query terminal background ONLY for progress bar usage
-	// We never use this anywhere else in styles - only for progress bar empty state
-	progressBarBg := ""
-	if transparentBackground || disableTheme {
-		_, termBG, _, err := GetTerminalColors()
-		if err == nil && termBG != "" && len(termBG) == 7 && termBG[0] == '#' {
-			progressBarBg = termBG
-		} else {
-			// Neutral fallback that looks acceptable on all background shades
-			progressBarBg = "#222222"
-		}
-	} else {
-		progressBarBg = bgStr
-	}
-
-	// Build base styles WITHOUT background first
-	backgroundStyle = lipgloss.NewStyle()
-	foregroundStyle = lipgloss.NewStyle().Foreground(fg)
-	accentStyle = lipgloss.NewStyle().Foreground(accent)
-	mutedStyle = lipgloss.NewStyle().Foreground(muted)
-	cursorStyle = lipgloss.NewStyle().Foreground(cursor)
-	headerStyle = lipgloss.NewStyle().Foreground(muted).Bold(true)
-	footerStyle = lipgloss.NewStyle().Foreground(accent).Bold(true)
 
 	// ONLY add background when we are NOT in terminal default modes
 	// In lipgloss v2 there is NO other way to get proper terminal background
@@ -398,6 +364,18 @@ func NewThemeStyles(theme *ColorTheme, transparentBackground bool, disableTheme 
 		cursorStyle = cursorStyle.Background(bg)
 		headerStyle = headerStyle.Background(bg)
 		footerStyle = footerStyle.Background(bg)
+	}
+
+	progressBarBg := ""
+	if transparentBackground || disableTheme {
+		_, termBG, _, err := GetTerminalColors()
+		if err == nil && termBG != "" && len(termBG) == 7 && termBG[0] == '#' {
+		progressBarBg = termBG
+		} else {
+			progressBarBg = "#222222"
+		}
+	} else {
+		progressBarBg = bgStr
 	}
 
 	return &ThemeStyles{

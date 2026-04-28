@@ -245,7 +245,7 @@ func (r *RadioParadiseAPI) ParseBlockSongs(blockData *BlockResponse) ([]*models.
 	keys := make([]int, 0, len(blockSongs))
 	for key := range blockSongs {
 		var k int
-		fmt.Sscanf(key, "%d", &k)
+		_, _ = fmt.Sscanf(key, "%d", &k)
 		keys = append(keys, k)
 	}
 

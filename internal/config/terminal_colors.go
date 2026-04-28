@@ -114,12 +114,9 @@ func (t *TerminalColors) queryTerminalColors() {
 }
 
 func (t *TerminalColors) queryTermenv() {
-	// Try termenv for default fg/bg (OSC 10/11)
-	// First try with stdout (works in some terminals)
 	output := termenv.NewOutput(os.Stdout)
 
-	// First try to get TTY explicitly
-	tty := output.TTY()
+	tty, _ := output.Writer().(*os.File)
 	if tty != nil {
 		// Use TTY for queries - this is what works in Kitty!
 		ttyOutput := termenv.NewOutput(tty)
@@ -194,7 +191,7 @@ func (t *TerminalColors) queryPaletteFromEnv() {
 // queryPaletteFromTTY queries the terminal's palette colors via OSC 4
 func (t *TerminalColors) queryPaletteFromTTY() {
 	output := termenv.NewOutput(os.Stdout)
-	tty := output.TTY()
+	tty, _ := output.Writer().(*os.File)
 	if tty == nil {
 		return
 	}
@@ -209,7 +206,7 @@ func (t *TerminalColors) queryPaletteFromTTY() {
 }
 
 // queryPaletteColor sends OSC 4 query for a specific color index and reads the response
-func queryPaletteColor(tty termenv.File, index int) string {
+func queryPaletteColor(tty *os.File, index int) string {
 	// Get the underlying file descriptor for termios operations
 	fd := int(tty.Fd())
 
@@ -219,7 +216,7 @@ func queryPaletteColor(tty termenv.File, index int) string {
 		// Fall back to without raw mode if it fails
 		return queryPaletteColorNoRaw(tty, index)
 	}
-	defer term.Restore(fd, oldState)
+	defer func() { _ = term.Restore(fd, oldState) }()
 
 	// Send OSC 4;n;? query - ask terminal for color at index n
 	query := fmt.Sprintf("\x1b]4;%d;?\x1b\\", index)
@@ -243,7 +240,7 @@ func queryPaletteColor(tty termenv.File, index int) string {
 }
 
 // queryPaletteColorNoRaw is a fallback when we can't set raw mode
-func queryPaletteColorNoRaw(tty termenv.File, index int) string {
+func queryPaletteColorNoRaw(tty *os.File, index int) string {
 	query := fmt.Sprintf("\x1b]4;%d;?\x1b\\", index)
 	_, err := tty.Write([]byte(query))
 	if err != nil {

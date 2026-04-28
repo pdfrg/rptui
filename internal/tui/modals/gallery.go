@@ -199,9 +199,8 @@ func (g *Gallery) HandleImageLoaded(msg GalleryImageLoadedMsg) tea.Cmd {
 
 // Update handles messages
 func (g *Gallery) Update(msg tea.Msg) tea.Cmd {
-	switch msg := msg.(type) {
-	case tea.KeyPressMsg:
-		switch msg.String() {
+	if key, ok := msg.(tea.KeyPressMsg); ok {
+		switch key.String() {
 		case "esc", "q":
 			return func() tea.Msg { return GalleryMsg{Closed: true} }
 		case "left", "h", "p":

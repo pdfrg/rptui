@@ -58,13 +58,18 @@ func Setup(scriptPath, cacheDir string) error {
 		cmd := exec.Command(pythonPath, "-m", "venv", venvDir)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			if runtime.GOOS == "windows" {
-				cmd = exec.Command("py", "-m", "venv", venvDir)
-			} else {
-				return fmt.Errorf("failed to create venv: %w (try installing python3-venv)", err)
+	if err := cmd.Run(); err != nil {
+		if runtime.GOOS == "windows" {
+			cmd = exec.Command("py", "-m", "venv", venvDir)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("failed to create venv with py: %w", err)
 			}
+		} else {
+			return fmt.Errorf("failed to create venv: %w (try installing python3-venv)", err)
 		}
+	}
 		fmt.Println("Virtual environment created.")
 	}
 

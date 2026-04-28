@@ -34,8 +34,7 @@ type MPVBackend struct {
 	lastPlaybackPosition PlaybackPosition
 	socketPath           string
 	socketTimeout        time.Duration
-	monitoringStop       chan struct{}
-	monitoringDone       chan struct{}
+
 }
 
 // PlaybackPosition holds time and percent position
@@ -87,7 +86,7 @@ func (m *MPVBackend) Start(urls []string) error {
 	defer m.mu.Unlock()
 
 	// Stop any existing process
-	m.stopLocked()
+	_ = m.stopLocked()
 
 	// Ensure socket directory exists (Unix only; Windows named pipes don't need directories)
 	if runtime.GOOS != "windows" {
@@ -156,7 +155,7 @@ func (m *MPVBackend) Start(urls []string) error {
 	// when MPV exits naturally (end of playlist). Without this,
 	// IsRunning() returns true forever after natural exit.
 	go func() {
-		m.process.Wait()
+		_ = m.process.Wait()
 		logger.Printf("MPV process exited naturally")
 	}()
 
@@ -183,8 +182,8 @@ func (m *MPVBackend) Stop() error {
 // stopLocked stops playback (must be called with lock held)
 func (m *MPVBackend) stopLocked() error {
 	if m.process != nil {
-		m.process.Process.Kill()
-		m.process.Wait()
+		_ = m.process.Process.Kill()
+		_ = m.process.Wait()
 		m.process = nil
 	}
 	m.currentURLs = nil
@@ -561,8 +560,8 @@ func (m *MPVBackend) sendIPCCommandLocked(cmd IPCCommand) (*IPCResponse, error) 
 	}
 	defer conn.Close()
 
-	conn.SetReadDeadline(time.Now().Add(m.socketTimeout))
-	conn.SetWriteDeadline(time.Now().Add(m.socketTimeout))
+	_ = conn.SetReadDeadline(time.Now().Add(m.socketTimeout))
+	_ = conn.SetWriteDeadline(time.Now().Add(m.socketTimeout))
 
 	// Send command
 	cmdData, err := json.Marshal(cmd)
@@ -626,7 +625,7 @@ func (m *MPVBackend) Restart() error {
 	copy(urls, m.currentURLs)
 
 	// Stop current process
-	m.stopLocked()
+	_ = m.stopLocked()
 
 	// Start with same URLs
 	return m.Start(urls)

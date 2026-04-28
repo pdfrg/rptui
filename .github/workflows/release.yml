@@ -18,12 +18,19 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: '1.26'
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.26'
 
-      - name: Run GoReleaser
+    - name: Verify version injection
+      run: |
+        go build -ldflags "-X main.Version=test-version-check" -o /tmp/rptui-test ./cmd/rptui
+        OUTPUT=$(/tmp/rptui-test --version 2>&1)
+        echo "Reported version: $OUTPUT"
+        echo "$OUTPUT" | grep -q "test-version-check" || (echo "ERROR: Version injection failed!" && exit 1)
+
+    - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v5
         with:
           distribution: goreleaser

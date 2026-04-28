@@ -260,7 +260,9 @@ func (c *Config) Save() error {
 	}
 
 	header := []byte("# rptui configuration file\n\n")
-	output := append(header, data...)
+	output := make([]byte, len(header)+len(data))
+	copy(output, header)
+	copy(output[len(header):], data)
 
 	if err := os.WriteFile(c.path, output, 0644); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)

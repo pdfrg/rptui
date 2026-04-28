@@ -128,18 +128,12 @@ var layoutNames = map[int]string{
 var (
 	layoutPromptActive bool
 	layoutCheckDone    bool
-	layoutPromptWidth  int
-	layoutPromptHeight int
-	layoutPromptLayout string
 )
 
 // ResetLayoutPrompt resets the package-level layout prompt state
 func ResetLayoutPrompt() {
 	layoutPromptActive = false
 	layoutCheckDone = false
-	layoutPromptWidth = 0
-	layoutPromptHeight = 0
-	layoutPromptLayout = ""
 }
 
 // Layout requirements (width x height in terminal cells)
@@ -233,9 +227,8 @@ type Model struct {
 	isPlaying        bool
 	isPaused         bool
 	bottomViewMode   int
-	imageBase        string
-	imageCounter     int  // for unique image IDs
-	skipWarningShown bool // track if skip warning has been shown this session
+	imageBase          string
+	skipWarningShown   bool // track if skip warning has been shown this session
 	mutedForBlocked  bool // MPV muted to silence a blocklisted last song
 
 	// Current song info
@@ -306,9 +299,7 @@ type Model struct {
 
 	artistArtCache map[string]artistArtCacheEntry // keyed by lowercase artist name
 
-	// Track first image display for clearing strategy (sixel/iterm2)
-	albumArtFirstDisplayed    bool
-	artistThumbFirstDisplayed bool
+
 
 	// Custom Widgets
 	headerWidget     *widgets.Header
@@ -565,8 +556,8 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 		} else {
 			songIDs := make(map[int64]string)
 			for _, s := range songs {
-				var songID int64
-				fmt.Sscanf(s.SongID, "%d", &songID)
+		var songID int64
+		_, _ = fmt.Sscanf(s.SongID, "%d", &songID)
 				if songID > 0 {
 					songIDs[songID] = s.Title
 				}
@@ -600,7 +591,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 		viewport.WithHeight(15),
 	)
 	viewport.SoftWrap = true
-	viewport.Style = styles.ForegroundStyle.Copy().
+	viewport.Style = styles.ForegroundStyle.
 		Background(styles.BackgroundStyle.GetBackground())
 
 	// Initialize help
@@ -609,7 +600,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 	// Initialize spinner
 	sp := spinner.New()
 	sp.Spinner = spinner.Points
-	sp.Style = styles.AccentStyle.Copy()
+	sp.Style = styles.AccentStyle
 
 	m := &Model{
 		config:                    cfg,
@@ -640,9 +631,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 		help:                      help,
 		spinner:                   sp,
 		cellRatio:                 cellRatio,
-		imageProtocol:             imageProtocol,
-		albumArtFirstDisplayed:    false,
-		artistThumbFirstDisplayed: false,
+	imageProtocol: imageProtocol,
 		downloadResults:           make(chan favoriteDownloadMsg, 1),
 		jukeboxMode:               startJukebox,
 		jukeboxBatchSize:          10,
@@ -771,7 +760,7 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 		viewport.WithHeight(15),
 	)
 	viewport.SoftWrap = true
-	viewport.Style = styles.ForegroundStyle.Copy().
+	viewport.Style = styles.ForegroundStyle.
 		Background(styles.BackgroundStyle.GetBackground())
 
 	// Initialize help
@@ -780,7 +769,7 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 	// Initialize spinner
 	sp := spinner.New()
 	sp.Spinner = spinner.Points
-	sp.Style = styles.AccentStyle.Copy()
+	sp.Style = styles.AccentStyle
 
 	// Convert CachedSong to models.Song for playlist display
 	var modelSongs []*models.Song
@@ -935,7 +924,7 @@ func (m Model) fetchBlockCmd() tea.Msg {
 
 	blockID := 0
 	if block.BlockID != "" {
-		fmt.Sscanf(block.BlockID, "%d", &blockID)
+		_, _ = fmt.Sscanf(block.BlockID, "%d", &blockID)
 	}
 	return blockFetchedMsg{songs: songs, imageBase: imageBase, blockID: blockID}
 }
@@ -1118,9 +1107,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.playlistWidget.UpdateStyles(m.styles)
 				m.headerWidget.UpdateStyles(m.styles.Header)
 				m.footerWidget.UpdateStyles(m.styles.AccentStyle, m.styles.MutedStyle)
-				m.viewport.Style = m.styles.ForegroundStyle.Copy().
-					Background(m.styles.BackgroundStyle.GetBackground())
-				m.spinner.Style = m.styles.AccentStyle.Copy()
+	m.viewport.Style = m.styles.ForegroundStyle.
+		Background(m.styles.BackgroundStyle.GetBackground())
+				m.spinner.Style = m.styles.AccentStyle
 			}
 		}
 
@@ -1135,14 +1124,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.config.Bitrate = *msg.Bitrate
 			m.rpAPI.SetBitrate(*msg.Bitrate)
 		}
-		m.config.Save()
+		_ = m.config.Save()
 
 		if !needsRestart {
 			return handle(m, renderAlbumArtAfterDelay())
 		}
 
 		// Full restart: stop MPV, clear state, re-fetch fresh block
-		m.mpvBackend.Stop()
+		_ = m.mpvBackend.Stop()
 		m.songs = nil
 		m.currentSongIndex = 0
 		m.playlistStartIdx = 0
@@ -1467,9 +1456,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.headerWidget.UpdateStyles(m.styles.Header)
 		m.footerWidget.UpdateStyles(m.styles.AccentStyle, m.styles.MutedStyle)
 
-		m.viewport.Style = m.styles.ForegroundStyle.Copy().
-			Background(m.styles.BackgroundStyle.GetBackground())
-		m.spinner.Style = m.styles.AccentStyle.Copy()
+	m.viewport.Style = m.styles.ForegroundStyle.
+		Background(m.styles.BackgroundStyle.GetBackground())
+	m.spinner.Style = m.styles.AccentStyle
 
 		// Update visualizer theme colors
 		if m.vis != nil {
@@ -1494,7 +1483,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if key == "q" || key == "ctrl+c" {
 			m.cacheManager.WaitForDownloads(60 * time.Second)
 			if m.mpvBackend != nil {
-				m.mpvBackend.Stop()
+				_ = m.mpvBackend.Stop()
 			}
 			if m.themeWatcher != nil {
 				m.themeWatcher.Close()
@@ -1547,7 +1536,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			go m.scrobbler.Scrobble(context.Background(), *m.currentSong, m.songStartTime)
 		}
 		// Cleanup MPV before quitting
-		m.mpvBackend.Stop()
+		_ = m.mpvBackend.Stop()
 		if m.themeWatcher != nil {
 			m.themeWatcher.Close()
 		}
@@ -1643,7 +1632,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		userRating := 5
 		if m.currentSong.UserRating != "" && m.currentSong.UserRating != "0" {
-			fmt.Sscanf(m.currentSong.UserRating, "%d", &userRating)
+			_, _ = fmt.Sscanf(m.currentSong.UserRating, "%d", &userRating)
 		}
 		m.ratingModal = modals.NewRating(m.styles, m.currentSong.Title, m.currentSong.Artist, m.currentSong.Album, m.currentSong.Year, userRating)
 		m.activeModal = ModalRating
@@ -1733,12 +1722,9 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.vis.RequestRefresh()
 			cmds = append(cmds, tickVisCmd())
 			cmds = append(cmds, setStatus(&m, "Visualizer: "+source, false))
-		} else {
-			// Stop audio tap when leaving visualizer view
-			if m.vis != nil {
-				m.vis.Close()
-			}
-		}
+	} else if m.vis != nil {
+		m.vis.Close()
+	}
 
 		// Fetch lyrics/artist if needed when entering those views
 		if m.bottomViewMode == ViewLyrics || m.bottomViewMode == ViewSyncedLyrics {
@@ -1858,7 +1844,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 					cutoff := m.authClient.Chan99Cutoff()
 					userRating := 0
 					if m.currentSong.UserRating != "" && m.currentSong.UserRating != "0" {
-						fmt.Sscanf(m.currentSong.UserRating, "%d", &userRating)
+						_, _ = fmt.Sscanf(m.currentSong.UserRating, "%d", &userRating)
 					}
 					if userRating < cutoff {
 						// Song isn't an RP favorite yet — submit rating at cutoff
@@ -1879,7 +1865,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 					cutoff := m.authClient.Chan99Cutoff()
 					userRating := 0
 					if m.currentSong.UserRating != "" && m.currentSong.UserRating != "0" {
-						fmt.Sscanf(m.currentSong.UserRating, "%d", &userRating)
+						_, _ = fmt.Sscanf(m.currentSong.UserRating, "%d", &userRating)
 					}
 					if userRating < cutoff {
 						statusMsg = fmt.Sprintf("Downloading favorite, rating %d/10...", cutoff)
@@ -1969,7 +1955,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		var remaining time.Duration
 		if m.sleepTimerActive {
-			remaining = m.sleepTimerExpiresAt.Sub(time.Now())
+			remaining = time.Until(m.sleepTimerExpiresAt)
 		}
 		m.sleepTimerModal = modals.NewSleepTimer(m.styles, m.sleepTimerActive, remaining)
 		m.activeModal = ModalSleepTimer
@@ -2176,7 +2162,7 @@ func (m Model) handleOfflineStart() (tea.Model, tea.Cmd) {
 
 	logger.Printf("Offline mode: %d songs loaded from cache '%s'", len(m.offlineSongs), m.offlineCache)
 
-	m.mpvBackend.Start(urls)
+	_ = m.mpvBackend.Start(urls)
 	m.updatePlaylist()
 
 	logger.Printf("Offline mode: %d songs loaded from cache '%s'", len(m.offlineSongs), m.offlineCache)
@@ -2248,7 +2234,7 @@ func (m Model) switchToOfflineMode(cacheName string) (tea.Model, tea.Cmd) {
 
 	logger.Printf("Switched to offline mode: cache '%s' with %d songs", cacheName, len(songs))
 
-	m.mpvBackend.Start(urls)
+	_ = m.mpvBackend.Start(urls)
 	m.updatePlaylist()
 
 	return m, tea.Batch(
@@ -2278,7 +2264,7 @@ func (m Model) exitOfflineMode() (tea.Model, tea.Cmd) {
 	m.pollingNextBlock = false
 	m.lastBlockID = 0
 
-	m.mpvBackend.Stop()
+	_ = m.mpvBackend.Stop()
 
 	logger.Printf("Exited offline mode, fetching live stream")
 
@@ -2298,10 +2284,10 @@ func (m Model) switchStation(channel int) (tea.Model, tea.Cmd) {
 
 	m.config.Channel = channel
 	m.rpAPI.SetChannel(channel)
-	m.config.Save()
+	_ = m.config.Save()
 
 	// Full restart: stop MPV, clear state, re-fetch fresh block
-	m.mpvBackend.Stop()
+	_ = m.mpvBackend.Stop()
 	m.songs = nil
 	m.currentSongIndex = 0
 	m.playlistStartIdx = 0
@@ -2365,7 +2351,7 @@ func (m Model) toggleJukeboxMode() (tea.Model, tea.Cmd) {
 	})
 
 	// Stop current playback
-	m.mpvBackend.Stop()
+	_ = m.mpvBackend.Stop()
 
 	// Clear state
 	m.songs = nil
@@ -2407,7 +2393,7 @@ func (m Model) toggleJukeboxMode() (tea.Model, tea.Cmd) {
 // exitJukeboxMode stops jukebox mode and clears playlist
 func (m Model) exitJukeboxMode() (tea.Model, tea.Cmd) {
 	logger.Printf("DEBUG: exitJukeboxMode called, setting initialized=false")
-	m.mpvBackend.Stop()
+	_ = m.mpvBackend.Stop()
 
 	m.songs = nil
 	m.currentSongIndex = 0
@@ -2443,7 +2429,7 @@ func (m Model) exitJukeboxMode() (tea.Model, tea.Cmd) {
 
 	logger.Printf("Jukebox mode exited")
 
-	m.mpvBackend.SetVolume(100.0)
+	_ = m.mpvBackend.SetVolume(100.0)
 
 	return m, tea.Batch(
 		tickProgressCmd(),
@@ -2615,7 +2601,7 @@ func (m *Model) fadeVolumeIn(target float64, durationSecs float64) {
 		if vol > target {
 			vol = target
 		}
-		m.mpvBackend.SetVolume(vol)
+		_ = m.mpvBackend.SetVolume(vol)
 		time.Sleep(interval)
 	}
 }
@@ -2664,7 +2650,7 @@ func (m *Model) refillOfflineBatch() {
 		m.songs = append(m.songs, s)
 	}
 
-	m.mpvBackend.AppendToPlaylist(urls)
+	_ = m.mpvBackend.AppendToPlaylist(urls)
 	logger.Printf("Offline refill: added %d songs", addCount)
 }
 
@@ -2868,8 +2854,8 @@ func (m Model) handleBlockFetched(msg blockFetchedMsg) (tea.Model, tea.Cmd) {
 
 			// Unmute if we muted for a blocked song, and skip past it
 			if m.mutedForBlocked {
-				m.mpvBackend.SetMute(false)
-				m.mpvBackend.SkipNext()
+	_ = m.mpvBackend.SetMute(false)
+	_ = m.mpvBackend.SkipNext()
 				m.mutedForBlocked = false
 				logger.Printf("Unmuted and skipped past blocklisted song")
 			}
@@ -2985,7 +2971,7 @@ func (m *Model) handleQuitTick(msg quitTickMsg) (tea.Model, tea.Cmd) {
 
 	if remaining <= 0 {
 		if m.mpvBackend != nil {
-			m.mpvBackend.Stop()
+			_ = m.mpvBackend.Stop()
 		}
 		logger.Println("Quitting app after sleep timer")
 		return m, tea.Quit
@@ -3080,7 +3066,7 @@ func (m Model) handleProgressTick(msg progressTickMsg) (tea.Model, tea.Cmd) {
 			if m.cacheManager.IsBlocked(m.songs[m.currentSongIndex]) {
 				logger.Printf("Auto-skipping blocklisted: %s", m.songs[m.currentSongIndex].Title)
 				if m.currentSongIndex < len(m.songs)-1 {
-					m.mpvBackend.SkipNext()
+					_ = m.mpvBackend.SkipNext()
 				} else {
 					// Last song is blocked
 					if m.offlineMode {
@@ -3094,15 +3080,15 @@ func (m Model) handleProgressTick(msg progressTickMsg) (tea.Model, tea.Cmd) {
 						if cmd := m.queueNextFavorite(); cmd != nil {
 							cmds = append(cmds, cmd)
 						}
-						m.mpvBackend.SkipNext()
+						_ = m.mpvBackend.SkipNext()
 					} else {
 						// No favorites: mute, seek to 2 min remaining to trigger polling
-						m.mpvBackend.SetMute(true)
+						_ = m.mpvBackend.SetMute(true)
 						m.mutedForBlocked = true
 						songDur := float64(m.songs[m.currentSongIndex].Duration) / 1000.0
 						target := songDur - 120
 						if target > 0 {
-							m.mpvBackend.SeekRelative(target - m.playbackPos.TimePos)
+							_ = m.mpvBackend.SeekRelative(target - m.playbackPos.TimePos)
 						}
 						logger.Printf("Muted and seeked blocklisted song to trigger polling")
 					}
@@ -3166,7 +3152,7 @@ func (m Model) handleProgressTick(msg progressTickMsg) (tea.Model, tea.Cmd) {
 			if vol < 5 {
 				vol = 5
 			}
-			m.mpvBackend.SetVolume(vol)
+			_ = m.mpvBackend.SetVolume(vol)
 			m.crossfading = true
 		} else if m.crossfading && timeRemaining > crossfadeDur {
 			// Song just transitioned - fade back in
@@ -3218,16 +3204,16 @@ func (m Model) handleProgressTick(msg progressTickMsg) (tea.Model, tea.Cmd) {
 				if vol < 5 {
 					vol = 5
 				}
-				m.mpvBackend.SetVolume(vol)
+				_ = m.mpvBackend.SetVolume(vol)
 			} else if skip.fading {
 				// User seeked backward past fade start — restore volume
 				skip.fading = false
-				m.mpvBackend.SetVolume(100.0)
+	_ = m.mpvBackend.SetVolume(100.0)
 				cmds = append(cmds, setStatus(&m, "", false))
 			}
 		} else {
 			// Song changed while skip was pending — restore volume and clear
-			m.mpvBackend.SetVolume(100.0)
+	_ = m.mpvBackend.SetVolume(100.0)
 			m.pendingDJSkip = nil
 		}
 	}
@@ -3842,7 +3828,7 @@ func (m *Model) updateBottomView() {
 				endIdx = len(m.syncedLyrics)
 			}
 
-			cursorStyle := m.styles.CursorStyle.Copy().Bold(true)
+			cursorStyle := m.styles.CursorStyle.Bold(true)
 			var lines []string
 			for i := startIdx; i < endIdx; i++ {
 				if i == currentLineIdx {
@@ -4014,8 +4000,8 @@ func (m *Model) updateBottomView() {
 				// Format: <time> <username>
 				// <quoted text if any>
 				// <message>
-				timeStyle := m.styles.AccentStyle.Copy()
-				userStyle := m.styles.CursorStyle.Copy()
+	timeStyle := m.styles.AccentStyle
+	userStyle := m.styles.CursorStyle
 				header := timeStyle.Render(c.PostedTime) + " " + userStyle.Render(c.Username)
 				lines = append(lines, header)
 				if c.QuotedText != "" {
@@ -4355,7 +4341,7 @@ func (m *Model) songChangedCmds() tea.Cmd {
 			cutoff := m.authClient.Chan99Cutoff()
 			userRating := 0
 			if m.currentSong.UserRating != "" && m.currentSong.UserRating != "0" {
-				fmt.Sscanf(m.currentSong.UserRating, "%d", &userRating)
+				_, _ = fmt.Sscanf(m.currentSong.UserRating, "%d", &userRating)
 			}
 			if userRating >= cutoff {
 				m.downloadingFav = m.currentSong.EventID
@@ -4579,7 +4565,9 @@ func (m Model) fetchCommentsPageCmd(page int) tea.Cmd {
 			comments[i] = &resp.Comments[i]
 		}
 		// Append to existing comments
-		allComments := append(existing, comments...)
+		allComments := make([]*api.Comment, 0, len(existing)+len(comments))
+		allComments = append(allComments, existing...)
+		allComments = append(allComments, comments...)
 		return commentsFetchedMsg{
 			songID:   songID,
 			comments: allComments,
@@ -5027,11 +5015,8 @@ func (m Model) View() tea.View {
 			if !fits || suboptimal {
 				// Store state in package variables for persistence across renders
 				layoutCheckDone = true
-				layoutPromptActive = true
-				layoutPromptWidth = m.width
-				layoutPromptHeight = m.height
-				layoutPromptLayout = m.initialLayout
-				fittingLayouts := getFittingLayouts(m.width, m.height)
+	layoutPromptActive = true
+	fittingLayouts := getFittingLayouts(m.width, m.height)
 
 				// Build prompt with initial choice + warning + fitting options + quit
 				var prompt string
@@ -5275,7 +5260,7 @@ func (m Model) View() tea.View {
 
 	// Update sleep timer display on widget
 	if m.sleepTimerActive {
-		remaining := m.sleepTimerExpiresAt.Sub(time.Now())
+		remaining := time.Until(m.sleepTimerExpiresAt)
 		mins := int(remaining.Minutes()) + 1
 		if mins < 0 {
 			mins = 0
@@ -5502,14 +5487,6 @@ func (m Model) renderImagesCmd() tea.Cmd {
 		return nil
 	}
 
-	// Set flags synchronously at start (for subsequent calls)
-	if hasAlbumArt {
-		m.albumArtFirstDisplayed = true
-	}
-	if hasArtistArt {
-		m.artistThumbFirstDisplayed = true
-	}
-
 	// Build image render string
 	// For Kitty: need ClearAllString to remove previous images before rendering
 	var raw string
@@ -5633,16 +5610,16 @@ func (m Model) buildVisInfoOverlay() []string {
 	var lines []string
 
 	// Title
-	titleStyle := m.styles.ForegroundStyle.Copy().Bold(true)
+	titleStyle := m.styles.ForegroundStyle.Bold(true)
 	lines = append(lines, titleStyle.Render(song.Title))
 
 	// Artist
-	artistStyle := m.styles.AccentStyle.Copy()
+	artistStyle := m.styles.AccentStyle
 	lines = append(lines, artistStyle.Render(song.Artist))
 
 	// Album (year)
 	if song.Album != "" {
-		albumStyle := m.styles.MutedStyle.Copy()
+		albumStyle := m.styles.MutedStyle
 		album := song.Album
 		if song.Year != "" {
 			album = fmt.Sprintf("%s (%s)", album, song.Year)
@@ -5651,7 +5628,7 @@ func (m Model) buildVisInfoOverlay() []string {
 	}
 
 	// Station info
-	stationStyle := m.styles.CursorStyle.Copy()
+	stationStyle := m.styles.CursorStyle
 	stationName := config.StationNames[m.config.Channel]
 	lines = append(lines, stationStyle.Render(stationName))
 
@@ -5695,7 +5672,7 @@ func (m Model) getRPFavoriteIndicator() string {
 	cutoff := m.authClient.Chan99Cutoff()
 	userRating := 0
 	if m.currentSong.UserRating != "" && m.currentSong.UserRating != "0" {
-		fmt.Sscanf(m.currentSong.UserRating, "%d", &userRating)
+		_, _ = fmt.Sscanf(m.currentSong.UserRating, "%d", &userRating)
 	}
 	if userRating >= cutoff {
 		return "⬇️❔"

@@ -4,7 +4,6 @@ package widgets
 import (
 	"fmt"
 	"image/color"
-	"log"
 	"strings"
 	"time"
 
@@ -12,15 +11,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/pdfrg/rptui/internal/loginit"
 	"github.com/pdfrg/rptui/internal/models"
 )
-
-var widgetLogger *log.Logger
-
-func init() {
-	widgetLogger = loginit.InitLogger("[NowPlaying] ")
-}
 
 // darkenColor reduces the brightness of a hex color by the given factor (0.0-1.0)
 func darkenColor(hex string, factor float64) string {
@@ -28,9 +20,9 @@ func darkenColor(hex string, factor float64) string {
 		return hex
 	}
 	var r, g, b int
-	fmt.Sscanf(hex[1:3], "%x", &r)
-	fmt.Sscanf(hex[3:5], "%x", &g)
-	fmt.Sscanf(hex[5:7], "%x", &b)
+	_, _ = fmt.Sscanf(hex[1:3], "%x", &r)
+	_, _ = fmt.Sscanf(hex[3:5], "%x", &g)
+	_, _ = fmt.Sscanf(hex[5:7], "%x", &b)
 	r = int(float64(r) * (1 - factor))
 	g = int(float64(g) * (1 - factor))
 	b = int(float64(b) * (1 - factor))
@@ -43,9 +35,9 @@ func lightenColor(hex string, factor float64) string {
 		return hex
 	}
 	var r, g, b int
-	fmt.Sscanf(hex[1:3], "%x", &r)
-	fmt.Sscanf(hex[3:5], "%x", &g)
-	fmt.Sscanf(hex[5:7], "%x", &b)
+	_, _ = fmt.Sscanf(hex[1:3], "%x", &r)
+	_, _ = fmt.Sscanf(hex[3:5], "%x", &g)
+	_, _ = fmt.Sscanf(hex[5:7], "%x", &b)
 	r = min(255, int(float64(r)*(1+factor)))
 	g = min(255, int(float64(g)*(1+factor)))
 	b = min(255, int(float64(b)*(1+factor)))
@@ -232,7 +224,7 @@ func (n NowPlaying) View(
 	rating := song.Rating
 	if rating != "" && rating != "—" {
 		var avg float64
-		fmt.Sscanf(rating, "%f", &avg)
+		_, _ = fmt.Sscanf(rating, "%f", &avg)
 		if avg > 0 {
 			rating = fmt.Sprintf("%.1f", avg)
 		}
@@ -244,12 +236,12 @@ func (n NowPlaying) View(
 	var ratingLine string
 	if userRating != "" {
 		keyStyle := n.mutedStyle.Render("│")
-		keyEmoji := n.cursorStyle.Copy().Render("🔑")
+		keyEmoji := n.cursorStyle.Render("🔑")
 		displayRating := userRating
 		if userRating == "0" {
 			displayRating = "--"
 		}
-		userRatingStyle := n.cursorStyle.Copy().Render(displayRating)
+		userRatingStyle := n.cursorStyle.Render(displayRating)
 		ratingLine = fmt.Sprintf("%s  %s  %s %s", n.accentStyle.Render(rating), keyStyle, keyEmoji, userRatingStyle)
 	} else {
 		ratingLine = n.accentStyle.Render(rating)
@@ -281,26 +273,6 @@ func (n NowPlaying) View(
 			n.mutedStyle.Render("󰒮"), n.foregroundStyle.Render(prevStr),
 			n.mutedStyle.Render("󰒭"), n.foregroundStyle.Render(nextStr),
 			jukeStr)
-	} else if offlineMode {
-		favStr := fmt.Sprintf("%s%s%s",
-			n.foregroundStyle.Render(fmt.Sprintf("%d", favoriteCount)),
-			n.mutedStyle.Render("/"),
-			n.mutedStyle.Render(fmt.Sprintf("%d", minFavorites)))
-		if favoriteCount >= minFavorites {
-			remaining := favoritesRemaining
-			if remaining == 0 {
-				remaining = favoriteCount
-			}
-			remainingStr := fmt.Sprintf("%s%s%s",
-				n.mutedStyle.Render("<"),
-				n.foregroundStyle.Render(fmt.Sprintf("%d", remaining)),
-				n.mutedStyle.Render(">"))
-			favStr += " ✅ " + remainingStr
-		}
-		navLine = fmt.Sprintf("%s %s  %s %s  ⭐ %s",
-			n.mutedStyle.Render("󰒮"), n.foregroundStyle.Render(prevStr),
-			n.mutedStyle.Render("󰒭"), n.foregroundStyle.Render(nextStr),
-			favStr)
 	} else {
 		favStr := fmt.Sprintf("%s%s%s",
 			n.foregroundStyle.Render(fmt.Sprintf("%d", favoriteCount)),
@@ -317,7 +289,7 @@ func (n NowPlaying) View(
 				n.mutedStyle.Render(">"))
 			favStr += " ✅ " + remainingStr
 		}
-		navLine = fmt.Sprintf("%s %s  %s %s  ⭐ %s",
+		navLine = fmt.Sprintf("%s %s %s %s ⭐ %s",
 			n.mutedStyle.Render("󰒮"), n.foregroundStyle.Render(prevStr),
 			n.mutedStyle.Render("󰒭"), n.foregroundStyle.Render(nextStr),
 			favStr)
@@ -325,7 +297,7 @@ func (n NowPlaying) View(
 
 	var statusLine string
 	if offlineMode {
-		status := "Playing"
+		var status string
 		if isPaused {
 			status = n.mutedStyle.Render("Paused")
 		} else {
@@ -333,7 +305,7 @@ func (n NowPlaying) View(
 		}
 		statusLine = fmt.Sprintf("%s %s %s", status, n.mutedStyle.Render("•"), n.mutedStyle.Render(offlineCacheInfo))
 	} else if jukeboxMode {
-		status := "Playing"
+		var status string
 		if isPaused {
 			status = n.mutedStyle.Render("Paused")
 		} else {
@@ -341,7 +313,7 @@ func (n NowPlaying) View(
 		}
 		statusLine = status
 	} else {
-		status := "Playing"
+		var status string
 		if isPaused {
 			status = n.mutedStyle.Render("Paused")
 		} else {
