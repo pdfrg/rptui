@@ -384,7 +384,8 @@ type Model struct {
 	crossfading      bool               // whether currently doing a crossfade volume ramp
 
 	// DJ speech skip (deferred until playback reaches speech boundary)
-	pendingDJSkip *djSkipInfo
+	pendingDJSkip   *djSkipInfo
+	djSkipAvailable bool // true if --setup-dj-skip has been run successfully
 
 	// Offline mode
 	offlineMode                 bool   // whether offline mode is active
@@ -580,7 +581,8 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 	playlistWidget := widgets.NewPlaylist(styles)
 
 	// Initialize modal widgets
-	optionsModal := modals.NewOptions(styles, cfg.Channel, cfg.Bitrate, cfg.ShowAlbumArt, cfg.ShowSkipWarning, cfg.CopyAlbumArt, cfg.NotificationsEnabled, cfg.NotificationsShowArt, cfg.Visualizer.Mode, cfg.ColorsFile, cfg.Theme)
+	djSkipAvail := smad.IsSetupAvailable(filepath.Join(xdg.CacheHome, "rptui"))
+	optionsModal := modals.NewOptions(styles, cfg.Channel, cfg.Bitrate, cfg.ShowAlbumArt, cfg.ShowSkipWarning, cfg.SkipDJSegments, cfg.CopyAlbumArt, cfg.NotificationsEnabled, cfg.NotificationsShowArt, cfg.Visualizer.Mode, cfg.ColorsFile, cfg.Theme, djSkipAvail)
 	skipWarningModal := modals.NewSkipWarning(styles, cfg.MinFavorites)
 
 	// Initialize viewport for bottom views
@@ -635,6 +637,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 		jukeboxBatchSize:       10,
 		commentsPerPage:        20,
 		networkTransitionModal: nil,
+		djSkipAvailable:        djSkipAvail,
 	}
 
 	// Determine layout mode
@@ -677,6 +680,10 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 		m.sleepTimerQuitChan = make(chan struct{})
 		m.sleepTimerTicker = time.NewTicker(time.Minute)
 		logger.Printf("Sleep timer started: %v", sleepTimerDuration)
+	}
+
+	if m.djSkipAvailable {
+		logger.Printf("DJ skip: model available (setup complete)")
 	}
 
 	return m
@@ -749,7 +756,8 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 	playlistWidget := widgets.NewPlaylist(styles)
 
 	// Initialize modal widgets
-	optionsModal := modals.NewOptions(styles, cfg.Channel, cfg.Bitrate, cfg.ShowAlbumArt, cfg.ShowSkipWarning, cfg.CopyAlbumArt, cfg.NotificationsEnabled, cfg.NotificationsShowArt, cfg.Visualizer.Mode, cfg.ColorsFile, cfg.Theme)
+	djSkipAvail := smad.IsSetupAvailable(filepath.Join(xdg.CacheHome, "rptui"))
+	optionsModal := modals.NewOptions(styles, cfg.Channel, cfg.Bitrate, cfg.ShowAlbumArt, cfg.ShowSkipWarning, cfg.SkipDJSegments, cfg.CopyAlbumArt, cfg.NotificationsEnabled, cfg.NotificationsShowArt, cfg.Visualizer.Mode, cfg.ColorsFile, cfg.Theme, djSkipAvail)
 	skipWarningModal := modals.NewSkipWarning(styles, cfg.MinFavorites)
 
 	// Initialize viewport for bottom views
@@ -833,6 +841,7 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 		songs:                       modelSongs,
 		currentSongIndex:            0,
 		networkTransitionModal:      nil,
+		djSkipAvailable:             djSkipAvail,
 	}
 
 	// Determine layout mode
@@ -1047,6 +1056,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.ShowSkipWarn != nil {
 			m.config.ShowSkipWarning = *msg.ShowSkipWarn
+		}
+		if msg.SkipDJSegments != nil {
+			m.config.SkipDJSegments = *msg.SkipDJSegments
 		}
 		if msg.CopyAlbumArt != nil {
 			m.config.CopyAlbumArt = *msg.CopyAlbumArt
@@ -1939,7 +1951,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.visFullscreen {
 			return m, nil
 		}
-		m.optionsModal = modals.NewOptions(m.styles, m.config.Channel, m.config.Bitrate, m.config.ShowAlbumArt, m.config.ShowSkipWarning, m.config.CopyAlbumArt, m.config.NotificationsEnabled, m.config.NotificationsShowArt, m.config.Visualizer.Mode, m.config.ColorsFile, m.config.Theme)
+		m.optionsModal = modals.NewOptions(m.styles, m.config.Channel, m.config.Bitrate, m.config.ShowAlbumArt, m.config.ShowSkipWarning, m.config.SkipDJSegments, m.config.CopyAlbumArt, m.config.NotificationsEnabled, m.config.NotificationsShowArt, m.config.Visualizer.Mode, m.config.ColorsFile, m.config.Theme, m.djSkipAvailable)
 		m.activeModal = ModalOptions
 		return m, clearKittyImagesCmdIf(m.imageProtocol)
 
