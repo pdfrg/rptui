@@ -542,5 +542,51 @@ However, to download Discogs images, a Discogs "personal access token" is requir
 You may sign up for free at [Discogs](https://www.discogs.com/settings/developers).
 Without a Discogs token, the artist image gallery feature will work, but will be limited to 4 images (max returned by TheAudioDB).
 
+## Offline Playback
 
+Saving a pre-recorded cache is required for Offline Mode.  Building/saving this cache will take
+approximately the same amount of time as the specified duration.  In other words, if you want 4 hours
+of music for listening to on your flight tomorrow, you will need to allow `rptui --cache 4h`
+to run for about 4 hours before you go offline.  When the cache has the duration of music specified,
+the command will complete.
+
+Unlike the official clients, rptui doesn't have access to the full RP library to rapidly download
+an offline cache.  Rather, it simply monitors the specified station and grabs all the songs that are
+played, in the order they are played.  It's like running the app normally, but with no TUI and no audio
+output, just saved to disk.  Or imagine setting up your cassette recorder next to your
+AM/FM clock radio and hitting record before you go to school, so while on your family vacation, you
+can listen in the back of the car on your Walkman instead of hearing Dad's oldies or trying to tune-in
+a decent radio station in the middle of nowhere.
+
+**How to use:**
+
+1. The night before your trip: `rptui --cache 6h Rock 128k`
+- CLI only. Allow to run ~6h
+
+2. While on the plane: `rptui --offline` (will prompt for cache selection)
+- Normal TUI, normal listening experience, album art included.  No online integrations (lyrics,
+artist info, RP account features, or Lidarr). Scrobbles will be cached and uploaded to your
+configured service(s) when back online.
+
+**Disk usage**
+
+Recording at higher bitrates (320k AAC, and especially FLAC) can fill up disk space quickly.
+Before the `--cache` command starts recording, it will prompt for confirmation with a disk
+space estimate:
+
+```
+Cache recording configuration:
+  Station: The Main Mix
+  Bitrate: 320k AAC
+  Target duration: 8h00m
+  Estimated size: 1.07 GB
+
+Continue? (y/n):
+```
+
+**Already on the plane and forgot to pre-record for offline mode?**
+
+No worries! As long as you have been favoriting songs, Jukebox Mode has you covered.
+
+Just run: `rptui -j`.
 
