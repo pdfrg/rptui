@@ -52,6 +52,14 @@ func (r *ringBuffer) Read(dst []float32) int {
 	tail := atomic.LoadUint64(&r.tail)
 	head := atomic.LoadUint64(&r.head)
 	available := head - tail
+	bufSize := uint64(len(r.data))
+
+	if available > bufSize {
+		newTail := head - bufSize
+		atomic.StoreUint64(&r.tail, newTail)
+		tail = newTail
+		available = bufSize
+	}
 
 	n := uint64(len(dst))
 	if n > available {
@@ -71,7 +79,12 @@ func (r *ringBuffer) Read(dst []float32) int {
 func (r *ringBuffer) Available() uint64 {
 	head := atomic.LoadUint64(&r.head)
 	tail := atomic.LoadUint64(&r.tail)
-	return head - tail
+	avail := head - tail
+	bufSize := uint64(len(r.data))
+	if avail > bufSize {
+		avail = bufSize
+	}
+	return avail
 }
 
 func DetectAudioServer() string {
@@ -155,7 +168,32 @@ type AudioTap struct {
 // findMonitorSourceNode returns the node ID of the default sink's monitor source.
 // Uses pactl which lists monitor sources even when suspended (unlike pw-cli).
 func findMonitorSourceNode() (int, error) {
-	// Try pactl first — it always lists sources even when suspended
+	defaultSink, sinkErr := exec.Command("pactl", "get-default-sink").Output()
+	if sinkErr == nil {
+		sinkName := strings.TrimSpace(string(defaultSink))
+		monitorName := sinkName + ".monitor"
+
+		out, err := exec.Command("pactl", "list", "sources", "short").Output()
+		if err == nil {
+			for _, line := range strings.Split(string(out), "\n") {
+				if strings.Contains(line, monitorName) {
+					fields := strings.Fields(line)
+					if len(fields) >= 1 {
+						if num, err := strconv.Atoi(fields[0]); err == nil {
+							if audioLogger != nil {
+								audioLogger.Printf("AudioTap: found default sink monitor '%s' (node %d)", monitorName, num)
+							}
+							return num, nil
+						}
+					}
+				}
+			}
+		}
+		if audioLogger != nil {
+			audioLogger.Printf("AudioTap: default sink '%s' monitor not found in sources, falling back", sinkName)
+		}
+	}
+
 	cmd := exec.Command("pactl", "list", "sources", "short")
 	out, err := cmd.Output()
 	if err == nil {
@@ -166,6 +204,9 @@ func findMonitorSourceNode() (int, error) {
 				if len(fields) >= 1 {
 					num, err := strconv.Atoi(fields[0])
 					if err == nil {
+						if audioLogger != nil {
+							audioLogger.Printf("AudioTap: using first available monitor source (node %d)", num)
+						}
 						return num, nil
 					}
 				}
@@ -173,7 +214,6 @@ func findMonitorSourceNode() (int, error) {
 		}
 	}
 
-	// Fallback: try pw-cli list-objects for active monitor nodes
 	cmd = exec.Command("pw-cli", "list-objects")
 	out, err = cmd.Output()
 	if err != nil {
@@ -266,7 +306,7 @@ func newPipeWireTap() *AudioTap {
 		cmd:    cmd,
 		stdout: stdout,
 		stderr: stderr,
-		buf:    newRingBuffer(8192),
+		buf:    newRingBuffer(65536),
 		done:   make(chan struct{}),
 	}
 
@@ -351,7 +391,7 @@ func newPulseAudioTap() *AudioTap {
 		cmd:        cmd,
 		stdout:     stdout,
 		stderr:     stderr,
-		buf:        newRingBuffer(8192),
+		buf:        newRingBuffer(65536),
 		done:       make(chan struct{}),
 		sampleSize: sampleSize,
 		useStderr:  false, // parecord sends audio to stdout
@@ -494,16 +534,14 @@ func (t *AudioTap) readLoop() {
 			t.sampleSize, t.useStderr)
 	}
 
-	accumSamples := 2048 // accumulate this many before writing to ring buffer
-	// sampleSize is 0 for pw-record (float32), 2 for parecord (s16le)
+	accumSamples := 2048
 	sampleSizeBuf := t.sampleSize
 	if sampleSizeBuf == 0 {
-		sampleSizeBuf = 4 // default to float32 for pw-record
+		sampleSizeBuf = 4
 	}
 	byteBuf := make([]byte, accumSamples*sampleSizeBuf)
 	floatBuf := make([]float32, accumSamples)
 
-	// Select reader: stderr for parecord -v, stdout otherwise
 	reader := t.stdout
 	if t.useStderr {
 		reader = t.stderr
@@ -511,21 +549,19 @@ func (t *AudioTap) readLoop() {
 
 	sampleSize := t.sampleSize
 	if sampleSize == 0 {
-		sampleSize = 4 // default to float32
+		sampleSize = 4
 	}
 
+	loggedFirstRead := false
+
 	for {
-		// Read audio into accumulation buffer
 		for collected := 0; collected < accumSamples; {
 			var n int
 			var err error
 
-			// pw-record (stdout): use io.ReadFull for exact buffer
-			// parecord: accumulate via Read() for variable chunks
 			if t.useStderr {
 				n, err = reader.Read(byteBuf[collected*sampleSize:])
 			} else {
-				// Read from stdout (parecord, pw-record)
 				localBuf := byteBuf[collected*sampleSize:]
 				n, err = io.ReadFull(reader, localBuf)
 			}
@@ -533,7 +569,6 @@ func (t *AudioTap) readLoop() {
 			if err != nil {
 				if audioLogger != nil {
 					audioLogger.Printf("AudioTap readLoop: read error: %v", err)
-					// Log process state
 					state, sterr := t.cmd.Process.Wait()
 					if sterr == nil {
 						audioLogger.Printf("AudioTap readLoop: process exited: %v", state)
@@ -541,8 +576,9 @@ func (t *AudioTap) readLoop() {
 				}
 				return
 			}
-			if audioLogger != nil && collected == 0 {
+			if !loggedFirstRead && audioLogger != nil {
 				audioLogger.Printf("AudioTap readLoop: first read n=%d, sampleSize=%d", n, sampleSize)
+				loggedFirstRead = true
 			}
 
 			sampleCount := n / sampleSize
@@ -552,24 +588,17 @@ func (t *AudioTap) readLoop() {
 			collected += sampleCount
 		}
 
-		// Convert accumulated samples to float32
 		for i := 0; i < accumSamples; i++ {
 			if sampleSize == 2 {
-				// s16le to float32: divide by 32768.0
 				bits := int16(binary.LittleEndian.Uint16(byteBuf[i*2 : (i+1)*2]))
 				floatBuf[i] = float32(bits) / 32768.0
 			} else {
-				// float32 (4 bytes)
 				bits := binary.LittleEndian.Uint32(byteBuf[i*4 : (i+1)*4])
 				floatBuf[i] = math.Float32frombits(bits)
 			}
 		}
 
 		t.buf.Write(floatBuf[:accumSamples])
-		if audioLogger != nil {
-			audioLogger.Printf("AudioTap readLoop: wrote %d samples to buffer, available=%d",
-				accumSamples, t.buf.Available())
-		}
 	}
 }
 
@@ -581,6 +610,18 @@ func (t *AudioTap) Close() {
 	_ = t.cmd.Process.Kill()
 	_ = t.cmd.Wait()
 	<-t.done
+}
+
+func (t *AudioTap) IsAlive() bool {
+	if t == nil || t.closed {
+		return false
+	}
+	select {
+	case <-t.done:
+		return false
+	default:
+		return true
+	}
 }
 
 func (t *AudioTap) ReadSamples(dst []float32) int {
