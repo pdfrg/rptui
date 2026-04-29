@@ -19,6 +19,7 @@ type OptionsMsg struct {
 	Bitrate              *int
 	ShowAlbumArt         *bool
 	ShowSkipWarn         *bool
+	SkipDJSegments       *bool
 	CopyAlbumArt         *bool
 	NotificationsEnabled *bool
 	NotificationsShowArt *bool
@@ -27,18 +28,18 @@ type OptionsMsg struct {
 	Closed               bool
 }
 
-// Option item types
+// Option item identifiers
 const (
 	optStation = iota
 	optBitrate
 	optShowAlbumArt
 	optShowSkipWarning
+	optSkipDJSpeech
 	optCopyAlbumArt
 	optNotificationsEnabled
 	optNotificationsShowArt
 	optVisualizerMode
 	optTheme
-	optCount // number of items
 )
 
 // Theme option list
@@ -92,13 +93,14 @@ var bitrateIDs = []int{1, 2, 3, 4}
 // Options modal for settings
 type Options struct {
 	styles *config.ThemeStyles
-	cursor int // which row is selected
+	cursor int // index into visible items
 
 	// Current values (editable)
 	stationIdx           int // index into stationIDs
 	bitrateIdx           int // index into bitrateIDs
 	showAlbumArt         bool
 	showSkipWarn         bool
+	skipDJSegments       bool
 	copyAlbumArt         bool
 	notificationsEnabled bool
 	notificationsShowArt bool
@@ -110,11 +112,45 @@ type Options struct {
 	origBitrateIdx   int
 	origAlbumArt     bool
 	origSkipWarn     bool
+	origSkipDJSpeech bool
 	origCopyArt      bool
 	origNotifEnabled bool
 	origNotifShowArt bool
 	origVisModeIdx   int
 	origThemeIdx     int
+
+	// Feature availability flags
+	djSkipAvailable bool // true if --setup-dj-skip has been run
+}
+
+// visibleItems returns the ordered list of option IDs to display.
+func (o *Options) visibleItems() []int {
+	items := []int{
+		optStation,
+		optBitrate,
+		optShowAlbumArt,
+		optShowSkipWarning,
+	}
+	if o.djSkipAvailable {
+		items = append(items, optSkipDJSpeech)
+	}
+	items = append(items,
+		optCopyAlbumArt,
+		optNotificationsEnabled,
+		optNotificationsShowArt,
+		optVisualizerMode,
+		optTheme,
+	)
+	return items
+}
+
+// currentOptID returns the option ID at the current cursor position.
+func (o *Options) currentOptID() int {
+	items := o.visibleItems()
+	if o.cursor >= 0 && o.cursor < len(items) {
+		return items[o.cursor]
+	}
+	return items[0]
 }
 
 // visualizerModeNames returns the display names of all visualizer modes.
@@ -123,7 +159,7 @@ func visualizerModeNames() []string {
 }
 
 // NewOptions creates a new Options modal
-func NewOptions(styles *config.ThemeStyles, currentStation, currentBitrate int, showAlbumArt, showSkipWarn, copyAlbumArt, notificationsEnabled, notificationsShowArt bool, visMode, colorsFile, themeName string) *Options {
+func NewOptions(styles *config.ThemeStyles, currentStation, currentBitrate int, showAlbumArt, showSkipWarn, skipDJSegments, copyAlbumArt, notificationsEnabled, notificationsShowArt bool, visMode, colorsFile, themeName string, djSkipAvailable bool) *Options {
 	// Find index of current station in stationIDs
 	stationIdx := 0
 	for i, id := range stationIDs {
@@ -161,6 +197,7 @@ func NewOptions(styles *config.ThemeStyles, currentStation, currentBitrate int, 
 		bitrateIdx:           bitrateIdx,
 		showAlbumArt:         showAlbumArt,
 		showSkipWarn:         showSkipWarn,
+		skipDJSegments:       skipDJSegments,
 		copyAlbumArt:         copyAlbumArt,
 		notificationsEnabled: notificationsEnabled,
 		notificationsShowArt: notificationsShowArt,
@@ -170,11 +207,13 @@ func NewOptions(styles *config.ThemeStyles, currentStation, currentBitrate int, 
 		origBitrateIdx:       bitrateIdx,
 		origAlbumArt:         showAlbumArt,
 		origSkipWarn:         showSkipWarn,
+		origSkipDJSpeech:     skipDJSegments,
 		origCopyArt:          copyAlbumArt,
 		origNotifEnabled:     notificationsEnabled,
 		origNotifShowArt:     notificationsShowArt,
 		origVisModeIdx:       visModeIdx,
 		origThemeIdx:         themeIdx,
+		djSkipAvailable:      djSkipAvailable,
 	}
 }
 
@@ -192,7 +231,7 @@ func (o *Options) Update(msg tea.Msg) tea.Cmd {
 			}
 
 		case "down", "j":
-			if o.cursor < optCount-1 {
+			if o.cursor < len(o.visibleItems())-1 {
 				o.cursor++
 			}
 
@@ -204,7 +243,7 @@ func (o *Options) Update(msg tea.Msg) tea.Cmd {
 
 		case "enter", " ":
 			// For toggles, toggle them; for pickers, cycle right
-			switch o.cursor {
+			switch o.currentOptID() {
 			case optStation:
 				o.cycleRight()
 			case optBitrate:
@@ -213,6 +252,8 @@ func (o *Options) Update(msg tea.Msg) tea.Cmd {
 				o.showAlbumArt = !o.showAlbumArt
 			case optShowSkipWarning:
 				o.showSkipWarn = !o.showSkipWarn
+			case optSkipDJSpeech:
+				o.skipDJSegments = !o.skipDJSegments
 			case optCopyAlbumArt:
 				o.copyAlbumArt = !o.copyAlbumArt
 			case optNotificationsEnabled:
@@ -233,7 +274,7 @@ func (o *Options) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (o *Options) cycleLeft() {
-	switch o.cursor {
+	switch o.currentOptID() {
 	case optStation:
 		if o.stationIdx > 0 {
 			o.stationIdx--
@@ -250,6 +291,8 @@ func (o *Options) cycleLeft() {
 		o.showAlbumArt = !o.showAlbumArt
 	case optShowSkipWarning:
 		o.showSkipWarn = !o.showSkipWarn
+	case optSkipDJSpeech:
+		o.skipDJSegments = !o.skipDJSegments
 	case optCopyAlbumArt:
 		o.copyAlbumArt = !o.copyAlbumArt
 	case optNotificationsEnabled:
@@ -274,7 +317,7 @@ func (o *Options) cycleLeft() {
 }
 
 func (o *Options) cycleRight() {
-	switch o.cursor {
+	switch o.currentOptID() {
 	case optStation:
 		if o.stationIdx < len(stationIDs)-1 {
 			o.stationIdx++
@@ -291,6 +334,8 @@ func (o *Options) cycleRight() {
 		o.showAlbumArt = !o.showAlbumArt
 	case optShowSkipWarning:
 		o.showSkipWarn = !o.showSkipWarn
+	case optSkipDJSpeech:
+		o.skipDJSegments = !o.skipDJSegments
 	case optCopyAlbumArt:
 		o.copyAlbumArt = !o.copyAlbumArt
 	case optNotificationsEnabled:
@@ -320,13 +365,14 @@ func (o *Options) applyChanges() tea.Cmd {
 	bitrateChanged := o.bitrateIdx != o.origBitrateIdx
 	albumArtChanged := o.showAlbumArt != o.origAlbumArt
 	skipWarnChanged := o.showSkipWarn != o.origSkipWarn
+	skipDJSpeechChanged := o.skipDJSegments != o.origSkipDJSpeech
 	copyArtChanged := o.copyAlbumArt != o.origCopyArt
 	notifEnabledChanged := o.notificationsEnabled != o.origNotifEnabled
 	notifShowArtChanged := o.notificationsShowArt != o.origNotifShowArt
 	visModeChanged := o.visModeIdx != o.origVisModeIdx
 	themeChanged := o.themeIdx != o.origThemeIdx
 
-	if !stationChanged && !bitrateChanged && !albumArtChanged && !skipWarnChanged && !copyArtChanged && !notifEnabledChanged && !notifShowArtChanged && !visModeChanged && !themeChanged {
+	if !stationChanged && !bitrateChanged && !albumArtChanged && !skipWarnChanged && !skipDJSpeechChanged && !copyArtChanged && !notifEnabledChanged && !notifShowArtChanged && !visModeChanged && !themeChanged {
 		return func() tea.Msg { return OptionsMsg{Closed: true} }
 	}
 
@@ -346,6 +392,10 @@ func (o *Options) applyChanges() tea.Cmd {
 	if skipWarnChanged {
 		v := o.showSkipWarn
 		msg.ShowSkipWarn = &v
+	}
+	if skipDJSpeechChanged {
+		v := o.skipDJSegments
+		msg.SkipDJSegments = &v
 	}
 	if copyArtChanged {
 		v := o.copyAlbumArt
@@ -398,7 +448,6 @@ func themeOptionValue(idx int) string {
 // View renders the modal
 func (o Options) View() string {
 	modalWidth := 60
-	// Inner content width (minus border 2 + padding 2*2 = 6)
 	contentWidth := modalWidth - 6
 
 	accentStyle := o.styles.AccentStyle
@@ -407,12 +456,10 @@ func (o Options) View() string {
 
 	var b strings.Builder
 
-	// Title
 	title := accentStyle.Render("OPTIONS")
 	b.WriteString(centerStyled(title, contentWidth))
 	b.WriteString("\n\n")
 
-	// Render each option row
 	visNames := visualizerModeNames()
 	visModeName := "Bars"
 	if o.visModeIdx >= 0 && o.visModeIdx < len(visNames) {
@@ -425,25 +472,44 @@ func (o Options) View() string {
 		themeName = themeOpts[o.themeIdx]
 	}
 
-	items := []struct {
+	// Build visible items with their option IDs
+	type optItem struct {
+		id    int
 		label string
 		value string
-	}{
-		{"Station", o.renderPicker(config.StationNames[stationIDs[o.stationIdx]], o.cursor == optStation)},
-		{"Bitrate", o.renderPicker(config.BitrateNames[bitrateIDs[o.bitrateIdx]], o.cursor == optBitrate)},
-		{"Show album art", o.renderToggle(o.showAlbumArt, o.cursor == optShowAlbumArt)},
-		{"Show skip warning", o.renderToggle(o.showSkipWarn, o.cursor == optShowSkipWarning)},
-		{"Copy album art", o.renderToggle(o.copyAlbumArt, o.cursor == optCopyAlbumArt)},
-		{"Desktop notifications", o.renderToggle(o.notificationsEnabled, o.cursor == optNotificationsEnabled)},
-		{"  Show album art", o.renderToggle(o.notificationsShowArt, o.cursor == optNotificationsShowArt)},
-		{"Visualizer mode", o.renderPicker(visModeName, o.cursor == optVisualizerMode)},
-		{"Theme", o.renderPicker(themeName, o.cursor == optTheme)},
+	}
+
+	visibleItems := o.visibleItems()
+	items := make([]optItem, 0, len(visibleItems))
+	for _, id := range visibleItems {
+		switch id {
+		case optStation:
+			items = append(items, optItem{id, "Station", o.renderPicker(config.StationNames[stationIDs[o.stationIdx]], o.cursor == len(items))})
+		case optBitrate:
+			items = append(items, optItem{id, "Bitrate", o.renderPicker(config.BitrateNames[bitrateIDs[o.bitrateIdx]], o.cursor == len(items))})
+		case optShowAlbumArt:
+			items = append(items, optItem{id, "Show album art", o.renderToggle(o.showAlbumArt, o.cursor == len(items))})
+		case optShowSkipWarning:
+			items = append(items, optItem{id, "Show skip warning", o.renderToggle(o.showSkipWarn, o.cursor == len(items))})
+		case optSkipDJSpeech:
+			items = append(items, optItem{id, "Skip DJ speech", o.renderToggle(o.skipDJSegments, o.cursor == len(items))})
+		case optCopyAlbumArt:
+			items = append(items, optItem{id, "Copy album art", o.renderToggle(o.copyAlbumArt, o.cursor == len(items))})
+		case optNotificationsEnabled:
+			items = append(items, optItem{id, "Desktop notifications", o.renderToggle(o.notificationsEnabled, o.cursor == len(items))})
+		case optNotificationsShowArt:
+			items = append(items, optItem{id, " Show album art", o.renderToggle(o.notificationsShowArt, o.cursor == len(items))})
+		case optVisualizerMode:
+			items = append(items, optItem{id, "Visualizer mode", o.renderPicker(visModeName, o.cursor == len(items))})
+		case optTheme:
+			items = append(items, optItem{id, "Theme", o.renderPicker(themeName, o.cursor == len(items))})
+		}
 	}
 
 	labelColWidth := 22
 
 	for i, item := range items {
-		prefix := "  "
+		prefix := " "
 		label := mutedStyle.Render(item.label)
 		if i == o.cursor {
 			prefix = cursorStyle.Render("▸ ")
@@ -452,7 +518,6 @@ func (o Options) View() string {
 				Render(item.label)
 		}
 
-		// Pad label to fixed visual width using lipgloss-aware width
 		labelVisualWidth := lipgloss.Width(label)
 		padCount := labelColWidth - labelVisualWidth
 		if padCount < 0 {
@@ -463,18 +528,16 @@ func (o Options) View() string {
 		b.WriteString("\n")
 	}
 
-	// Warning text
 	b.WriteString("\n")
 	warningStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("208")).
 		Bold(true)
 	b.WriteString(centerStyled(warningStyle.Render("Station/bitrate changes restart playback"), contentWidth))
 
-	// Help text
 	b.WriteString("\n\n")
-	helpText := accentStyle.Render("←/→") + mutedStyle.Render(" change  ") +
-		accentStyle.Render("↑/↓") + mutedStyle.Render(" navigate  ") +
-		accentStyle.Render("a") + mutedStyle.Render(" apply  ") +
+	helpText := accentStyle.Render("←/→") + mutedStyle.Render(" change ") +
+		accentStyle.Render("↑/↓") + mutedStyle.Render(" navigate ") +
+		accentStyle.Render("a") + mutedStyle.Render(" apply ") +
 		accentStyle.Render("esc") + mutedStyle.Render(" close")
 	b.WriteString(centerStyled(helpText, contentWidth))
 

@@ -259,6 +259,28 @@ func CacheDir(cacheDir string) string {
 	return filepath.Join(cacheDir, "smad", "cache")
 }
 
+// IsSetupAvailable checks if the DJ skip feature files exist on disk.
+// This is a lightweight alternative to IsSetupComplete that skips the
+// expensive Python import subprocess check, suitable for UI visibility checks.
+func IsSetupAvailable(cacheDir string) bool {
+	pythonPath := PythonPath(cacheDir)
+	if _, err := exec.LookPath(pythonPath); err != nil {
+		if !fileExists(pythonPath) {
+			return false
+		}
+	}
+
+	if !fileExists(DetectorPath(cacheDir)) {
+		return false
+	}
+
+	if !fileExists(ModelPath(cacheDir)) {
+		return false
+	}
+
+	return true
+}
+
 // IsSetupComplete checks if the DJ skip feature is fully set up
 func IsSetupComplete(cacheDir string) bool {
 	pythonPath := PythonPath(cacheDir)
