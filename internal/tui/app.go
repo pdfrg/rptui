@@ -5400,17 +5400,18 @@ func (m Model) View() tea.View {
 			if m.vis.AudioReady() {
 				bottomSection = m.vis.Render(m.width)
 			} else {
-				// Show loading message while audio tap connects
 				modeName := m.vis.ModeName()
 				source := m.vis.AudioSource()
-				available := m.vis.AvailableSamples()
-				lines := []string{
-					"",
-					fmt.Sprintf("Loading %s visualization...", modeName),
-					fmt.Sprintf("Connecting to %s audio...", source),
-					fmt.Sprintf("Samples available: %d (need %d)", available, 2048),
-					"",
+				retryStatus := m.vis.RetryStatus()
+				var lines []string
+				lines = append(lines, "")
+				if retryStatus != "" {
+					lines = append(lines, retryStatus)
+				} else {
+					lines = append(lines, fmt.Sprintf("Loading %s visualization...", modeName))
+					lines = append(lines, fmt.Sprintf("Connecting to %s audio...", source))
 				}
+				lines = append(lines, "")
 				bottomSection = strings.Join(lines, "\n")
 			}
 		} else if m.bottomViewMode != ViewOff {
@@ -5580,12 +5581,16 @@ func (m Model) renderFullscreenVisualizer() tea.View {
 	var b strings.Builder
 
 	if !m.vis.AudioReady() {
-		// Show loading message while audio tap connects
 		modeName := m.vis.ModeName()
 		source := m.vis.AudioSource()
+		retryStatus := m.vis.RetryStatus()
 		b.WriteString("\n\n")
-		b.WriteString(fmt.Sprintf("Loading %s visualization...\n", modeName))
-		b.WriteString(fmt.Sprintf("Connecting to %s audio...\n", source))
+		if retryStatus != "" {
+			b.WriteString(retryStatus + "\n")
+		} else {
+			b.WriteString(fmt.Sprintf("Loading %s visualization...\n", modeName))
+			b.WriteString(fmt.Sprintf("Connecting to %s audio...\n", source))
+		}
 		return m.altView(b.String())
 	}
 

@@ -2,6 +2,7 @@
 package visualizer
 
 import (
+	"fmt"
 	"log"
 	"math"
 )
@@ -15,6 +16,8 @@ func SetLogger(l *log.Logger) {
 const (
 	DefaultBandCount = 10
 	DefaultRows      = 5
+	maxSilentTicks   = 60
+	maxRetries       = 3
 )
 
 // Unicode block elements for bar height (9 levels including space)
@@ -81,11 +84,14 @@ type Visualizer struct {
 	colorDim  string // empty space (muted)
 
 	// Real audio support
-	audioTap   *AudioTap
-	analyzer   *Analyzer
-	realAudio  bool
-	audioReady bool      // true when real audio data is flowing
-	sampleBuf  []float32 // buffer for reading from audio tap
+	audioTap    *AudioTap
+	analyzer    *Analyzer
+	realAudio   bool
+	audioReady  bool      // true when real audio data is flowing
+	sampleBuf   []float32 // buffer for reading from audio tap
+	silentTicks int       // consecutive ticks with no audio energy
+	retryCount  int       // number of audio tap reconnection attempts
+	retryStatus string    // status message for UI ("Retrying audio...", etc.)
 }
 
 // New creates a Visualizer with the given seed for spectrum generation.
@@ -182,61 +188,96 @@ func (v *Visualizer) Tick(playing bool, paused bool) {
 // updateFromAudio reads samples from the audio tap and runs FFT analysis.
 // Does nothing until real audio data is available — no simulated fallback.
 func (v *Visualizer) updateFromAudio() {
+	if !v.audioTap.IsAlive() {
+		if logger != nil {
+			logger.Printf("Visualizer: audio tap process died, reconnecting")
+		}
+		v.reconnectAudioTap()
+		return
+	}
+
 	if len(v.sampleBuf) < fftSize {
 		v.sampleBuf = make([]float32, fftSize)
 	}
 
 	n := v.audioTap.ReadSamples(v.sampleBuf)
-	if logger != nil {
-		logger.Printf("Visualizer: ReadSamples returned %d (need %d)", n, fftSize)
-	}
 	if n < fftSize {
-		// Buffer not full yet — keep waiting
 		return
 	}
 
-	// Log first few samples to debug NaN issue
-	if logger != nil {
-		logger.Printf("Visualizer: first 5 samples: %v", v.sampleBuf[:5])
-	}
-
 	bands := v.analyzer.Analyze(v.sampleBuf[:n])
-	if logger != nil {
-		if bands == nil {
-			logger.Printf("Visualizer: Analyze returned nil")
-		} else {
-			logger.Printf("Visualizer: Analyze returned bands, len=%d", len(bands))
-		}
-	}
 	if bands == nil {
 		return
 	}
 
-	// Check if audio has any energy — skip if silent (monitor may be suspended)
 	hasEnergy := false
-	if logger != nil {
-		logger.Printf("Visualizer: bands before energy check: %v", bands)
-	}
 	for _, b := range bands {
 		if b > 0.001 {
 			hasEnergy = true
 			break
 		}
 	}
-	if logger != nil {
-		logger.Printf("Visualizer: hasEnergy=%v", hasEnergy)
-	}
+
 	if !hasEnergy {
+		v.silentTicks++
+		if v.silentTicks > maxSilentTicks {
+			if logger != nil {
+				logger.Printf("Visualizer: no audio energy for %d ticks, will retry", v.silentTicks)
+			}
+			v.reconnectAudioTap()
+		}
 		return
 	}
 
-	// Real audio data is flowing
-	v.audioReady = true
+	if !v.audioReady {
+		if logger != nil {
+			logger.Printf("Visualizer: audio data flowing (audioReady=true)")
+		}
+		v.audioReady = true
+	}
+	v.silentTicks = 0
+	v.retryCount = 0
+	v.retryStatus = ""
+
 	for i := range bandCount {
 		v.bands[i] = bands[i]
 		v.prevBands[i] = bands[i]
 	}
 	v.refreshPending = true
+}
+
+func (v *Visualizer) reconnectAudioTap() {
+	v.retryCount++
+	if v.retryCount > maxRetries {
+		v.retryStatus = "Audio connection failed. Press 'v' to retry."
+		if logger != nil {
+			logger.Printf("Visualizer: audio reconnection failed after %d attempts", maxRetries)
+		}
+		return
+	}
+	v.silentTicks = 0
+	v.retryStatus = fmt.Sprintf("Retrying audio connection (attempt %d)...", v.retryCount)
+	if logger != nil {
+		logger.Printf("Visualizer: reconnecting audio tap (attempt %d)", v.retryCount)
+	}
+	if v.audioTap != nil {
+		v.audioTap.Close()
+	}
+	v.audioTap = NewAudioTap()
+	if v.audioTap == nil {
+		v.retryStatus = "Audio connection failed. Press 'v' to retry."
+	}
+}
+
+func (v *Visualizer) RetryStatus() string {
+	return v.retryStatus
+}
+
+func (v *Visualizer) ResetRetry() {
+	v.silentTicks = 0
+	v.retryCount = 0
+	v.retryStatus = ""
+	v.audioReady = false
 }
 
 // EnableRealAudio enables or disables real audio capture.
@@ -252,7 +293,10 @@ func (v *Visualizer) EnableRealAudio(enabled bool) string {
 		if v.audioTap != nil {
 			v.analyzer = NewAnalyzer()
 			v.realAudio = true
-			v.audioReady = false // will become true when data arrives
+			v.audioReady = false
+			v.silentTicks = 0
+			v.retryCount = 0
+			v.retryStatus = ""
 			return ActiveBackend()
 		}
 	}
@@ -263,6 +307,9 @@ func (v *Visualizer) EnableRealAudio(enabled bool) string {
 		v.analyzer = nil
 		v.realAudio = false
 		v.audioReady = false
+		v.silentTicks = 0
+		v.retryCount = 0
+		v.retryStatus = ""
 	}
 
 	if v.realAudio {
@@ -311,6 +358,9 @@ func (v *Visualizer) Close() {
 		v.audioTap = nil
 		v.analyzer = nil
 		v.realAudio = false
+		v.silentTicks = 0
+		v.retryCount = 0
+		v.retryStatus = ""
 	}
 }
 

@@ -139,10 +139,6 @@ func (a *Analyzer) Analyze(samples []float32) []float64 {
 		}
 	}
 
-	if fftLogger != nil {
-		fftLogger.Printf("FFT: magBuf first 10: %v", a.magBuf[:10])
-	}
-
 	// Extract bands
 	for b := range bandCount {
 		start := a.bandEdges[b]
