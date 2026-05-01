@@ -426,11 +426,14 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 		logger.Printf("Theme watcher started successfully")
 	}
 
-	// Initialize terminal cell ratio for album art
 	features := termimg.QueryTerminalFeatures()
+	if w, h, ok := correctCellRatioForTmux(logger); ok {
+		features.FontWidth = w
+		features.FontHeight = h
+	}
 	cellRatio := float64(features.FontHeight) / float64(features.FontWidth)
 	if cellRatio <= 0 {
-		cellRatio = 2.0 // fallback (typical terminal: ~2x taller than wide)
+		cellRatio = 2.0
 	}
 	logger.Printf("DEBUG: FontWidth=%d, FontHeight=%d, cellRatio=%.2f", features.FontWidth, features.FontHeight, cellRatio)
 
@@ -698,8 +701,11 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 		logger.Printf("Warning: failed to start theme watcher: %v", err)
 	}
 
-	// Initialize terminal cell ratio for album art
 	features := termimg.QueryTerminalFeatures()
+	if w, h, ok := correctCellRatioForTmux(logger); ok {
+		features.FontWidth = w
+		features.FontHeight = h
+	}
 	cellRatio := float64(features.FontHeight) / float64(features.FontWidth)
 	if cellRatio <= 0 {
 		cellRatio = 2.0
