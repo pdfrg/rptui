@@ -366,6 +366,14 @@ type Model struct {
 	// Detected image protocol (Kitty, Sixel, ITerm2, or Halfblocks)
 	imageProtocol termimg.Protocol
 
+	// tmux pane offset for Kitty image positioning
+	// When running inside tmux with Kitty graphics, cursor coordinates in
+	// Kitty APC sequences are relative to the outer terminal window, not
+	// the tmux pane. These offsets translate pane-relative positions to
+	// outer-terminal-absolute positions.
+	tmuxRowOffset int
+	tmuxColOffset int
+
 	// Notification tracking
 	notifSentForSong bool // true once desktop notification fired for current song
 
@@ -427,10 +435,6 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 	}
 
 	features := termimg.QueryTerminalFeatures()
-	if w, h, ok := correctCellRatioForTmux(logger); ok {
-		features.FontWidth = w
-		features.FontHeight = h
-	}
 	cellRatio := float64(features.FontHeight) / float64(features.FontWidth)
 	if cellRatio <= 0 {
 		cellRatio = 2.0
@@ -702,10 +706,6 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 	}
 
 	features := termimg.QueryTerminalFeatures()
-	if w, h, ok := correctCellRatioForTmux(logger); ok {
-		features.FontWidth = w
-		features.FontHeight = h
-	}
 	cellRatio := float64(features.FontHeight) / float64(features.FontWidth)
 	if cellRatio <= 0 {
 		cellRatio = 2.0
@@ -894,6 +894,7 @@ func (m Model) Init() tea.Cmd {
 		tickPollCmd(),
 		tea.RequestBackgroundColor,
 		m.downloadResultsCmd(),
+		detectTmuxCellInfoCmd(m.imageProtocol),
 	}
 	if m.themeWatcher != nil {
 		cmds = append(cmds, watchThemeCmd(m.themeWatcher))
@@ -1385,6 +1386,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return handle(m, nil)
 
+	case tmuxCellInfoMsg:
+		if msg.cellRatioOk {
+			m.cellRatio = float64(msg.fontHeight) / float64(msg.fontWidth)
+			if m.cellRatio <= 0 {
+				m.cellRatio = 2.0
+			}
+			logger.Printf("tmux cellRatio fix applied: %dx%d -> cellRatio=%.2f", msg.fontWidth, msg.fontHeight, m.cellRatio)
+		}
+		if msg.offsetOk {
+			m.tmuxRowOffset = msg.rowOffset
+			m.tmuxColOffset = msg.colOffset
+		}
+		return handle(m, nil)
+
 	case scrobbleResultMsg:
 		m.scrobbleFlashAt = time.Now()
 		m.scrobbleStates = make(map[string]int)
@@ -1507,12 +1522,11 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if m.vis != nil {
 				m.vis.Close()
 			}
-			return m, tea.Quit
+			return m, tea.Sequence(clearKittyImagesCmdIf(m.imageProtocol), tea.Quit)
 		}
 
 		// Check if key matches initial layout choice
 		if strings.ToLower(m.initialLayout[:1]) == key {
-			// User chose their initial layout - clear prompt flag, let normal init proceed
 			layoutPromptActive = false
 			m.initialized = true
 			return m, tea.Batch(m.songChangedCmds())
@@ -1521,7 +1535,6 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// Check if key matches any fitting layout
 		for _, l := range fittingLayouts {
 			if strings.ToLower(l[:1]) == key && l != m.initialLayout {
-				// Switch to that layout
 				switch l {
 				case "large":
 					m.layoutMode = LayoutLarge
@@ -1532,7 +1545,6 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				case "narrow":
 					m.layoutMode = LayoutNarrow
 				}
-				// Clear prompt flag, let normal init proceed
 				layoutPromptActive = false
 				m.initialized = true
 				return m, tea.Batch(m.songChangedCmds())
@@ -1559,7 +1571,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.vis != nil {
 			m.vis.Close()
 		}
-		return m, tea.Quit
+		return m, tea.Sequence(clearKittyImagesCmdIf(m.imageProtocol), tea.Quit)
 
 	case "space":
 		// Play/Pause
@@ -2004,6 +2016,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				logger,
 			)
 			m.galleryModal.SetProtocol(m.imageProtocol)
+			m.galleryModal.SetTmuxOffset(m.tmuxRowOffset, m.tmuxColOffset)
 			m.activeModal = ModalGallery
 			return m, tea.Batch(
 				clearKittyImagesCmdIf(m.imageProtocol),
@@ -2990,7 +3003,7 @@ func (m *Model) handleQuitTick(msg quitTickMsg) (tea.Model, tea.Cmd) {
 			_ = m.mpvBackend.Stop()
 		}
 		logger.Println("Quitting app after sleep timer")
-		return m, tea.Quit
+		return m, tea.Sequence(clearKittyImagesCmdIf(m.imageProtocol), tea.Quit)
 	}
 
 	m.statusMsg = fmt.Sprintf("Sleep timer expired - quitting in %ds...", remaining)
@@ -5527,11 +5540,10 @@ func (m Model) renderImagesCmd() tea.Cmd {
 			}
 		}
 
-		// All protocols: render at position
-		// For Kitty: single escape sequence, position directly
-		// For other protocols (halfblocks/sixel/iterm2): use positionMultiLineImage to handle multi-line correctly
 		if m.imageProtocol == termimg.Kitty {
-			raw += fmt.Sprintf("\x1b[s\x1b[3;%dH%s\x1b[u", artCol, m.albumArtStr)
+			artRow := 3 + m.tmuxRowOffset
+			artColAbs := artCol + m.tmuxColOffset
+			raw += fmt.Sprintf("\x1b[s\x1b[%d;%dH%s\x1b[u", artRow, artColAbs, m.albumArtStr)
 		} else {
 			raw += "\x1b[s" + positionMultiLineImage(m.albumArtStr, 3, artCol) + "\x1b[u"
 		}
@@ -5542,8 +5554,10 @@ func (m Model) renderImagesCmd() tea.Cmd {
 		availableSpace := m.height - 20 - 3
 		if availableSpace >= m.artistArtHeight {
 			// Bottom section starts after: header(1) + gap(2) + nowPlaying(15 lines) + gap(2) = row 20
+			artistRow := 20 + m.tmuxRowOffset
+			artistCol := 2 + m.tmuxColOffset
 			if m.imageProtocol == termimg.Kitty {
-				raw += fmt.Sprintf("\x1b[s\x1b[%d;%dH%s\x1b[u", 20, 2, m.artistArtStr)
+				raw += fmt.Sprintf("\x1b[s\x1b[%d;%dH%s\x1b[u", artistRow, artistCol, m.artistArtStr)
 			} else {
 				raw += "\x1b[s" + positionMultiLineImage(m.artistArtStr, 20, 2) + "\x1b[u"
 			}

@@ -200,10 +200,11 @@ func renderArtistArtAfterDelay() tea.Cmd {
 // to the terminal via tea.Raw, bypassing the cell-based renderer. This is
 // needed because APC sequences embedded in View() content get consumed by the
 // cell buffer and don't reliably reach the terminal.
+// Uses termimg.ClearAllString() which wraps in tmux passthrough when needed.
 // This should only be called for Kitty protocol - for other protocols, use
 // clearKittyImagesCmdIf which checks the protocol first.
 func clearKittyImagesCmd() tea.Cmd {
-	return tea.Raw("\x1b_Ga=d,d=A\x1b\\")
+	return tea.Raw(termimg.ClearAllString())
 }
 
 // clearKittyImagesCmdIf returns a clear command only if the protocol is Kitty.
@@ -316,6 +317,44 @@ func favoriteDownloadCmd(cmgr *cache.CacheManager, song *models.Song, fileExt st
 			results <- favoriteDownloadMsg{success: success}
 		})
 		return nil
+	}
+}
+
+// tmuxCellInfoMsg is sent when tmux terminal queries (cell ratio + pane offset)
+// complete. These queries must run after bubbletea has entered raw mode
+// (i.e. as a tea.Cmd from Init), because they open /dev/tty and set it
+// to raw mode — and in tmux, /dev/tty is the same pty slave as stdin.
+// Running them before p.Run() would restore the pty to cooked mode,
+// causing bubbletea's readLoop to block until the user presses Enter.
+type tmuxCellInfoMsg struct {
+	fontWidth   int
+	fontHeight  int
+	cellRatioOk bool
+	rowOffset   int
+	colOffset   int
+	offsetOk    bool
+}
+
+// detectTmuxCellInfoCmd runs tmux cell ratio and pane offset detection
+// asynchronously. See tmuxCellInfoMsg for why this must run from Init().
+func detectTmuxCellInfoCmd(imageProtocol termimg.Protocol) tea.Cmd {
+	return func() tea.Msg {
+		msg := tmuxCellInfoMsg{}
+
+		if w, h, ok := correctCellRatioForTmux(logger); ok {
+			msg.fontWidth = w
+			msg.fontHeight = h
+			msg.cellRatioOk = true
+		}
+
+		if imageProtocol == termimg.Kitty {
+			r, c, ok := detectTmuxPaneOffset(logger)
+			msg.rowOffset = r
+			msg.colOffset = c
+			msg.offsetOk = ok
+		}
+
+		return msg
 	}
 }
 
