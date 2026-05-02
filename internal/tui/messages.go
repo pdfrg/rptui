@@ -320,44 +320,6 @@ func favoriteDownloadCmd(cmgr *cache.CacheManager, song *models.Song, fileExt st
 	}
 }
 
-// tmuxCellInfoMsg is sent when tmux terminal queries (cell ratio + pane offset)
-// complete. These queries must run after bubbletea has entered raw mode
-// (i.e. as a tea.Cmd from Init), because they open /dev/tty and set it
-// to raw mode — and in tmux, /dev/tty is the same pty slave as stdin.
-// Running them before p.Run() would restore the pty to cooked mode,
-// causing bubbletea's readLoop to block until the user presses Enter.
-type tmuxCellInfoMsg struct {
-	fontWidth   int
-	fontHeight  int
-	cellRatioOk bool
-	rowOffset   int
-	colOffset   int
-	offsetOk    bool
-}
-
-// detectTmuxCellInfoCmd runs tmux cell ratio and pane offset detection
-// asynchronously. See tmuxCellInfoMsg for why this must run from Init().
-func detectTmuxCellInfoCmd(imageProtocol termimg.Protocol) tea.Cmd {
-	return func() tea.Msg {
-		msg := tmuxCellInfoMsg{}
-
-		if w, h, ok := correctCellRatioForTmux(logger); ok {
-			msg.fontWidth = w
-			msg.fontHeight = h
-			msg.cellRatioOk = true
-		}
-
-		if imageProtocol == termimg.Kitty {
-			r, c, ok := detectTmuxPaneOffset(logger)
-			msg.rowOffset = r
-			msg.colOffset = c
-			msg.offsetOk = ok
-		}
-
-		return msg
-	}
-}
-
 // startJukeboxCmd returns a command that triggers jukebox initialization
 func startJukeboxCmd() tea.Cmd {
 	return func() tea.Msg {

@@ -367,13 +367,6 @@ type Model struct {
 	imageProtocol termimg.Protocol
 
 	// tmux pane offset for Kitty image positioning
-	// When running inside tmux with Kitty graphics, cursor coordinates in
-	// Kitty APC sequences are relative to the outer terminal window, not
-	// the tmux pane. These offsets translate pane-relative positions to
-	// outer-terminal-absolute positions.
-	tmuxRowOffset int
-	tmuxColOffset int
-
 	// Notification tracking
 	notifSentForSong bool // true once desktop notification fired for current song
 
@@ -440,6 +433,14 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 		cellRatio = 2.0
 	}
 	logger.Printf("DEBUG: FontWidth=%d, FontHeight=%d, cellRatio=%.2f", features.FontWidth, features.FontHeight, cellRatio)
+
+	if w, h, ok := correctCellRatioForTmux(logger); ok {
+		cellRatio = float64(h) / float64(w)
+		if cellRatio <= 0 {
+			cellRatio = 2.0
+		}
+		logger.Printf("tmux cellRatio fix applied in NewModel: %dx%d -> cellRatio=%.2f", w, h, cellRatio)
+	}
 
 	// Detect image protocol (Kitty, Sixel, ITerm2, or Halfblocks)
 	var imageProtocol termimg.Protocol
@@ -711,6 +712,14 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 		cellRatio = 2.0
 	}
 
+	if w, h, ok := correctCellRatioForTmux(logger); ok {
+		cellRatio = float64(h) / float64(w)
+		if cellRatio <= 0 {
+			cellRatio = 2.0
+		}
+		logger.Printf("tmux cellRatio fix applied in NewOfflineModel: %dx%d -> cellRatio=%.2f", w, h, cellRatio)
+	}
+
 	// Detect image protocol (Kitty, Sixel, ITerm2, or Halfblocks)
 	var imageProtocol termimg.Protocol
 	if cfg.ForceProtocol != "" {
@@ -894,7 +903,6 @@ func (m Model) Init() tea.Cmd {
 		tickPollCmd(),
 		tea.RequestBackgroundColor,
 		m.downloadResultsCmd(),
-		detectTmuxCellInfoCmd(m.imageProtocol),
 	}
 	if m.themeWatcher != nil {
 		cmds = append(cmds, watchThemeCmd(m.themeWatcher))
@@ -1383,20 +1391,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			for _, issue := range msg.issues {
 				logger.Printf("Station issue [%s]: %s", issue.Kind, issue.Message)
 			}
-		}
-		return handle(m, nil)
-
-	case tmuxCellInfoMsg:
-		if msg.cellRatioOk {
-			m.cellRatio = float64(msg.fontHeight) / float64(msg.fontWidth)
-			if m.cellRatio <= 0 {
-				m.cellRatio = 2.0
-			}
-			logger.Printf("tmux cellRatio fix applied: %dx%d -> cellRatio=%.2f", msg.fontWidth, msg.fontHeight, m.cellRatio)
-		}
-		if msg.offsetOk {
-			m.tmuxRowOffset = msg.rowOffset
-			m.tmuxColOffset = msg.colOffset
 		}
 		return handle(m, nil)
 
@@ -2016,7 +2010,6 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				logger,
 			)
 			m.galleryModal.SetProtocol(m.imageProtocol)
-			m.galleryModal.SetTmuxOffset(m.tmuxRowOffset, m.tmuxColOffset)
 			m.activeModal = ModalGallery
 			return m, tea.Batch(
 				clearKittyImagesCmdIf(m.imageProtocol),
@@ -5541,8 +5534,8 @@ func (m Model) renderImagesCmd() tea.Cmd {
 		}
 
 		if m.imageProtocol == termimg.Kitty {
-			artRow := 3 + m.tmuxRowOffset
-			artColAbs := artCol + m.tmuxColOffset
+			artRow := 3
+			artColAbs := artCol
 			raw += fmt.Sprintf("\x1b[s\x1b[%d;%dH%s\x1b[u", artRow, artColAbs, m.albumArtStr)
 		} else {
 			raw += "\x1b[s" + positionMultiLineImage(m.albumArtStr, 3, artCol) + "\x1b[u"
@@ -5554,8 +5547,8 @@ func (m Model) renderImagesCmd() tea.Cmd {
 		availableSpace := m.height - 20 - 3
 		if availableSpace >= m.artistArtHeight {
 			// Bottom section starts after: header(1) + gap(2) + nowPlaying(15 lines) + gap(2) = row 20
-			artistRow := 20 + m.tmuxRowOffset
-			artistCol := 2 + m.tmuxColOffset
+			artistRow := 20
+			artistCol := 2
 			if m.imageProtocol == termimg.Kitty {
 				raw += fmt.Sprintf("\x1b[s\x1b[%d;%dH%s\x1b[u", artistRow, artistCol, m.artistArtStr)
 			} else {

@@ -74,7 +74,8 @@ type Gallery struct {
 	termHeight    int
 	cellRatio     float64
 	imageProtocol termimg.Protocol
-	logger        *log.Logger
+
+	logger *log.Logger
 
 	// Image state
 	images  []image.Image // decoded images (nil until loaded)
