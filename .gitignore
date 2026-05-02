@@ -23,6 +23,7 @@ AGENTS.md
 grok-readme.md
 session-*.md
 .kilo/
+.opencode/
 
 # Planning documents
 docs/

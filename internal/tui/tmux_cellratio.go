@@ -27,12 +27,12 @@ func wrapTmuxPassthrough(output string) string {
 // the character dimensions reflect the inner tmux pane.
 //
 // This function uses two strategies:
-//  1. CSI 16t (character cell size in pixels) — this passes through tmux
-//     correctly and returns the outer terminal's actual per-cell pixel size,
-//     avoiding the division mismatch entirely.
-//  2. tmux client dimensions — runs `tmux display -p` to get the outer
-//     terminal's character count, then pairs it with CSI 14t pixel dimensions
-//     for the division.
+// 1. CSI 16t (character cell size in pixels) — this passes through tmux
+// correctly and returns the outer terminal's actual per-cell pixel size,
+// avoiding the division mismatch entirely.
+// 2. tmux client dimensions — runs `tmux display -p` to get the outer
+// terminal's character count, then pairs it with CSI 14t pixel dimensions
+// for the division.
 //
 // Returns (fontWidth, fontHeight, true) if a correction was applied,
 // or (0, 0, false) if no correction is needed or available.
@@ -41,14 +41,12 @@ func correctCellRatioForTmux(logger *log.Logger) (int, int, bool) {
 		return 0, 0, false
 	}
 
-	// Strategy 1: CSI 16t — direct cell size query
 	if w, h, ok := queryCSI16tViaTmux(); ok && w > 0 && h > 0 {
 		logger.Printf("tmux cellRatio fix: CSI 16t returned %dx%d", w, h)
 		return w, h, true
 	}
 	logger.Printf("tmux cellRatio fix: CSI 16t failed, trying tmux client dimensions")
 
-	// Strategy 2: tmux client dimensions + CSI 14t pixel area
 	clientW, clientH, ok := getTmuxClientDimensions()
 	if !ok {
 		logger.Printf("tmux cellRatio fix: tmux client dimensions failed")
@@ -74,8 +72,6 @@ func correctCellRatioForTmux(logger *log.Logger) (int, int, bool) {
 	return fontW, fontH, true
 }
 
-// queryCSI16tViaTmux sends CSI 16t wrapped in tmux passthrough and reads
-// the response from the outer terminal.
 func queryCSI16tViaTmux() (width, height int, ok bool) {
 	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 	if err != nil {
@@ -125,8 +121,6 @@ func queryCSI16tViaTmux() (width, height int, ok bool) {
 	}
 }
 
-// queryCSI14tViaTmux sends CSI 14t wrapped in tmux passthrough and reads
-// the pixel area response from the outer terminal.
 func queryCSI14tViaTmux() (width, height int, ok bool) {
 	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 	if err != nil {
@@ -176,8 +170,6 @@ func queryCSI14tViaTmux() (width, height int, ok bool) {
 	}
 }
 
-// getTmuxClientDimensions returns the outer terminal's character dimensions
-// by querying tmux's client_width and client_height format strings.
 func getTmuxClientDimensions() (width, height int, ok bool) {
 	out, err := exec.Command("tmux", "display", "-p", "#{client_width} #{client_height}").Output()
 	if err != nil {
