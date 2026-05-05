@@ -465,6 +465,11 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 		logger.Printf("Detected image protocol: %s", imageProtocol)
 	}
 
+	if imageProtocol != termimg.Kitty && detectTmuxOuterKitty() {
+		imageProtocol = termimg.Kitty
+		logger.Printf("tmux outer terminal supports Kitty, overriding detection")
+	}
+
 	// Initialize API clients
 	rpAPI := api.NewRadioParadiseAPI(cfg.Channel, cfg.Bitrate)
 
@@ -740,6 +745,11 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 	} else {
 		imageProtocol = termimg.DetectProtocol()
 		logger.Printf("Detected image protocol: %s", imageProtocol)
+	}
+
+	if imageProtocol != termimg.Kitty && detectTmuxOuterKitty() {
+		imageProtocol = termimg.Kitty
+		logger.Printf("tmux outer terminal supports Kitty, overriding detection")
 	}
 
 	// Initialize API clients (lyrics, artist info still available for lookups)
@@ -1293,7 +1303,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case modals.GalleryRenderImageMsg:
 		if m.galleryModal != nil && m.activeModal == ModalGallery {
-			return m, tea.Raw(msg.ImageStr)
+			var raw string
+			if m.imageProtocol == termimg.Kitty {
+				if inTmux() {
+					images := []struct {
+						Str string
+						Row int
+						Col int
+					}{{msg.ImageStr, msg.Row, msg.Col}}
+					raw = buildKittyTmuxRaw(termimg.ClearAllString(), images)
+				} else {
+					raw = termimg.ClearAllString() + fmt.Sprintf("\x1b[s\x1b[%d;%dH%s\x1b[u", msg.Row, msg.Col, msg.ImageStr)
+				}
+			} else {
+				raw = "\x1b[s" + positionMultiLineImage(msg.ImageStr, msg.Row, msg.Col) + "\x1b[u"
+			}
+			return m, tea.Raw(raw)
 		}
 		return m, nil
 
@@ -3423,7 +3448,8 @@ func (m Model) handleImageLoaded(msg imageLoadedMsg) (tea.Model, tea.Cmd) {
 	tiImg := termimg.New(img).
 		Size(width, height).
 		Scale(termimg.ScaleFit).
-		Protocol(m.imageProtocol)
+		Protocol(m.imageProtocol).
+		UseUnicode(false)
 
 	logger.Printf("DEBUG AlbumArt: cellRatio=%.2f, protocol=%s, targetW=%d, targetH=%d", m.cellRatio, m.imageProtocol, width, height)
 
@@ -4954,7 +4980,8 @@ func (m Model) handleArtistImageLoaded(msg artistImageLoadedMsg) (tea.Model, tea
 		Size(renderWidth, renderHeight).
 		Scale(termimg.ScaleFit).
 		Protocol(m.imageProtocol).
-		ZIndex(1)
+		ZIndex(1).
+		UseUnicode(false)
 
 	rendered, err := tiImg.Render()
 	if err != nil {
@@ -5484,6 +5511,92 @@ func positionMultiLineImage(imgStr string, startRow, startCol int) string {
 	return b.String()
 }
 
+// unwrapAllTmuxDCS unwraps one or more tmux DCS passthrough wrappers in the
+// input, un-doubling ESC characters inside each, and concatenating the raw
+// escape sequences that the outer terminal should see.
+//
+// go-termimg wraps each APC chunk in its own DCS passthrough when running
+// inside tmux, so a rendered image string looks like:
+//
+//	\x1bPtmux;\x1b<doubled-ESC chunk1>\x1b\\\x1bPtmux;\x1b<doubled-ESC chunk2>\x1b\\...
+//
+// This function iterates over each DCS passthrough, strips the
+// \x1bPtmux;\x1b prefix and \x1b\\ terminator, un-doubles \x1b\x1b → \x1b,
+// and concatenates all unwrapped segments.
+func unwrapAllTmuxDCS(input string) string {
+	const prefix = "\x1bPtmux;\x1b"
+	const terminator = "\x1b\\"
+
+	if !strings.Contains(input, prefix) {
+		return input
+	}
+
+	var result strings.Builder
+	i := 0
+	for i < len(input) {
+		idx := strings.Index(input[i:], prefix)
+		if idx == -1 {
+			result.WriteString(input[i:])
+			break
+		}
+		if idx > 0 {
+			result.WriteString(input[i : i+idx])
+		}
+		start := i + idx + len(prefix)
+		end := start
+		for end < len(input) {
+			tIdx := strings.Index(input[end:], terminator)
+			if tIdx == -1 {
+				end = len(input)
+				break
+			}
+			termPos := end + tIdx
+			if termPos > start && input[termPos-1] == '\x1b' {
+				end = termPos + len(terminator)
+				continue
+			}
+			end = termPos
+			break
+		}
+		content := input[start:end]
+		result.WriteString(strings.ReplaceAll(content, "\x1b\x1b", "\x1b"))
+		i = end + len(terminator)
+	}
+	return result.String()
+}
+
+// buildKittyTmuxRaw builds a single tmux DCS passthrough that combines a Kitty
+// clear-all command, a cursor move, and one or more Kitty image render strings
+// into one atomic passthrough. This ensures the outer terminal's cursor is
+// positioned correctly before the APC image data arrives, and that only one
+// tty_invalidate() fires after everything is done.
+//
+// Each image is specified as (renderStr, row, col) where row/col are 1-indexed
+// pane-relative coordinates. These are converted to absolute outer-terminal
+// coordinates using the tmux pane offset.
+func buildKittyTmuxRaw(clearStr string, images []struct {
+	Str string
+	Row int
+	Col int
+}) string {
+	rowOff, colOff, _ := getTmuxPaneOffset()
+
+	var inner strings.Builder
+
+	if clearStr != "" {
+		inner.WriteString(unwrapAllTmuxDCS(clearStr))
+	}
+
+	for _, img := range images {
+		absRow := img.Row + rowOff
+		absCol := img.Col + colOff
+		inner.WriteString(fmt.Sprintf("\x1b[%d;%dH", absRow, absCol))
+		inner.WriteString(unwrapAllTmuxDCS(img.Str))
+	}
+
+	return wrapTmuxPassthrough(inner.String())
+}
+
 // renderImagesCmd returns a tea.Cmd that sends all terminal images (album art
 // and artist thumbnail) via tea.Raw. All protocols use tea.Raw to bypass
 // bubbletea's StyledString which doesn't support cursor positioning escapes.
@@ -5511,48 +5624,84 @@ func (m Model) renderImagesCmd() tea.Cmd {
 	}
 
 	// Build image render string
-	// For Kitty: need ClearAllString to remove previous images before rendering
 	var raw string
-	if m.imageProtocol == termimg.Kitty {
-		raw = termimg.ClearAllString()
-	}
 
-	if hasAlbumArt {
-		artHeight := 16
-		artWidth := int(float64(artHeight) * m.cellRatio)
-		if artWidth < 10 {
-			artWidth = 10
+	if m.imageProtocol == termimg.Kitty && inTmux() {
+		var images []struct {
+			Str string
+			Row int
+			Col int
 		}
-		var artCol int
-		if m.layoutMode == LayoutNarrow {
-			artCol = 2 // left-aligned for narrow layout
-		} else {
-			artCol = m.width - artWidth - 2
-			if artCol < 1 {
-				artCol = 1
+		if hasAlbumArt {
+			artHeight := 16
+			artWidth := int(float64(artHeight) * m.cellRatio)
+			if artWidth < 10 {
+				artWidth = 10
+			}
+			var artCol int
+			if m.layoutMode == LayoutNarrow {
+				artCol = 2
+			} else {
+				artCol = m.width - artWidth - 2
+				if artCol < 1 {
+					artCol = 1
+				}
+			}
+			images = append(images, struct {
+				Str string
+				Row int
+				Col int
+			}{m.albumArtStr, 3, artCol})
+		}
+		if hasArtistArt {
+			availableSpace := m.height - 20 - 3
+			if availableSpace >= m.artistArtHeight {
+				images = append(images, struct {
+					Str string
+					Row int
+					Col int
+				}{m.artistArtStr, 20, 2})
+			}
+		}
+		if len(images) > 0 {
+			raw = buildKittyTmuxRaw(termimg.ClearAllString(), images)
+		}
+	} else {
+		if m.imageProtocol == termimg.Kitty {
+			raw = termimg.ClearAllString()
+		}
+
+		if hasAlbumArt {
+			artHeight := 16
+			artWidth := int(float64(artHeight) * m.cellRatio)
+			if artWidth < 10 {
+				artWidth = 10
+			}
+			var artCol int
+			if m.layoutMode == LayoutNarrow {
+				artCol = 2
+			} else {
+				artCol = m.width - artWidth - 2
+				if artCol < 1 {
+					artCol = 1
+				}
+			}
+
+			if m.imageProtocol == termimg.Kitty {
+				raw += fmt.Sprintf("\x1b[s\x1b[%d;%dH%s\x1b[u", 3, artCol, m.albumArtStr)
+			} else {
+				raw += "\x1b[s" + positionMultiLineImage(m.albumArtStr, 3, artCol) + "\x1b[u"
 			}
 		}
 
-		if m.imageProtocol == termimg.Kitty {
-			artRow := 3
-			artColAbs := artCol
-			raw += fmt.Sprintf("\x1b[s\x1b[%d;%dH%s\x1b[u", artRow, artColAbs, m.albumArtStr)
-		} else {
-			raw += "\x1b[s" + positionMultiLineImage(m.albumArtStr, 3, artCol) + "\x1b[u"
-		}
-	}
-
-	if hasArtistArt {
-		// Check if there's enough space: available = height - start_row(20) - footer_estimate(3)
-		availableSpace := m.height - 20 - 3
-		if availableSpace >= m.artistArtHeight {
-			// Bottom section starts after: header(1) + gap(2) + nowPlaying(15 lines) + gap(2) = row 20
-			artistRow := 20
-			artistCol := 2
-			if m.imageProtocol == termimg.Kitty {
-				raw += fmt.Sprintf("\x1b[s\x1b[%d;%dH%s\x1b[u", artistRow, artistCol, m.artistArtStr)
-			} else {
-				raw += "\x1b[s" + positionMultiLineImage(m.artistArtStr, 20, 2) + "\x1b[u"
+		if hasArtistArt {
+			availableSpace := m.height - 20 - 3
+			if availableSpace >= m.artistArtHeight {
+				if m.imageProtocol == termimg.Kitty {
+					raw += fmt.Sprintf("\x1b[s\x1b[%d;%dH%s\x1b[u", 20, 2, m.artistArtStr)
+				} else {
+					raw += "\x1b[s" + positionMultiLineImage(m.artistArtStr, 20, 2) + "\x1b[u"
+				}
 			}
 		}
 	}

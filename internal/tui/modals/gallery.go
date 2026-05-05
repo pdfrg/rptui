@@ -29,23 +29,6 @@ const (
 	galleryLinesBelow  = 4 // blank + source + blank + help
 )
 
-// positionImage positions a multi-line image string at the specified row and column.
-// For protocols like halfblocks that output multi-line content, each newline resets
-// to column 1, so we need to prepend a cursor position escape before each line.
-func positionImage(imgStr string, row, col int) string {
-	lines := strings.Split(imgStr, "\n")
-	var b strings.Builder
-	for i, line := range lines {
-		if i > 0 {
-			b.WriteString("\n")
-		}
-		if line != "" {
-			b.WriteString(fmt.Sprintf("\x1b[%d;%dH%s", row+i, col, line))
-		}
-	}
-	return b.String()
-}
-
 // GalleryMsg is sent when the gallery modal closes
 type GalleryMsg struct {
 	Closed bool
@@ -62,6 +45,8 @@ type GalleryImageLoadedMsg struct {
 // via tea.Raw(). The delay ensures the modal View() renders first.
 type GalleryRenderImageMsg struct {
 	ImageStr string
+	Row      int
+	Col      int
 }
 
 // Gallery modal for viewing artist images
@@ -310,7 +295,8 @@ func (g *Gallery) renderCurrentImage() {
 	tiImg := termimg.New(img).
 		Size(renderWidth, renderHeight).
 		Scale(termimg.ScaleFit).
-		Protocol(g.imageProtocol)
+		Protocol(g.imageProtocol).
+		UseUnicode(false)
 
 	g.logger.Printf("DEBUG Gallery: protocol=%s, cellRatio=%.2f, maxW=%d, maxH=%d, displayW=%d, displayH=%d, imgSrc=%dx%d, renderW=%d, renderH=%d",
 		g.imageProtocol, g.cellRatio, maxW, maxH, displayWidth, displayHeight, imgBounds.Dx(), imgBounds.Dy(), renderWidth, renderHeight)
@@ -410,16 +396,7 @@ func (g *Gallery) RenderImageCmd() tea.Cmd {
 
 	// Build the image render command
 	renderCmd := tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
-		// Just render the image - no clear sequence
-		// For Kitty: ClearAllString clears previous images
-		// For other protocols: just render on top
-		var raw string
-		if g.imageProtocol == termimg.Kitty {
-			raw = termimg.ClearAllString() + fmt.Sprintf("\x1b[s\x1b[%d;%dH%s\x1b[u", row, col, imgStr)
-		} else {
-			raw = "\x1b[s" + positionImage(imgStr, row, col) + "\x1b[u"
-		}
-		return GalleryRenderImageMsg{ImageStr: raw}
+		return GalleryRenderImageMsg{ImageStr: imgStr, Row: row, Col: col}
 	})
 
 	// For subsequent navigations: clear screen first, then render
