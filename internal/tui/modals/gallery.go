@@ -9,6 +9,7 @@ import (
 	_ "image/png"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -28,6 +29,14 @@ const (
 	galleryLinesAbove  = 3 // title/indicator + blank + blank before image
 	galleryLinesBelow  = 4 // blank + source + blank + help
 )
+
+// maxTmuxPixelArea caps the rendered image pixel area (widthPx × heightPx)
+// when running in tmux+Kitty. This keeps the go-termimg rendered output
+// under ~850KB, well within tmux's 1MB DCS input buffer limit, so the
+// image always fits in a single DCS passthrough and avoids the DCS
+// splitting path in buildKittyTmuxRaw which causes cursor positioning
+// errors. Measured ratio: ~5.3 bytes of DCS-wrapped output per pixel.
+const maxTmuxPixelArea = 160_000
 
 // GalleryMsg is sent when the gallery modal closes
 type GalleryMsg struct {
@@ -292,6 +301,17 @@ func (g *Gallery) renderCurrentImage() {
 		}
 	}
 
+	// Cap pixel area when in tmux+Kitty to keep rendered output under
+	// the DCS buffer limit, avoiding the problematic DCS splitting path.
+	if g.imageProtocol == termimg.Kitty && g.fontW > 0 && g.fontH > 0 {
+		pixelArea := displayWidth * g.fontW * displayHeight * g.fontH
+		if pixelArea > maxTmuxPixelArea {
+			scale := math.Sqrt(float64(maxTmuxPixelArea) / float64(pixelArea))
+			displayWidth = max(4, int(float64(displayWidth)*scale))
+			displayHeight = max(2, int(float64(displayHeight)*scale))
+		}
+	}
+
 	// Calculate render dimensions (in pixels for halfblocks, cells for others)
 	renderWidth := displayWidth
 	renderHeight := displayHeight
@@ -317,8 +337,8 @@ func (g *Gallery) renderCurrentImage() {
 			UseUnicode(false)
 	}
 
-	g.logger.Printf("DEBUG Gallery: protocol=%s, cellRatio=%.2f, maxW=%d, maxH=%d, displayW=%d, displayH=%d, imgSrc=%dx%d, renderW=%d, renderH=%d",
-		g.imageProtocol, g.cellRatio, maxW, maxH, displayWidth, displayHeight, imgBounds.Dx(), imgBounds.Dy(), renderWidth, renderHeight)
+	g.logger.Printf("DEBUG Gallery: protocol=%s, cellRatio=%.2f, maxW=%d, maxH=%d, displayW=%d, displayH=%d, imgSrc=%dx%d, renderW=%d, renderH=%d, pixelArea=%d",
+		g.imageProtocol, g.cellRatio, maxW, maxH, displayWidth, displayHeight, imgBounds.Dx(), imgBounds.Dy(), renderWidth, renderHeight, displayWidth*g.fontW*displayHeight*g.fontH)
 
 	rendered, err := tiImg.Render()
 	if err != nil {
