@@ -58,6 +58,8 @@ type Gallery struct {
 	termWidth     int
 	termHeight    int
 	cellRatio     float64
+	fontW         int
+	fontH         int
 	imageProtocol termimg.Protocol
 
 	logger *log.Logger
@@ -78,7 +80,7 @@ type Gallery struct {
 }
 
 // NewGallery creates a new Gallery modal
-func NewGallery(styles *config.ThemeStyles, urls []string, source string, termWidth, termHeight int, cellRatio float64, logger *log.Logger) *Gallery {
+func NewGallery(styles *config.ThemeStyles, urls []string, source string, termWidth, termHeight int, cellRatio float64, fontW, fontH int, logger *log.Logger) *Gallery {
 	if cellRatio < 1.0 {
 		cellRatio = 2.0
 	}
@@ -90,6 +92,8 @@ func NewGallery(styles *config.ThemeStyles, urls []string, source string, termWi
 		termWidth:  termWidth,
 		termHeight: termHeight,
 		cellRatio:  cellRatio,
+		fontW:      fontW,
+		fontH:      fontH,
 		logger:     logger,
 		images:     make([]image.Image, len(urls)),
 		loading:    make(map[int]bool),
@@ -264,10 +268,15 @@ func (g *Gallery) renderCurrentImage() {
 	// Convert cells to pixels using font metrics, then clamp.
 	nativeW := imgBounds.Dx()
 	nativeH := imgBounds.Dy()
-	features := termimg.QueryTerminalFeatures()
-	if features.FontWidth > 0 && features.FontHeight > 0 {
-		maxNativeCols := nativeW / features.FontWidth
-		maxNativeRows := nativeH / features.FontHeight
+	fw, fh := g.fontW, g.fontH
+	if fw <= 0 || fh <= 0 {
+		features := termimg.QueryTerminalFeatures()
+		fw = features.FontWidth
+		fh = features.FontHeight
+	}
+	if fw > 0 && fh > 0 {
+		maxNativeCols := nativeW / fw
+		maxNativeRows := nativeH / fh
 		if displayWidth > maxNativeCols || displayHeight > maxNativeRows {
 			// Scale down to fit native resolution
 			if displayWidth > maxNativeCols {
@@ -292,11 +301,21 @@ func (g *Gallery) renderCurrentImage() {
 		renderHeight = displayHeight * 2
 	}
 
-	tiImg := termimg.New(img).
-		Size(renderWidth, renderHeight).
-		Scale(termimg.ScaleFit).
-		Protocol(g.imageProtocol).
-		UseUnicode(false)
+	var tiImg *termimg.Image
+	if g.imageProtocol == termimg.Kitty && g.fontW > 0 && g.fontH > 0 {
+		tiImg = termimg.New(img).
+			SizePixels(renderWidth*g.fontW, renderHeight*g.fontH).
+			Size(renderWidth, renderHeight).
+			Scale(termimg.ScaleFit).
+			Protocol(g.imageProtocol).
+			UseUnicode(false)
+	} else {
+		tiImg = termimg.New(img).
+			Size(renderWidth, renderHeight).
+			Scale(termimg.ScaleFit).
+			Protocol(g.imageProtocol).
+			UseUnicode(false)
+	}
 
 	g.logger.Printf("DEBUG Gallery: protocol=%s, cellRatio=%.2f, maxW=%d, maxH=%d, displayW=%d, displayH=%d, imgSrc=%dx%d, renderW=%d, renderH=%d",
 		g.imageProtocol, g.cellRatio, maxW, maxH, displayWidth, displayHeight, imgBounds.Dx(), imgBounds.Dy(), renderWidth, renderHeight)

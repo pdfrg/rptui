@@ -26,13 +26,15 @@ func wrapTmuxPassthrough(output string) string {
 // because the pixel dimensions reflect the full outer terminal window while
 // the character dimensions reflect the inner tmux pane.
 //
-// This function uses two strategies:
-// 1. CSI 16t (character cell size in pixels) — this passes through tmux
-// correctly and returns the outer terminal's actual per-cell pixel size,
-// avoiding the division mismatch entirely.
-// 2. tmux client dimensions — runs `tmux display -p` to get the outer
-// terminal's character count, then pairs it with CSI 14t pixel dimensions
-// for the division.
+// This function uses three strategies in order of reliability:
+// 1. tmux client_cell_width/height format variables — the simplest and most
+// reliable approach. These are per-client values from the tmux server
+// (available since tmux 3.0a, April 2019) that report the outer terminal's
+// actual per-cell pixel size. No TTY manipulation or CSI queries needed.
+// 2. CSI 16t (character cell size in pixels) — passes through tmux via
+// DCS passthrough and returns the outer terminal's per-cell pixel size.
+// 3. tmux client dimensions + CSI 14t — divides the outer terminal's total
+// pixel dimensions (CSI 14t) by its character count (tmux client_width/height).
 //
 // Returns (fontWidth, fontHeight, true) if a correction was applied,
 // or (0, 0, false) if no correction is needed or available.
@@ -40,6 +42,12 @@ func correctCellRatioForTmux(logger *log.Logger) (int, int, bool) {
 	if !inTmux() {
 		return 0, 0, false
 	}
+
+	if w, h, ok := getTmuxClientCellSize(); ok && w > 0 && h > 0 {
+		logger.Printf("tmux cellRatio fix: client_cell returned %dx%d", w, h)
+		return w, h, true
+	}
+	logger.Printf("tmux cellRatio fix: client_cell failed, trying CSI 16t")
 
 	if w, h, ok := queryCSI16tViaTmux(); ok && w > 0 && h > 0 {
 		logger.Printf("tmux cellRatio fix: CSI 16t returned %dx%d", w, h)
@@ -70,6 +78,31 @@ func correctCellRatioForTmux(logger *log.Logger) (int, int, bool) {
 	logger.Printf("tmux cellRatio fix: tmux client dims %dx%d + CSI 14t %dx%d -> font %dx%d",
 		clientW, clientH, pixelW, pixelH, fontW, fontH)
 	return fontW, fontH, true
+}
+
+func getTmuxClientCellSize() (width, height int, ok bool) {
+	out, err := exec.Command("tmux", "display", "-p",
+		"#{client_cell_width} #{client_cell_height}").Output()
+	if err != nil {
+		return 0, 0, false
+	}
+
+	fields := strings.Fields(strings.TrimSpace(string(out)))
+	if len(fields) < 2 {
+		return 0, 0, false
+	}
+
+	w, err := strconv.Atoi(fields[0])
+	if err != nil || w <= 0 {
+		return 0, 0, false
+	}
+
+	h, err := strconv.Atoi(fields[1])
+	if err != nil || h <= 0 {
+		return 0, 0, false
+	}
+
+	return w, h, true
 }
 
 func queryCSI16tViaTmux() (width, height int, ok bool) {
