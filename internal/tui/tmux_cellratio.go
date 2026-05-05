@@ -329,3 +329,28 @@ func detectTmuxOuterKitty() bool {
 
 	return false
 }
+
+// detectTermKitty checks whether the current terminal supports the Kitty
+// graphics protocol by examining the TERM environment variable. This
+// supplements go-termimg's detection for the non-tmux SSH case where
+// TERM_PROGRAM is not set (SSH only propagates TERM by default).
+//
+// go-termimg checks TERM_PROGRAM for "rio", "WezTerm", and "ghostty",
+// but when connecting via SSH from these terminals, TERM_PROGRAM is
+// typically empty. However, TERM is set (e.g., TERM=rio) and propagated
+// by SSH. This function checks TERM against the known Kitty-capable
+// terminal names, catching cases where go-termimg's TERM_PROGRAM-based
+// detection fails and the terminal query times out over SSH.
+func detectTermKitty() bool {
+	if inTmux() {
+		return false
+	}
+
+	term := strings.ToLower(os.Getenv("TERM"))
+	for _, name := range []string{"rio", "ghostty", "wezterm", "kitty"} {
+		if term == name || strings.Contains(term, name) {
+			return true
+		}
+	}
+	return false
+}
