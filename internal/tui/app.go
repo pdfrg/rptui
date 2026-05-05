@@ -432,13 +432,24 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 	}
 
 	features := termimg.QueryTerminalFeatures()
-	cellRatio := float64(features.FontHeight) / float64(features.FontWidth)
+	fontW, fontH := features.FontWidth, features.FontHeight
+	cellRatio := float64(fontH) / float64(fontW)
+
+	// Some terminals (notably WezTerm over SSH) return swapped font
+	// dimensions in their CSI 16t response, producing FontWidth >
+	// FontHeight and cellRatio < 1.0. No monospace font is wider than
+	// it is tall, so swap the dimensions when this invariant is violated.
+	if cellRatio < 1.0 && fontW > 0 && fontH > 0 {
+		logger.Printf("WARNING: FontWidth=%d > FontHeight=%d (cellRatio=%.2f) — likely swapped dimensions, correcting",
+			fontW, fontH, cellRatio)
+		fontW, fontH = fontH, fontW
+		cellRatio = float64(fontH) / float64(fontW)
+	}
 	if cellRatio <= 0 {
 		cellRatio = 2.0
 	}
-	logger.Printf("DEBUG: FontWidth=%d, FontHeight=%d, cellRatio=%.2f", features.FontWidth, features.FontHeight, cellRatio)
+	logger.Printf("DEBUG: FontWidth=%d, FontHeight=%d, cellRatio=%.2f", fontW, fontH, cellRatio)
 
-	var fontW, fontH int
 	if w, h, ok := correctCellRatioForTmux(logger); ok {
 		cellRatio = float64(h) / float64(w)
 		if cellRatio <= 0 {
@@ -475,6 +486,10 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 	if imageProtocol != termimg.Kitty && detectTmuxOuterKitty() {
 		imageProtocol = termimg.Kitty
 		logger.Printf("tmux outer terminal supports Kitty, overriding detection")
+	}
+	if imageProtocol != termimg.Kitty && detectTermKitty() {
+		imageProtocol = termimg.Kitty
+		logger.Printf("TERM=%q indicates Kitty support, overriding detection", os.Getenv("TERM"))
 	}
 
 	ensureTmuxPassthroughAll(logger)
@@ -723,12 +738,19 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 	}
 
 	features := termimg.QueryTerminalFeatures()
-	cellRatio := float64(features.FontHeight) / float64(features.FontWidth)
+	fontW, fontH := features.FontWidth, features.FontHeight
+	cellRatio := float64(fontH) / float64(fontW)
+
+	if cellRatio < 1.0 && fontW > 0 && fontH > 0 {
+		logger.Printf("WARNING: FontWidth=%d > FontHeight=%d (cellRatio=%.2f) — likely swapped dimensions, correcting",
+			fontW, fontH, cellRatio)
+		fontW, fontH = fontH, fontW
+		cellRatio = float64(fontH) / float64(fontW)
+	}
 	if cellRatio <= 0 {
 		cellRatio = 2.0
 	}
 
-	var fontW, fontH int
 	if w, h, ok := correctCellRatioForTmux(logger); ok {
 		cellRatio = float64(h) / float64(w)
 		if cellRatio <= 0 {
@@ -764,6 +786,10 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 	if imageProtocol != termimg.Kitty && detectTmuxOuterKitty() {
 		imageProtocol = termimg.Kitty
 		logger.Printf("tmux outer terminal supports Kitty, overriding detection")
+	}
+	if imageProtocol != termimg.Kitty && detectTermKitty() {
+		imageProtocol = termimg.Kitty
+		logger.Printf("TERM=%q indicates Kitty support, overriding detection", os.Getenv("TERM"))
 	}
 
 	ensureTmuxPassthroughAll(logger)

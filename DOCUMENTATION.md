@@ -590,3 +590,67 @@ No worries! As long as you have been favoriting songs, Jukebox Mode has you cove
 
 Just run: `rptui -j`.
 
+## Tmux, SSH, and Tmux+SSH Compatibility
+
+rptui supports rendering images (album art, artist thumbnails, gallery) in
+terminals that implement the Kitty graphics protocol. This section documents
+which combinations of terminal, connection method, and multiplexer have been
+tested.
+
+### Kitty Graphics Protocol Support
+
+The following terminals implement the Kitty graphics protocol and can display
+images in rptui:
+
+- **kitty** — native Kitty protocol support
+- **rio** — Kitty protocol support
+- **WezTerm** — Kitty protocol support
+- **ghostty** — Kitty protocol support
+
+### Tested Combinations
+
+| Terminal | Local | SSH | Local + tmux | SSH + tmux |
+|----------|:-----:|:---:|:------------:|:----------:|
+| kitty | yes | yes | yes | yes |
+| rio | yes | yes | yes | yes |
+| WezTerm | — | yes | — | yes |
+| ghostty | — | — | — | — |
+
+`yes` = tested and working. `—` = not tested (WezTerm and ghostty do not run
+on the developer's local GPU; ghostty lacks Ubuntu 22.04 support).
+
+### Other Terminals (VTE-based)
+
+VTE-based terminals (mate-terminal, gnome-terminal, xfce4-terminal, etc.) do
+not support Kitty graphics but work with the Halfblocks fallback protocol:
+
+| Terminal | Local | SSH | Local + tmux | SSH + tmux |
+|----------|:-----:|:---:|:------------:|:----------:|
+| mate-terminal | yes | yes | yes | yes |
+
+Other VTE terminals should behave identically.
+
+### Sixel and iTerm2
+
+Sixel and iTerm2 protocols are not yet tested with SSH or tmux. They work
+locally but compatibility under SSH or inside tmux is unconfirmed.
+
+### Known Issues and Workarounds
+
+**Rio over SSH**: The `TERM_PROGRAM` environment variable is not propagated
+over SSH by default. rptui falls back to checking `TERM=rio` to detect Kitty
+protocol support. If detection still fails, set `force_protocol = "kitty"` in
+your config file.
+
+**WezTerm over SSH**: WezTerm returns swapped cell dimensions in its CSI 16t
+response over SSH, producing a wrong cell ratio (0.44 instead of ~2.0). rptui
+detects this (no monospace font has width > height) and automatically swaps the
+dimensions back. No manual configuration needed.
+
+**tmux image rendering**: tmux does not natively support terminal graphics
+protocols. rptui works around this using DCS passthrough sequences to send
+Kitty commands directly to the outer terminal. This requires
+`allow-passthrough=all` in tmux, which rptui sets automatically. Large gallery
+images in tmux are scaled down to stay within tmux's DCS buffer limit, which
+may result in slightly smaller images compared to non-tmux rendering.
+
