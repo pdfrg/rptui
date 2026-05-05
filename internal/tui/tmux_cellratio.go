@@ -170,6 +170,40 @@ func queryCSI14tViaTmux() (width, height int, ok bool) {
 	}
 }
 
+func getTmuxPaneOffset() (rowOffset, colOffset int, ok bool) {
+	if !inTmux() {
+		return 0, 0, false
+	}
+
+	out, err := exec.Command("tmux", "display", "-p",
+		"#{pane_top} #{pane_left} #{status-position}").Output()
+	if err != nil {
+		return 0, 0, false
+	}
+
+	fields := strings.Fields(strings.TrimSpace(string(out)))
+	if len(fields) < 3 {
+		return 0, 0, false
+	}
+
+	paneTop, err := strconv.Atoi(fields[0])
+	if err != nil || paneTop < 0 {
+		return 0, 0, false
+	}
+
+	paneLeft, err := strconv.Atoi(fields[1])
+	if err != nil || paneLeft < 0 {
+		return 0, 0, false
+	}
+
+	statusTop := 0
+	if fields[2] == "top" {
+		statusTop = 1
+	}
+
+	return paneTop + statusTop, paneLeft, true
+}
+
 func getTmuxClientDimensions() (width, height int, ok bool) {
 	out, err := exec.Command("tmux", "display", "-p", "#{client_width} #{client_height}").Output()
 	if err != nil {
@@ -192,4 +226,45 @@ func getTmuxClientDimensions() (width, height int, ok bool) {
 	}
 
 	return w, h, true
+}
+
+// detectTmuxOuterKitty checks whether the outer terminal (outside tmux)
+// supports the Kitty graphics protocol by reading tmux's global environment
+// variables. Inside tmux, os.Getenv("TERM_PROGRAM") returns "tmux" and
+// os.Getenv("TERM") returns "tmux-256color", so go-termimg's normal
+// environment-based detection cannot identify the outer terminal.
+//
+// This function queries `tmux show-environment -g` for TERM_PROGRAM and TERM,
+// then checks if either contains any known Kitty-capable terminal name:
+// rio, ghostty, wezterm, or kitty.
+func detectTmuxOuterKitty() bool {
+	if !inTmux() {
+		return false
+	}
+
+	kittyNames := []string{"rio", "ghostty", "wezterm", "kitty"}
+
+	match := func(val string) bool {
+		lower := strings.ToLower(val)
+		for _, name := range kittyNames {
+			if strings.Contains(lower, name) {
+				return true
+			}
+		}
+		return false
+	}
+
+	for _, envVar := range []string{"TERM_PROGRAM", "TERM"} {
+		out, err := exec.Command("tmux", "show-environment", "-g", envVar).Output()
+		if err != nil {
+			continue
+		}
+		line := strings.TrimSpace(string(out))
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 && match(parts[1]) {
+			return true
+		}
+	}
+
+	return false
 }
