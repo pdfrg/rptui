@@ -363,6 +363,10 @@ type Model struct {
 	// Terminal cell ratio for album art aspect ratio correction
 	cellRatio float64
 
+	// Correct font pixel dimensions from tmux (0 if not in tmux or detection failed)
+	fontW int
+	fontH int
+
 	// Detected image protocol (Kitty, Sixel, ITerm2, or Halfblocks)
 	imageProtocol termimg.Protocol
 
@@ -434,11 +438,14 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 	}
 	logger.Printf("DEBUG: FontWidth=%d, FontHeight=%d, cellRatio=%.2f", features.FontWidth, features.FontHeight, cellRatio)
 
+	var fontW, fontH int
 	if w, h, ok := correctCellRatioForTmux(logger); ok {
 		cellRatio = float64(h) / float64(w)
 		if cellRatio <= 0 {
 			cellRatio = 2.0
 		}
+		fontW = w
+		fontH = h
 		logger.Printf("tmux cellRatio fix applied in NewModel: %dx%d -> cellRatio=%.2f", w, h, cellRatio)
 	}
 
@@ -646,6 +653,8 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 		help:                   help,
 		spinner:                sp,
 		cellRatio:              cellRatio,
+		fontW:                  fontW,
+		fontH:                  fontH,
 		imageProtocol:          imageProtocol,
 		downloadResults:        make(chan favoriteDownloadMsg, 1),
 		jukeboxMode:            startJukebox,
@@ -719,11 +728,14 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 		cellRatio = 2.0
 	}
 
+	var fontW, fontH int
 	if w, h, ok := correctCellRatioForTmux(logger); ok {
 		cellRatio = float64(h) / float64(w)
 		if cellRatio <= 0 {
 			cellRatio = 2.0
 		}
+		fontW = w
+		fontH = h
 		logger.Printf("tmux cellRatio fix applied in NewOfflineModel: %dx%d -> cellRatio=%.2f", w, h, cellRatio)
 	}
 
@@ -858,6 +870,8 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 		help:                        help,
 		spinner:                     sp,
 		cellRatio:                   cellRatio,
+		fontW:                       fontW,
+		fontH:                       fontH,
 		imageProtocol:               imageProtocol,
 		downloadResults:             make(chan favoriteDownloadMsg, 1),
 		offlineMode:                 true,
@@ -2036,6 +2050,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				m.artistInfo.GallerySource,
 				m.width, m.height,
 				m.cellRatio,
+				m.fontW, m.fontH,
 				logger,
 			)
 			m.galleryModal.SetProtocol(m.imageProtocol)
@@ -3449,11 +3464,21 @@ func (m Model) handleImageLoaded(msg imageLoadedMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	tiImg := termimg.New(img).
-		Size(width, height).
-		Scale(termimg.ScaleFit).
-		Protocol(m.imageProtocol).
-		UseUnicode(false)
+	var tiImg *termimg.Image
+	if m.imageProtocol == termimg.Kitty && inTmux() && m.fontW > 0 && m.fontH > 0 {
+		tiImg = termimg.New(img).
+			SizePixels(width*m.fontW, height*m.fontH).
+			Size(width, height).
+			Scale(termimg.ScaleFit).
+			Protocol(m.imageProtocol).
+			UseUnicode(false)
+	} else {
+		tiImg = termimg.New(img).
+			Size(width, height).
+			Scale(termimg.ScaleFit).
+			Protocol(m.imageProtocol).
+			UseUnicode(false)
+	}
 
 	logger.Printf("DEBUG AlbumArt: cellRatio=%.2f, protocol=%s, targetW=%d, targetH=%d", m.cellRatio, m.imageProtocol, width, height)
 
@@ -4980,12 +5005,23 @@ func (m Model) handleArtistImageLoaded(msg artistImageLoadedMsg) (tea.Model, tea
 	logger.Printf("Artist thumbnail sizing: src=%dx%d, display=%dx%d cells, render=%dx%d, cellRatio=%.2f",
 		imgBounds.Dx(), imgBounds.Dy(), displayWidth, displayHeight, renderWidth, renderHeight, m.cellRatio)
 
-	tiImg := termimg.New(img).
-		Size(renderWidth, renderHeight).
-		Scale(termimg.ScaleFit).
-		Protocol(m.imageProtocol).
-		ZIndex(1).
-		UseUnicode(false)
+	var tiImg *termimg.Image
+	if m.imageProtocol == termimg.Kitty && inTmux() && m.fontW > 0 && m.fontH > 0 {
+		tiImg = termimg.New(img).
+			SizePixels(renderWidth*m.fontW, renderHeight*m.fontH).
+			Size(renderWidth, renderHeight).
+			Scale(termimg.ScaleFit).
+			Protocol(m.imageProtocol).
+			ZIndex(1).
+			UseUnicode(false)
+	} else {
+		tiImg = termimg.New(img).
+			Size(renderWidth, renderHeight).
+			Scale(termimg.ScaleFit).
+			Protocol(m.imageProtocol).
+			ZIndex(1).
+			UseUnicode(false)
+	}
 
 	rendered, err := tiImg.Render()
 	if err != nil {
@@ -5569,11 +5605,17 @@ func unwrapAllTmuxDCS(input string) string {
 	return result.String()
 }
 
-// buildKittyTmuxRaw builds a single tmux DCS passthrough that combines a Kitty
-// clear-all command, a cursor move, and one or more Kitty image render strings
-// into one atomic passthrough. This ensures the outer terminal's cursor is
-// positioned correctly before the APC image data arrives, and that only one
-// tty_invalidate() fires after everything is done.
+// buildKittyTmuxRaw builds one or more tmux DCS passthroughs for Kitty images.
+// When the combined content fits under the DCS buffer safety limit, everything
+// (clear + cursor moves + images) goes into a single DCS passthrough — only
+// one tty_invalidate fires, minimizing redraw overhead.
+//
+// When the content would exceed tmux's 1MB input buffer limit
+// (INPUT_BUF_DEFAULT_SIZE=1048576 in tmux's input.c), images are split across
+// multiple DCS passthroughs. For a single oversized image, its APC chunks are
+// split at chunk boundaries. Each DCS is processed independently by tmux's
+// input state machine with its own buffer, so splitting avoids silent data
+// loss from buffer overflow.
 //
 // Each image is specified as (renderStr, row, col) where row/col are 1-indexed
 // pane-relative coordinates. These are converted to absolute outer-terminal
@@ -5585,20 +5627,108 @@ func buildKittyTmuxRaw(clearStr string, images []struct {
 }) string {
 	rowOff, colOff, _ := getTmuxPaneOffset()
 
-	var inner strings.Builder
-
-	if clearStr != "" {
-		inner.WriteString(unwrapAllTmuxDCS(clearStr))
+	if len(images) == 0 && clearStr == "" {
+		return ""
 	}
+
+	const maxDCSBytes = 900_000
+
+	clearUnwrapped := ""
+	if clearStr != "" {
+		clearUnwrapped = unwrapAllTmuxDCS(clearStr)
+	}
+
+	var dcsSegments []string
+	var inner strings.Builder
+	inner.WriteString(clearUnwrapped)
 
 	for _, img := range images {
 		absRow := img.Row + rowOff
 		absCol := img.Col + colOff
-		inner.WriteString(fmt.Sprintf("\x1b[%d;%dH", absRow, absCol))
-		inner.WriteString(unwrapAllTmuxDCS(img.Str))
+		cup := fmt.Sprintf("\x1b[%d;%dH", absRow, absCol)
+		imgUnwrapped := unwrapAllTmuxDCS(img.Str)
+
+		projectedSize := dcsWrappedLen(inner.String() + cup + imgUnwrapped)
+		if projectedSize <= maxDCSBytes {
+			inner.WriteString(cup)
+			inner.WriteString(imgUnwrapped)
+			continue
+		}
+
+		if inner.Len() > 0 {
+			dcsSegments = append(dcsSegments, wrapTmuxPassthrough(inner.String()))
+			inner.Reset()
+		}
+
+		if dcsWrappedLen(cup+imgUnwrapped) <= maxDCSBytes {
+			inner.WriteString(cup)
+			inner.WriteString(imgUnwrapped)
+			continue
+		}
+
+		chunks := splitAPCChunks(imgUnwrapped)
+		first := true
+		for _, chunk := range chunks {
+			prefix := ""
+			if first {
+				prefix = cup
+				first = false
+			}
+			if inner.Len() == 0 {
+				inner.WriteString(prefix)
+				inner.WriteString(chunk)
+				continue
+			}
+			projected := dcsWrappedLen(inner.String() + chunk)
+			if projected > maxDCSBytes {
+				dcsSegments = append(dcsSegments, wrapTmuxPassthrough(inner.String()))
+				inner.Reset()
+				inner.WriteString(chunk)
+			} else {
+				inner.WriteString(chunk)
+			}
+		}
 	}
 
-	return wrapTmuxPassthrough(inner.String())
+	if inner.Len() > 0 {
+		dcsSegments = append(dcsSegments, wrapTmuxPassthrough(inner.String()))
+	}
+
+	return strings.Join(dcsSegments, "")
+}
+
+// splitAPCChunks splits unwrapped Kitty APC content into individual APC sequences.
+// Each APC sequence is delimited by \x1b_G (start) and \x1b\\ (end).
+func splitAPCChunks(content string) []string {
+	var chunks []string
+	i := 0
+	for i < len(content) {
+		start := strings.Index(content[i:], "\x1b_G")
+		if start == -1 {
+			break
+		}
+		start += i
+		end := strings.Index(content[start:], "\x1b\\")
+		if end == -1 {
+			chunks = append(chunks, content[start:])
+			break
+		}
+		end += start + 2
+		chunks = append(chunks, content[start:end])
+		i = end
+	}
+	if len(chunks) == 0 && len(content) > 0 {
+		chunks = append(chunks, content)
+	}
+	return chunks
+}
+
+// dcsWrappedLen estimates the byte length of a DCS passthrough wrapping content.
+// Each \x1b byte in the content is doubled (\x1b\x1b), plus the DCS prefix
+// (\x1bPtmux;\x1b) and suffix (\x1b\\).
+func dcsWrappedLen(content string) int {
+	escCount := strings.Count(content, "\x1b")
+	return len(content) + escCount + 7 + 2
 }
 
 // renderImagesCmd returns a tea.Cmd that sends all terminal images (album art
