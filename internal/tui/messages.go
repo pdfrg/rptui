@@ -216,6 +216,23 @@ func clearKittyImagesCmdIf(protocol termimg.Protocol) tea.Cmd {
 	return clearKittyImagesCmd()
 }
 
+// quitWithClearCmd returns a command that clears Kitty images and then quits
+// after a short delay. The delay ensures tmux reads the clear APC sequence
+// from the pty before it closes — without it, the pty can close before tmux
+// processes the clear, leaving stale images on screen. For non-Kitty
+// protocols, returns tea.Quit directly.
+func quitWithClearCmd(protocol termimg.Protocol) tea.Cmd {
+	if protocol != termimg.Kitty {
+		return tea.Quit
+	}
+	return tea.Sequence(
+		clearKittyImagesCmd(),
+		tea.Tick(100*time.Millisecond, func(t time.Time) tea.Msg {
+			return tea.Quit()
+		}),
+	)
+}
+
 // tickProgressCmd returns a command that sends progressTickMsg every second
 func tickProgressCmd() tea.Cmd {
 	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
