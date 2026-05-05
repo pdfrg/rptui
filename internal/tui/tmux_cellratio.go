@@ -228,6 +228,34 @@ func getTmuxClientDimensions() (width, height int, ok bool) {
 	return w, h, true
 }
 
+// ensureTmuxPassthroughAll sets tmux's allow-passthrough option to "all"
+// at both pane and window level. go-termimg's enableTmuxPassthrough() sets
+// it to "on" (value 1) at pane level, but value 1 still causes tmux to drop
+// DCS passthrough when PANE_REDRAW or CLIENT_REDRAWPANES is set — which is
+// almost always the case in multi-pane layouts. Value "all" (2) bypasses
+// these checks, allowing passthrough even for invisible/redrawing panes.
+//
+// Both pane (-p) and window (-w) levels are set because pane options override
+// window options in tmux's options_get lookup chain. go-termimg's sync.Once
+// sets -p on, so we must override at -p level. We also set -w all so that
+// other panes in the same window also benefit.
+func ensureTmuxPassthroughAll(logger *log.Logger) {
+	if !inTmux() {
+		return
+	}
+
+	for _, args := range [][]string{
+		{"set", "-p", "allow-passthrough", "all"},
+		{"set", "-w", "allow-passthrough", "all"},
+	} {
+		if err := exec.Command("tmux", args...).Run(); err != nil {
+			logger.Printf("Warning: tmux %v failed: %v", args, err)
+		} else {
+			logger.Printf("Set tmux allow-passthrough=all (%s)", args[1])
+		}
+	}
+}
+
 // detectTmuxOuterKitty checks whether the outer terminal (outside tmux)
 // supports the Kitty graphics protocol by reading tmux's global environment
 // variables. Inside tmux, os.Getenv("TERM_PROGRAM") returns "tmux" and

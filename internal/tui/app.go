@@ -470,6 +470,8 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 		logger.Printf("tmux outer terminal supports Kitty, overriding detection")
 	}
 
+	ensureTmuxPassthroughAll(logger)
+
 	// Initialize API clients
 	rpAPI := api.NewRadioParadiseAPI(cfg.Channel, cfg.Bitrate)
 
@@ -751,6 +753,8 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 		imageProtocol = termimg.Kitty
 		logger.Printf("tmux outer terminal supports Kitty, overriding detection")
 	}
+
+	ensureTmuxPassthroughAll(logger)
 
 	// Initialize API clients (lyrics, artist info still available for lookups)
 	rpAPI := api.NewRadioParadiseAPI(cfg.Channel, cfg.Bitrate)
@@ -1541,7 +1545,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if m.vis != nil {
 				m.vis.Close()
 			}
-			return m, tea.Sequence(clearKittyImagesCmdIf(m.imageProtocol), tea.Quit)
+			return m, quitWithClearCmd(m.imageProtocol)
 		}
 
 		// Check if key matches initial layout choice
@@ -1590,7 +1594,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.vis != nil {
 			m.vis.Close()
 		}
-		return m, tea.Sequence(clearKittyImagesCmdIf(m.imageProtocol), tea.Quit)
+		return m, quitWithClearCmd(m.imageProtocol)
 
 	case "space":
 		// Play/Pause
@@ -3021,7 +3025,7 @@ func (m *Model) handleQuitTick(msg quitTickMsg) (tea.Model, tea.Cmd) {
 			_ = m.mpvBackend.Stop()
 		}
 		logger.Println("Quitting app after sleep timer")
-		return m, tea.Sequence(clearKittyImagesCmdIf(m.imageProtocol), tea.Quit)
+		return m, quitWithClearCmd(m.imageProtocol)
 	}
 
 	m.statusMsg = fmt.Sprintf("Sleep timer expired - quitting in %ds...", remaining)

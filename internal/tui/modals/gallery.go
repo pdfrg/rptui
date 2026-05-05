@@ -388,24 +388,26 @@ func (g *Gallery) RenderImageCmd() tea.Cmd {
 		return nil
 	}
 
-	// Set flag synchronously here - will be true for all subsequent navigations
+	isFirst := !g.firstImageDisplayed
 	g.firstImageDisplayed = true
 
 	row, col := g.ImageScreenPosition()
 	imgStr := g.renderedStr
 
-	// Build the image render command
-	renderCmd := tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
-		return GalleryRenderImageMsg{ImageStr: imgStr, Row: row, Col: col}
-	})
+	if isFirst {
+		return tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
+			return GalleryRenderImageMsg{ImageStr: imgStr, Row: row, Col: col}
+		})
+	}
 
-	// For subsequent navigations: clear screen first, then render
-	// This clears the old image before the new one appears
-	clearCmd := tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
-		return tea.ClearScreen()
-	})
-
-	return tea.Batch(clearCmd, renderCmd)
+	return tea.Sequence(
+		tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
+			return tea.ClearScreen()
+		}),
+		tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
+			return GalleryRenderImageMsg{ImageStr: imgStr, Row: row, Col: col}
+		}),
+	)
 }
 
 // View renders the text-only modal content. Images are drawn separately
