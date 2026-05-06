@@ -128,12 +128,14 @@ var layoutNames = map[int]string{
 var (
 	layoutPromptActive bool
 	layoutCheckDone    bool
+	sshAudioPromptDone bool
 )
 
 // ResetLayoutPrompt resets the package-level layout prompt state
 func ResetLayoutPrompt() {
 	layoutPromptActive = false
 	layoutCheckDone = false
+	sshAudioPromptDone = false
 }
 
 // Layout requirements (width x height in terminal cells)
@@ -418,10 +420,14 @@ type Model struct {
 	quittingActive    bool         // whether we're in the 60s countdown to quit
 	quittingStartedAt time.Time    // when the 60s countdown started
 	quittingTicker    *time.Ticker // ticker for countdown updates
+
+	// SSH audio forwarding
+	audioForward         bool // whether --audio-forward flag was set
+	sshAudioPromptActive bool // whether SSH audio info prompt is showing
 }
 
 // NewModel creates a new TUI model
-func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, layoutOverride string, sleepTimerDuration time.Duration) *Model {
+func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, layoutOverride string, sleepTimerDuration time.Duration, audioForward bool) *Model {
 	styles := config.NewThemeStyles(theme, cfg.TransparentBackground, cfg.DisableTheme, cfg.TerminalPalette)
 
 	themeWatcher := config.NewThemeWatcher(cfg.ColorsFile)
@@ -569,6 +575,10 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 		logger.Printf("Lidarr API: configured (%s)", cfg.Lidarr.URL)
 	}
 	mpvBackend := mpv.NewMPVBackend()
+	if audioForward && cfg.Audio.SSHAudioServer != "" {
+		mpvBackend.SetPulseServer(cfg.Audio.SSHAudioServer)
+		logger.Printf("SSH audio forwarding: PULSE_SERVER=%s", cfg.Audio.SSHAudioServer)
+	}
 	cacheManager := cache.NewCacheManager(
 		cfg.GetFavoritesDir(),
 		cfg.GetBlocklistDir(),
@@ -677,6 +687,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 		commentsPerPage:        20,
 		networkTransitionModal: nil,
 		djSkipAvailable:        djSkipAvail,
+		audioForward:           audioForward,
 	}
 
 	// Determine layout mode
@@ -729,7 +740,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 }
 
 // NewOfflineModel creates a new TUI model for offline playback
-func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache.CachedSong, cacheName string, layoutOverride string) *Model {
+func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache.CachedSong, cacheName string, layoutOverride string, audioForward bool) *Model {
 	styles := config.NewThemeStyles(theme, cfg.TransparentBackground, cfg.DisableTheme, cfg.TerminalPalette)
 
 	themeWatcher := config.NewThemeWatcher(cfg.ColorsFile)
@@ -803,6 +814,10 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 	theaudiodbClient := api.NewTheAudioDBClient()
 	lidarrClient := api.NewLidarrClient(cfg.Lidarr.URL, cfg.Lidarr.APIKey, cfg.Lidarr.Enabled)
 	mpvBackend := mpv.NewMPVBackend()
+	if audioForward && cfg.Audio.SSHAudioServer != "" {
+		mpvBackend.SetPulseServer(cfg.Audio.SSHAudioServer)
+		logger.Printf("SSH audio forwarding: PULSE_SERVER=%s", cfg.Audio.SSHAudioServer)
+	}
 	cacheManager := cache.NewCacheManager(
 		cfg.GetFavoritesDir(),
 		cfg.GetBlocklistDir(),
@@ -1568,6 +1583,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handleKeyPress handles keyboard input
 func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	// Handle SSH audio info prompt (before layout prompt, since it shows first)
+	if m.sshAudioPromptActive {
+		key := strings.ToLower(msg.String())
+		if key == "q" || key == "ctrl+c" {
+			m.cacheManager.WaitForDownloads(60 * time.Second)
+			if m.mpvBackend != nil {
+				_ = m.mpvBackend.Stop()
+			}
+			if m.themeWatcher != nil {
+				m.themeWatcher.Close()
+			}
+			if m.vis != nil {
+				m.vis.Close()
+			}
+			return m, quitWithClearCmd(m.imageProtocol)
+		}
+		if key == "c" {
+			m.sshAudioPromptActive = false
+			return m, nil
+		}
+		return m, nil
+	}
+
 	// Handle layout selection prompt (when showing terminal size warning)
 	if layoutPromptActive && m.width > 0 && m.height > 0 {
 		key := strings.ToLower(msg.String())
@@ -5123,6 +5161,48 @@ func (m Model) View() tea.View {
 	}
 
 	if !m.initialized {
+		// SSH audio forwarding info prompt (shown once, before terminal size check)
+		if !sshAudioPromptDone && m.width > 0 && m.height > 0 && config.InSSHSession() && !m.audioForward {
+			sshAudioPromptDone = true
+			m.sshAudioPromptActive = true
+			var prompt string
+			if m.config.Audio.SSHAudioServer != "" {
+				prompt = "SSH session detected. Audio will play on this server.\n" +
+					"To forward audio to your client, quit and run: rptui --audio-forward\n" +
+					"\n" +
+					"Requires SSH port forwarding, e.g.:\n" +
+					"  ssh -R 4713:127.0.0.1:4713 <host>\n"
+			} else {
+				prompt = "SSH session detected. Audio will play on this server.\n" +
+					"To forward audio to your client, configure [audio] ssh_audio_server\n" +
+					"in config.toml and use the --audio-forward flag.\n"
+			}
+			prompt += "\n" +
+				m.styles.AccentStyle.Render("c") + " " + m.styles.MutedStyle.Render("continue") + ", " +
+				m.styles.AccentStyle.Render("q") + " " + m.styles.MutedStyle.Render("quit")
+			return m.altView(prompt)
+		}
+
+		// If SSH audio prompt is active, keep showing it
+		if m.sshAudioPromptActive {
+			var prompt string
+			if m.config.Audio.SSHAudioServer != "" {
+				prompt = "SSH session detected. Audio will play on this server.\n" +
+					"To forward audio to your client, quit and run: rptui --audio-forward\n" +
+					"\n" +
+					"Requires SSH port forwarding, e.g.:\n" +
+					"  ssh -R 4713:127.0.0.1:4713 <host>\n"
+			} else {
+				prompt = "SSH session detected. Audio will play on this server.\n" +
+					"To forward audio to your client, configure [audio] ssh_audio_server\n" +
+					"in config.toml and use the --audio-forward flag.\n"
+			}
+			prompt += "\n" +
+				m.styles.AccentStyle.Render("c") + " " + m.styles.MutedStyle.Render("continue") + ", " +
+				m.styles.AccentStyle.Render("q") + " " + m.styles.MutedStyle.Render("quit")
+			return m.altView(prompt)
+		}
+
 		// Check terminal size against initial layout (only once)
 		// Use package-level variables to persist across View() calls
 		if !layoutCheckDone && m.width > 0 && m.height > 0 {
