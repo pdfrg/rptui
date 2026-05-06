@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -88,6 +89,23 @@ func (m *MPVBackend) SetPulseServer(server string) {
 	m.pulseServer = server
 }
 
+// checkPulseServerReachable verifies the PULSE_SERVER tcp address is reachable.
+// It parses "tcp:host:port" and attempts a brief TCP connection.
+// Returns an error if the address is unreachable.
+func (m *MPVBackend) checkPulseServerReachable() error {
+	addr := m.pulseServer
+	if !strings.HasPrefix(addr, "tcp:") {
+		return fmt.Errorf("unsupported PULSE_SERVER format: %s (expected tcp:host:port)", addr)
+	}
+	hostPort := strings.TrimPrefix(addr, "tcp:")
+	conn, err := net.DialTimeout("tcp", hostPort, 2*time.Second)
+	if err != nil {
+		return fmt.Errorf("cannot reach PULSE_SERVER %s: %w", addr, err)
+	}
+	conn.Close()
+	return nil
+}
+
 // Start starts MPV with the given URLs
 func (m *MPVBackend) Start(urls []string) error {
 	m.mu.Lock()
@@ -109,6 +127,17 @@ func (m *MPVBackend) Start(urls []string) error {
 		os.Remove(m.socketPath)
 	}
 
+	// Pre-flight check: verify PULSE_SERVER tunnel is reachable
+	if m.pulseServer != "" {
+		if err := m.checkPulseServerReachable(); err != nil {
+			logger.Printf("Warning: PULSE_SERVER tunnel not reachable: %v", err)
+			logger.Printf("Ensure you connected with: ssh -R 4713:127.0.0.1:4713 <host>")
+			logger.Printf("And the SSH client has loaded module-native-protocol-tcp on port 4713")
+		} else {
+			logger.Printf("PULSE_SERVER tunnel verified reachable")
+		}
+	}
+
 	// Build MPV command
 	args := []string{
 		"--no-video",
@@ -116,6 +145,9 @@ func (m *MPVBackend) Start(urls []string) error {
 		"--no-terminal",
 		"--gapless-audio=weak",
 		fmt.Sprintf("--input-ipc-server=%s", m.socketPath),
+	}
+	if m.pulseServer != "" {
+		args = append(args, "--ao=pulse")
 	}
 	args = append(args, urls...)
 
