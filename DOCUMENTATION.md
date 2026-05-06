@@ -670,30 +670,27 @@ This works by setting the `PULSE_SERVER` environment variable for the mpv subpro
 
 #### One-time Local Setup
 
-Your local machine needs to accept TCP connections for audio. This is a one-time configuration change.
+Your local machine (the SSH client, the one with speakers) needs to accept TCP connections for audio. This is a one-time setup per session.
+
+**PulseAudio** (Ubuntu 22.04 and similar):
+
+```bash
+pactl load-module module-native-protocol-tcp port=4713
+```
+
+Note the module number printed (e.g., `28`). If you run this multiple times, you'll get duplicate modules — check with:
+```bash
+pactl list modules short | grep native-protocol-tcp
+```
+To unload a module later: `pactl unload-module <number>`.
 
 **PipeWire** (most common on modern Linux):
 
 ```bash
-mkdir -p ~/.config/pipewire/pipewire-pulse.conf.d/
-cat > ~/.config/pipewire/pipewire-pulse.conf.d/50-network.conf << 'EOF'
-pulse.properties = {
-    server.address = [
-        "unix:native"
-        "tcp:127.0.0.1:4713"
-    ]
-}
-EOF
-systemctl --user restart pipewire-pulse
+pactl load-module module-native-protocol-tcp port=4713
 ```
 
-**PulseAudio** (legacy):
-
-```bash
-# Add to ~/.config/pulse/default.pa or /etc/pulse/default.pa:
-load-module module-native-protocol-tcp listen=127.0.0.1 port=4713
-# Then restart PulseAudio
-```
+Same note applies — check for duplicates and unload with `pactl unload-module` if needed. PipeWire's PulseAudio compatibility layer handles this the same way.
 
 #### Remote Configuration
 
@@ -729,11 +726,14 @@ When SSH is detected and `ssh_audio_server` is configured but `--audio-forward` 
 `--audio-forward` will fail with an error message if:
 - Not running in an SSH session (`SSH_CONNECTION` not set)
 - `ssh_audio_server` is not configured in `config.toml`
+- mpv was not built with PulseAudio support (`--ao=pulse` not available)
+
+At runtime, rptui checks if the `PULSE_SERVER` tcp address is reachable. If the SSH tunnel is not set up correctly, a warning is logged to `rptui.log` with instructions.
 
 #### Requirements
 
 - **Both machines**: Linux
-- **Local machine**: PulseAudio or PipeWire with TCP listener enabled (port 4713)
-- **Remote machine**: PulseAudio or PipeWire (provides `libpulse` used by mpv)
-- **SSH connection**: Must include `-R 4713:127.0.0.1:4713` port forwarding (or use a direct TCP connection to the local machine's IP on port 4713)
-- **mpv**: Uses PulseAudio output driver automatically when `PULSE_SERVER` is set
+- **Local machine (SSH client)**: PulseAudio or PipeWire with TCP listener enabled (port 4713)
+  - Run `pactl load-module module-native-protocol-tcp port=4713` once per session
+- **Remote machine (SSH server)**: PulseAudio or PipeWire (provides `libpulse` used by mpv), mpv with PulseAudio support
+- **SSH connection**: Must include `-R 4713:127.0.0.1:4713` port forwarding

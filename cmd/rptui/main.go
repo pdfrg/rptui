@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -209,6 +210,10 @@ func main() {
 		if cfg.Audio.SSHAudioServer == "" {
 			fmt.Fprintf(os.Stderr, "Error: --audio-forward requires [audio] ssh_audio_server in config.toml\n")
 			fmt.Fprintf(os.Stderr, "Example:\n  [audio]\n  ssh_audio_server = \"tcp:localhost:4713\"\n")
+			os.Exit(1)
+		}
+		if err := checkMpvPulseSupport(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 	}
@@ -595,6 +600,19 @@ func handleCacheRecording(requests []CacheRequest) {
 			os.Exit(1)
 		}
 	}
+}
+
+// checkMpvPulseSupport verifies that mpv has PulseAudio output support.
+func checkMpvPulseSupport() error {
+	cmd := exec.Command("mpv", "--ao=help")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to run 'mpv --ao=help': %w", err)
+	}
+	if !strings.Contains(string(output), "pulse") {
+		return fmt.Errorf("mpv was not built with PulseAudio support (--ao=pulse not available)")
+	}
+	return nil
 }
 
 // handleOfflineMode handles the --offline playback mode
