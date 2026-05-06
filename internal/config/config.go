@@ -93,8 +93,16 @@ type Config struct {
 	// Image protocol override (optional)
 	ForceProtocol string `toml:"force_protocol" comment:"force a specific image protocol instead of auto-detecting\nuseful for testing or for terminals that don't support kitty\noptions: kitty, sixel, halfblocks, iterm2, or empty for auto-detect (default: '')"`
 
+	// Audio output
+	Audio AudioConfig `toml:"audio" comment:"audio output settings"`
+
 	// Jukebox mode
 	Jukebox JukeboxConfig `toml:"jukebox" comment:"favorites jukebox mode\nplay your favorites in random order\nmin_faves: minimum favorites required (default: 20)\nrepeat: reshuffle and repeat after playing all (default: false)\ncrossfade_duration: seconds for volume crossfade between songs, 0=disabled (default: 3.0)"`
+}
+
+// AudioConfig holds audio output settings
+type AudioConfig struct {
+	SSHAudioServer string `toml:"ssh_audio_server" comment:"audio server address for SSH audio forwarding\nused with --audio-forward flag when running over SSH\nworks with both PulseAudio and PipeWire (via PulseAudio compatibility)\nexample: \"tcp:localhost:4713\" (with ssh -R 4713:127.0.0.1:4713 <host>)\nexample: \"tcp:10.0.0.1:4713\" (direct connection, local TCP listener required) (default: '')"`
 }
 
 // JukeboxConfig holds jukebox mode settings
@@ -391,6 +399,11 @@ func (c *Config) GetBlocklistDir() string {
 // GetScrobbleCacheDir returns the scrobble cache directory path.
 func GetScrobbleCacheDir() string {
 	return filepath.Join(xdg.CacheHome, "rptui", "scrobbles")
+}
+
+// InSSHSession returns true if the current process is running inside an SSH session
+func InSSHSession() bool {
+	return os.Getenv("SSH_CONNECTION") != ""
 }
 
 // StationIssue represents a discrepancy between local config and RP API

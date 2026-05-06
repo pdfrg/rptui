@@ -40,7 +40,8 @@ SLEEP TIMER / ALARM:
     --alarm <TIME>           Schedule alarm (e.g., 7:20am, 7:20 a.m., 19:20)
                             App starts at specified time
 ACTIONS:
---lastfm-auth          Run Last.fm OAuth authentication flow and save session key
+  --audio-forward    Forward audio to client over SSH (requires ssh_audio_server in config)
+  --lastfm-auth Run Last.fm OAuth authentication flow and save session key
 --rp-auth              Authenticate with Radio Paradise account
                        Enables user ratings, comments, favorites sync, and My Paradise channel
                        (optional — all features work without an RP account)
@@ -150,6 +151,12 @@ On Linux, the config file generally is located at `~/.config/rptui/config.toml`.
 | `visualizer.show_info` | string | Song info overlay: `fade`, `on`, `off` |
 | `visualizer.info_duration` | int | Seconds to show song info (default: 5) |
 | `visualizer.real_audio` | bool | Use real audio capture for visualizer (Linux: PipeWire/PulseAudio, Windows: WASAPI, macOS: SoX+BlackHole). Default: true. |
+
+### Audio
+
+| Setting | Type | Description |
+|---------|------|-------------|
+| `audio.ssh_audio_server` | string | Audio server address for SSH forwarding (e.g., `tcp:localhost:4713`) |
 
 ### Jukebox Mode
 
@@ -637,20 +644,96 @@ locally but compatibility under SSH or inside tmux is unconfirmed.
 
 ### Known Issues and Workarounds
 
-**Rio over SSH**: The `TERM_PROGRAM` environment variable is not propagated
-over SSH by default. rptui falls back to checking `TERM=rio` to detect Kitty
-protocol support. If detection still fails, set `force_protocol = "kitty"` in
-your config file.
+**Rio and WezTerm over SSH**: The `TERM_PROGRAM` environment variable is not propagated
+over SSH by default. Rio and WezTerm both set `TERM=xterm-256color`, which can cause failure
+to detect Kitty image protocol support.  There are two options to ensure Kitty image
+protocol is used.
 
-**WezTerm over SSH**: WezTerm returns swapped cell dimensions in its CSI 16t
-response over SSH, producing a wrong cell ratio (0.44 instead of ~2.0). rptui
-detects this (no monospace font has width > height) and automatically swaps the
-dimensions back. No manual configuration needed.
+1. Configure your terminal (preferred)
+- Rio: in `config.toml` add `env-vars = ["TERM=rio"]`.  See [https://rioterm.com/docs/config#env-vars](https://rioterm.com/docs/config#env-vars).
+- Wezterm: in `wezterm.lua` add `config.term = 'wezterm'`.  See [https://wezterm.org/config/lua/config/term.html](https://wezterm.org/config/lua/config/term.html).
 
-**tmux image rendering**: tmux does not natively support terminal graphics
-protocols. rptui works around this using DCS passthrough sequences to send
+2. Set `force_protocol = "kitty"` in your rptui config file.
+
+**tmux image rendering**: tmux does not natively support the Kitty image
+protocol (current work in progress).  rptui works around this using DCS passthrough sequences to send
 Kitty commands directly to the outer terminal. This requires
 `allow-passthrough=all` in tmux, which rptui sets automatically. Large gallery
 images in tmux are scaled down to stay within tmux's DCS buffer limit, which
 may result in slightly smaller images compared to non-tmux rendering.
 
+### SSH Audio Forwarding
+
+When running rptui over SSH, audio plays on the remote server's speakers by default. To hear audio on your local machine instead, use `--audio-forward` with a PulseAudio/PipeWire server address configured in `config.toml`.
+
+This works by setting the `PULSE_SERVER` environment variable for the mpv subprocess, which redirects audio output to a remote PulseAudio or PipeWire server. PipeWire's PulseAudio compatibility layer means this works with both PulseAudio and PipeWire on either end.
+
+#### One-time Local Setup
+
+Your local machine needs to accept TCP connections for audio. This is a one-time configuration change.
+
+**PipeWire** (most common on modern Linux):
+
+```bash
+mkdir -p ~/.config/pipewire/pipewire-pulse.conf.d/
+cat > ~/.config/pipewire/pipewire-pulse.conf.d/50-network.conf << 'EOF'
+pulse.properties = {
+    server.address = [
+        "unix:native"
+        "tcp:127.0.0.1:4713"
+    ]
+}
+EOF
+systemctl --user restart pipewire-pulse
+```
+
+**PulseAudio** (legacy):
+
+```bash
+# Add to ~/.config/pulse/default.pa or /etc/pulse/default.pa:
+load-module module-native-protocol-tcp listen=127.0.0.1 port=4713
+# Then restart PulseAudio
+```
+
+#### Remote Configuration
+
+Add to `config.toml` on the remote machine:
+
+```toml
+[audio]
+ssh_audio_server = "tcp:localhost:4713"
+```
+
+#### Usage
+
+Connect with SSH port forwarding (the `-R` flag tunnels port 4713 over SSH so no open ports are needed):
+
+```bash
+ssh -R 4713:127.0.0.1:4713 <remote-host>
+```
+
+Then run rptui with or without audio forwarding:
+
+```bash
+# Audio plays on server (default)
+rptui
+
+# Audio forwarded to your local machine
+rptui --audio-forward
+```
+
+When SSH is detected and `ssh_audio_server` is configured but `--audio-forward` is not used, rptui shows a one-time reminder at startup with instructions.
+
+#### Validation
+
+`--audio-forward` will fail with an error message if:
+- Not running in an SSH session (`SSH_CONNECTION` not set)
+- `ssh_audio_server` is not configured in `config.toml`
+
+#### Requirements
+
+- **Both machines**: Linux
+- **Local machine**: PulseAudio or PipeWire with TCP listener enabled (port 4713)
+- **Remote machine**: PulseAudio or PipeWire (provides `libpulse` used by mpv)
+- **SSH connection**: Must include `-R 4713:127.0.0.1:4713` port forwarding (or use a direct TCP connection to the local machine's IP on port 4713)
+- **mpv**: Uses PulseAudio output driver automatically when `PULSE_SERVER` is set

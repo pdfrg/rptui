@@ -33,6 +33,7 @@ type CacheRequest struct {
 
 func main() {
 	jukeboxMode := false
+	audioForward := false
 	var cacheRequests []CacheRequest
 	offlineMode := false
 	offlineCacheName := ""
@@ -62,6 +63,8 @@ func main() {
 			return
 		case "--jukebox", "-j":
 			jukeboxMode = true
+		case "--audio-forward":
+			audioForward = true
 		case "--layout":
 			if i+1 < len(args) {
 				layoutOverride = args[i+1]
@@ -152,7 +155,7 @@ func main() {
 
 	// Handle offline playback mode
 	if offlineMode {
-		handleOfflineMode(offlineCacheName, layoutOverride)
+		handleOfflineMode(offlineCacheName, layoutOverride, audioForward)
 		return
 	}
 
@@ -197,6 +200,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Validate --audio-forward prerequisites
+	if audioForward {
+		if !config.InSSHSession() {
+			fmt.Fprintf(os.Stderr, "Error: --audio-forward requires an SSH session\n")
+			os.Exit(1)
+		}
+		if cfg.Audio.SSHAudioServer == "" {
+			fmt.Fprintf(os.Stderr, "Error: --audio-forward requires [audio] ssh_audio_server in config.toml\n")
+			fmt.Fprintf(os.Stderr, "Example:\n  [audio]\n  ssh_audio_server = \"tcp:localhost:4713\"\n")
+			os.Exit(1)
+		}
+	}
+
 	theme, err := config.LoadTheme(cfg.ColorsFile, cfg.Theme)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to load theme: %v\n", err)
@@ -209,7 +225,7 @@ func main() {
 		// After alarm fires, proceed to normal TUI
 	}
 
-	m := tui.NewModel(cfg, theme, jukeboxMode, layoutOverride, sleepTimerDuration)
+	m := tui.NewModel(cfg, theme, jukeboxMode, layoutOverride, sleepTimerDuration, audioForward)
 
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
@@ -582,11 +598,23 @@ func handleCacheRecording(requests []CacheRequest) {
 }
 
 // handleOfflineMode handles the --offline playback mode
-func handleOfflineMode(cacheName string, layoutOverride string) {
+func handleOfflineMode(cacheName string, layoutOverride string, audioForward bool) {
 	cfg, err := config.NewConfig()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
 		os.Exit(1)
+	}
+
+	if audioForward {
+		if !config.InSSHSession() {
+			fmt.Fprintf(os.Stderr, "Error: --audio-forward requires an SSH session\n")
+			os.Exit(1)
+		}
+		if cfg.Audio.SSHAudioServer == "" {
+			fmt.Fprintf(os.Stderr, "Error: --audio-forward requires [audio] ssh_audio_server in config.toml\n")
+			fmt.Fprintf(os.Stderr, "Example:\n  [audio]\n  ssh_audio_server = \"tcp:localhost:4713\"\n")
+			os.Exit(1)
+		}
 	}
 
 	offlineDir := filepath.Join(xdg.CacheHome, "rptui", "offline")
@@ -663,7 +691,7 @@ func handleOfflineMode(cacheName string, layoutOverride string) {
 	}
 
 	// Launch TUI in offline mode
-	m := tui.NewOfflineModel(cfg, theme, songs, cacheName, layoutOverride)
+	m := tui.NewOfflineModel(cfg, theme, songs, cacheName, layoutOverride, audioForward)
 
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
@@ -764,7 +792,8 @@ SLEEP TIMER / ALARM:
                             App starts at specified time
 
 ACTIONS:
-	--setup-dj-skip     Download TVSM model for DJ speech skipping
+  --audio-forward    Forward audio to client over SSH (requires ssh_audio_server in config)
+  --setup-dj-skip    Download TVSM model for DJ speech skipping
 	                    (~2.5GB Python dependencies, 10-20 min install time)
     --lastfm-auth           Run Last.fm OAuth authentication flow and save session key
     --rp-auth               Authenticate with Radio Paradise account

@@ -34,6 +34,7 @@ type MPVBackend struct {
 	lastPlaybackPosition PlaybackPosition
 	socketPath           string
 	socketTimeout        time.Duration
+	pulseServer          string
 }
 
 // PlaybackPosition holds time and percent position
@@ -79,6 +80,14 @@ func NewMPVBackend() *MPVBackend {
 	}
 }
 
+// SetPulseServer sets the PULSE_SERVER environment variable for the MPV subprocess.
+// This redirects audio output to a remote PulseAudio/PipeWire server (e.g., over SSH).
+func (m *MPVBackend) SetPulseServer(server string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.pulseServer = server
+}
+
 // Start starts MPV with the given URLs
 func (m *MPVBackend) Start(urls []string) error {
 	m.mu.Lock()
@@ -117,6 +126,10 @@ func (m *MPVBackend) Start(urls []string) error {
 
 	m.process = exec.Command("mpv", args...)
 	m.process.Stdout = nil
+	if m.pulseServer != "" {
+		m.process.Env = append(os.Environ(), "PULSE_SERVER="+m.pulseServer)
+		logger.Printf("MPV PULSE_SERVER=%s", m.pulseServer)
+	}
 	// Capture stderr to log any MPV errors
 	stderrPipe, err := m.process.StderrPipe()
 	if err != nil {
