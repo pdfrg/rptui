@@ -29,10 +29,10 @@ duration = 10
 max_speech_gap = 2.5
 
 # Phase 1 boundary window: check only the first and last N seconds of each
-# song for speech. If speech frames exist in a boundary zone, Phase 2 expands
-# from that boundary until a gap > max_speech_gap seconds with no speech is
-# found. Speech detected beyond boundary_width from start/end is a false positive.
-boundary_width = 10
+# song for speech. If any frame within this window exceeds the confidence
+# threshold, Phase 2 expands from that boundary until a gap > max_speech_gap
+# seconds with no speech is found. Must match Go-side maxSpeechDistanceFromBoundary.
+boundary_window = 1.5
 
 
 class F2M(nn.Module):
@@ -222,59 +222,62 @@ def process_chunk(model, pcen_data, chunk_index, c_size, confidence_threshold):
     return frames
 
 
-def has_speech_in_zone(frames, confidence_threshold):
-    """Check if any frame in the list exceeds the confidence threshold."""
-    return any(prob >= confidence_threshold for _, prob in frames)
+def has_speech_in_window(frames, confidence_threshold, window_start, window_end):
+    """Check if any frame within the time window exceeds the confidence threshold."""
+    return any(
+        prob >= confidence_threshold and window_start <= t <= window_end
+        for t, prob in frames
+    )
 
 
 def expand_forward(model, pcen_data, start_chunk, n_chunks, c_size, confidence_threshold):
-    """Scan forward from start_chunk until a gap > max_speech_gap with no speech frames."""
+    """Scan forward from start_chunk until a gap > max_speech_gap with no speech frames.
+
+    Track last_speech_time: the timestamp of the most recent frame above threshold.
+    If the current chunk's end exceeds last_speech_time + max_speech_gap, stop.
+    """
     all_frames = []
-    gap_start = None
+    last_speech_time = None
 
     for ci in range(start_chunk, n_chunks):
         chunk_frames = process_chunk(model, pcen_data, ci, c_size, confidence_threshold)
         all_frames.extend(chunk_frames)
 
-        chunk_has_speech = has_speech_in_zone(chunk_frames, confidence_threshold)
-        chunk_end_sec = (ci + 1) * duration
+        for t, prob in chunk_frames:
+            if prob >= confidence_threshold:
+                last_speech_time = t
 
-        if chunk_has_speech:
-            gap_start = None
-        else:
-            if gap_start is None:
-                gap_start = chunk_end_sec
-            else:
-                gap_duration = chunk_end_sec - gap_start
-                if gap_duration >= max_speech_gap:
-                    break
+        if last_speech_time is not None:
+            chunk_end_sec = (ci + 1) * duration
+            if chunk_end_sec - last_speech_time >= max_speech_gap:
+                break
 
     return all_frames
 
 
 def expand_backward(model, pcen_data, end_chunk, c_size, confidence_threshold):
-    """Scan backward from end_chunk until a gap > max_speech_gap with no speech frames."""
+    """Scan backward from end_chunk until a gap > max_speech_gap with no speech frames.
+
+    Moving leftward from the song end, track earliest_speech_time: the smallest
+    timestamp among frames above threshold found so far (closest to song start).
+    If the current chunk begins more than max_speech_gap before earliest_speech_time, stop.
+    """
     all_frames = []
-    gap_end = None
+    earliest_speech_time = None
 
     for ci in range(end_chunk, -1, -1):
         chunk_frames = process_chunk(model, pcen_data, ci, c_size, confidence_threshold)
-        chunk_start_sec = ci * duration
-
-        chunk_has_speech = has_speech_in_zone(chunk_frames, confidence_threshold)
-
-        if chunk_has_speech:
-            gap_end = None
-        else:
-            if gap_end is None:
-                gap_end = chunk_start_sec + duration
-            else:
-                gap_duration = gap_end - chunk_start_sec
-                if gap_duration >= max_speech_gap:
-                    all_frames = chunk_frames + all_frames
-                    break
-
         all_frames = chunk_frames + all_frames
+
+        for t, prob in chunk_frames:
+            if prob >= confidence_threshold:
+                if earliest_speech_time is None or t < earliest_speech_time:
+                    earliest_speech_time = t
+
+        if earliest_speech_time is not None:
+            chunk_start_sec = ci * duration
+            if chunk_start_sec <= earliest_speech_time - max_speech_gap:
+                break
 
     return all_frames
 
@@ -350,17 +353,19 @@ def detect_speech(audio_path, model_path, confidence_threshold, min_speech_durat
         # Phase 1: check first and last boundary chunks for speech
         last_chunk = n_chunks - 1
         start_frames = process_chunk(model, audio_pcen, 0, c_size, confidence_threshold)
-        start_has_speech = has_speech_in_zone(start_frames, confidence_threshold)
+        start_has_speech = has_speech_in_window(start_frames, confidence_threshold, 0, boundary_window)
 
         end_frames = process_chunk(model, audio_pcen, last_chunk, c_size, confidence_threshold)
-        end_has_speech = has_speech_in_zone(end_frames, confidence_threshold)
+        end_has_speech = has_speech_in_window(
+            end_frames, confidence_threshold, audio_duration - boundary_window, audio_duration
+        )
 
         if not start_has_speech and not end_has_speech:
             result = speech_empty()
             result["song_duration"] = round(audio_duration, 3)
             return result
 
-        # Phase 2: expand from detected boundary boundaries
+        # Phase 2: expand from detected boundaries
         all_frames = []
 
         if start_has_speech:
@@ -373,13 +378,14 @@ def detect_speech(audio_path, model_path, confidence_threshold, min_speech_durat
             backward_frames = expand_backward(
                 model, audio_pcen, last_chunk, c_size, confidence_threshold
             )
-            # merge: backward frames come before start zone; avoid duplicates
-            if all_frames:
-                start_at = all_frames[0][0]
-                backward_frames = [f for f in backward_frames if f[0] < start_at]
-            all_frames = backward_frames + all_frames
+            all_frames.extend(backward_frames)
 
-    all_frames.sort(key=lambda x: x[0])
+    # Deduplicate by timestamp (same frame may appear in both forward/backward lists)
+    seen = set()
+    all_frames = [
+        f for f in sorted(all_frames, key=lambda x: x[0])
+        if not (round(f[0], 4) in seen or seen.add(round(f[0], 4)))
+    ]
 
     raw_regions = extract_regions(all_frames, confidence_threshold, frame_time, audio_duration)
 
