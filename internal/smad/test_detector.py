@@ -7,7 +7,7 @@ Usage:
   test-dj Song.m4a
   test-dj Song1.m4a Song2.flac
   test-dj ~/.cache/rptui/favorites/
-  test-dj --confidence 0.5 --check-seconds 60 --min-duration 3.0 Song.m4a
+  test-dj --confidence 0.5 --min-duration 3.0 Song.m4a
   test-dj -h
 """
 
@@ -53,34 +53,34 @@ def collect_files(paths):
     return files
 
 
-def process_file(filepath, model_path, confidence, check_seconds, min_duration):
+def process_file(filepath, model_path, confidence, min_duration):
     basename = os.path.basename(filepath)
-    duration = detector.get_audio_duration(filepath)
-    if duration is None:
+    dur = detector.get_audio_duration(filepath)
+    if dur is None:
         print(f"--- {basename} ---")
-        print(f"Error: could not read audio file")
+        print("Error: could not read audio file")
         return False
 
-    print(f"--- {basename} ({fmt_time(duration)}) ---")
-    print(
-        f"Params: confidence={confidence} check_seconds={check_seconds} min_duration={min_duration}"
-    )
+    print(f"--- {basename} ({fmt_time(dur)}) ---")
+    print(f"Params: confidence={confidence} min_duration={min_duration}")
 
     start = time.time()
     result = detector.detect_speech(
-        filepath, model_path, confidence, check_seconds, min_duration
+        filepath, model_path, confidence, min_duration
     )
     elapsed = time.time() - start
 
     if result["has_speech"]:
         seg_len = result["speech_end"] - result["speech_start"]
+        near_start = result["speech_start"]
         near_end = result["song_duration"] - result["speech_end"]
         print(
             f"Speech detected: {fmt_time(result['speech_start'])} - "
             f"{fmt_time(result['speech_end'])} ({seg_len:.1f}s, "
             f"confidence {result['confidence']:.2f}, "
             f"song_duration {result['song_duration']:.1f}s, "
-            f"speech ends {near_end:.1f}s from end)"
+            f"starts {near_start:.1f}s from start, "
+            f"ends {near_end:.1f}s from end)"
         )
     else:
         print("No speech detected")
@@ -97,7 +97,7 @@ def main():
   test-dj Song.m4a
   test-dj Song1.m4a Song2.flac
   test-dj ~/.cache/rptui/favorites/
-  test-dj --confidence 0.5 --check-seconds 60 Song.m4a
+  test-dj --confidence 0.5 Song.m4a
 """,
     )
     parser.add_argument(
@@ -107,22 +107,16 @@ def main():
         help="audio files and/or directories to scan",
     )
     parser.add_argument(
-    "--confidence",
-    type=float,
-    default=0.88,
-    help="speech confidence threshold (default: 0.88)",
-    )
-    parser.add_argument(
-        "--check-seconds",
-        type=int,
-        default=80,
-        help="seconds from end of song to check (default: 80)",
+        "--confidence",
+        type=float,
+        default=0.88,
+        help="speech confidence threshold (default: 0.88)",
     )
     parser.add_argument(
         "--min-duration",
         type=float,
-        default=15.0,
-        help="minimum speech segment duration in seconds (default: 15.0)",
+        default=10.0,
+        help="minimum speech segment duration in seconds (default: 10.0)",
     )
     parser.add_argument(
         "--model",
@@ -145,7 +139,7 @@ def main():
     for f in files:
         print()
         if process_file(
-            f, args.model, args.confidence, args.check_seconds, args.min_duration
+            f, args.model, args.confidence, args.min_duration
         ):
             speech_count += 1
 

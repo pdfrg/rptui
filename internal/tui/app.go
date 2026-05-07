@@ -1405,9 +1405,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.hasSpeech && m.currentSong != nil && msg.eventID == m.currentSong.EventID && m.mpvBackend != nil {
 			songDur := m.currentSong.GetDurationSeconds()
-			nearEnd := songDur > 0 && songDur-msg.skipEnd <= maxSpeechDistanceFromEnd
-			if !nearEnd {
-				logger.Printf("DJ speech: rejected (ends %.1fs from song end, max %.1fs)", songDur-msg.skipEnd, maxSpeechDistanceFromEnd)
+			nearStart := msg.skipStart <= maxSpeechDistanceFromBoundary
+			nearEnd := songDur > 0 && songDur-msg.skipEnd <= maxSpeechDistanceFromBoundary
+			nearBoundary := nearStart || nearEnd
+			if !nearBoundary {
+				logger.Printf("DJ speech: rejected (starts %.1fs from start, ends %.1fs from end, max %.1fs)", msg.skipStart, songDur-msg.skipEnd, maxSpeechDistanceFromBoundary)
 			} else if pos, err := m.mpvBackend.GetPlaybackPosition(); err == nil && pos.TimePos >= msg.skipStart && pos.TimePos < msg.skipEnd {
 				_ = m.mpvBackend.SeekAbsolute(msg.skipEnd)
 				logger.Printf("DJ speech: already at speech, skipping to %.1fs", msg.skipEnd)
@@ -4254,7 +4256,7 @@ func (m *Model) startDJDetection(song *models.Song) tea.Cmd {
 		)
 
 		speechStart, speechEnd, confidence, hasSpeech, err := checker.Detect(
-			ctx, originalURL, audioPath, m.config.DJConfidence, m.config.DJCheckSeconds, m.config.DJMinSpeechDuration, song.Artist, song.Title,
+			ctx, originalURL, audioPath, m.config.DJConfidence, m.config.DJMinSpeechDuration, song.Artist, song.Title,
 		)
 
 		if err != nil {
@@ -4315,11 +4317,12 @@ type djSkipInfo struct {
 
 const djSkipFadeDuration = 1.5 // seconds of volume fade-out before DJ speech skip
 
-// maxSpeechDistanceFromEnd is the maximum distance (in seconds) from the song's
-// end at which detected speech is considered plausible DJ speech. RP DJs talk
-// at the very end of a track — speech ending more than this far from the song
-// end is almost certainly a false positive (e.g., sung vocals).
-const maxSpeechDistanceFromEnd = 1.5
+// maxSpeechDistanceFromBoundary is the maximum distance (in seconds) from the
+// song's start or end at which detected speech is considered plausible DJ
+// speech. RP DJs talk at the very start or end of a track — speech with its
+// start more than this far from the song start AND its end more than this far
+// from the song end is almost certainly a false positive (e.g., sung vocals).
+const maxSpeechDistanceFromBoundary = 1.5
 
 func (m *Model) isLastSongInBlock() bool {
 	if m.currentSongIndex < 0 || m.currentSongIndex >= len(m.songs) {
@@ -4452,9 +4455,8 @@ func (m *Model) songChangedCmds() tea.Cmd {
 
 	var cmds []tea.Cmd
 
-	// Start DJ detection if enabled and song is last in its block
-	// (RP DJs only talk at block boundaries; non-last songs are skipped)
-	if m.currentSong != nil && m.config.SkipDJSegments && m.isLastSongInBlock() {
+	// Start DJ detection if enabled
+	if m.currentSong != nil && m.config.SkipDJSegments {
 		cmds = append(cmds, m.startDJDetection(m.currentSong))
 	}
 
