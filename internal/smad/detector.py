@@ -22,11 +22,17 @@ sr = 16000
 n_fft = 1024
 hop_size = 512
 n_features = 128
-duration = 20
+duration = 10
 
 # Maximum gap (seconds) between speech regions to bridge into one segment
 # DJ speech often has brief musical interludes/station IDs that split detections
 max_speech_gap = 2.5
+
+# Phase 1 boundary window: check only the first and last N seconds of each
+# song for speech. If speech frames exist in a boundary zone, Phase 2 expands
+# from that boundary until a gap > max_speech_gap seconds with no speech is
+# found. Speech detected beyond boundary_width from start/end is a false positive.
+boundary_width = 10
 
 
 class F2M(nn.Module):
@@ -193,9 +199,125 @@ def bridge_regions(regions, max_speech_gap):
     return bridged
 
 
-def detect_speech(
-    audio_path, model_path, confidence_threshold, check_seconds, min_speech_duration=15.0
-):
+def process_chunk(model, pcen_data, chunk_index, c_size, confidence_threshold):
+    """Run inference on one 10s chunk, return list of (time, speech_prob) frames."""
+    chunk = pcen_data[..., chunk_index * c_size : (chunk_index + 1) * c_size]
+    if chunk.shape[-1] == 0:
+        return []
+
+    frame_time = 1 / ((sr / hop_size) / 6)
+    chunk_start_sec = chunk_index * duration
+    chunk_offset_frames = int(chunk_start_sec / frame_time)
+
+    la = model(chunk)
+    la = torch.sigmoid(la)
+    la = torch.max_pool1d(la, 6, 6)
+    chunk_labels = la.detach().cpu().numpy()[0]
+
+    frames = []
+    for j, frame in enumerate(chunk_labels.T):
+        speech_prob = float(frame[1])
+        t = frame_time * (chunk_offset_frames + j)
+        frames.append((t, speech_prob))
+    return frames
+
+
+def has_speech_in_zone(frames, confidence_threshold):
+    """Check if any frame in the list exceeds the confidence threshold."""
+    return any(prob >= confidence_threshold for _, prob in frames)
+
+
+def expand_forward(model, pcen_data, start_chunk, n_chunks, c_size, confidence_threshold):
+    """Scan forward from start_chunk until a gap > max_speech_gap with no speech frames."""
+    all_frames = []
+    gap_start = None
+
+    for ci in range(start_chunk, n_chunks):
+        chunk_frames = process_chunk(model, pcen_data, ci, c_size, confidence_threshold)
+        all_frames.extend(chunk_frames)
+
+        chunk_has_speech = has_speech_in_zone(chunk_frames, confidence_threshold)
+        chunk_end_sec = (ci + 1) * duration
+
+        if chunk_has_speech:
+            gap_start = None
+        else:
+            if gap_start is None:
+                gap_start = chunk_end_sec
+            else:
+                gap_duration = chunk_end_sec - gap_start
+                if gap_duration >= max_speech_gap:
+                    break
+
+    return all_frames
+
+
+def expand_backward(model, pcen_data, end_chunk, c_size, confidence_threshold):
+    """Scan backward from end_chunk until a gap > max_speech_gap with no speech frames."""
+    all_frames = []
+    gap_end = None
+
+    for ci in range(end_chunk, -1, -1):
+        chunk_frames = process_chunk(model, pcen_data, ci, c_size, confidence_threshold)
+        chunk_start_sec = ci * duration
+
+        chunk_has_speech = has_speech_in_zone(chunk_frames, confidence_threshold)
+
+        if chunk_has_speech:
+            gap_end = None
+        else:
+            if gap_end is None:
+                gap_end = chunk_start_sec + duration
+            else:
+                gap_duration = gap_end - chunk_start_sec
+                if gap_duration >= max_speech_gap:
+                    all_frames = chunk_frames + all_frames
+                    break
+
+        all_frames = chunk_frames + all_frames
+
+    return all_frames
+
+
+def extract_regions(all_frames, confidence_threshold, frame_time, audio_duration):
+    """Extract contiguous speech regions from a list of (time, prob) frames."""
+    raw_regions = []
+    active = False
+    start = 0.0
+    region_probs = []
+
+    for t, speech_prob in all_frames:
+        if speech_prob >= confidence_threshold and not active:
+            active = True
+            start = t
+            region_probs = [speech_prob]
+        elif speech_prob >= confidence_threshold and active:
+            region_probs.append(speech_prob)
+        elif active and speech_prob < confidence_threshold:
+            active = False
+            avg_conf = float(np.mean(region_probs))
+            raw_regions.append((start, t, avg_conf, len(region_probs)))
+            region_probs = []
+
+    if active and region_probs:
+        avg_conf = float(np.mean(region_probs))
+        t_end = min(all_frames[-1][0] + frame_time, audio_duration)
+        raw_regions.append((start, t_end, avg_conf, len(region_probs)))
+
+    return raw_regions
+
+
+def speech_empty():
+    """Return the standard 'no speech found' result."""
+    return {
+        "has_speech": False,
+        "speech_start": 0.0,
+        "speech_end": 0.0,
+        "confidence": 0.0,
+    }
+
+
+def detect_speech(audio_path, model_path, confidence_threshold, min_speech_duration=10.0):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = CRNN()
     checkpoint = torch.load(model_path, map_location=device, weights_only=True)
@@ -216,105 +338,66 @@ def detect_speech(
     audio_mel = mel_transform(audio)
     audio_pcen = pcen_transform(audio_mel)
     c_size = int(sr / hop_size * duration)
+    n_chunks = int(np.ceil(audio_pcen.shape[-1] / c_size))
 
-    # Determine which chunks overlap with the end-of-song zone
-    n_chunk = int(np.ceil(audio_pcen.shape[-1] / c_size))
-    if check_seconds > 0 and audio_duration > check_seconds:
-        chunks_to_process = []
-        for i in range(n_chunk):
-            chunk_start_sec = i * duration
-            chunk_end_sec = (i + 1) * duration
-            in_boundary = chunk_end_sec > audio_duration - check_seconds
-            if in_boundary:
-                chunks_to_process.append(i)
-    else:
-        chunks_to_process = list(range(n_chunk))
+    if n_chunks == 0:
+        result = speech_empty()
+        result["song_duration"] = round(audio_duration, 3)
+        return result
 
-    if not chunks_to_process:
-        return {
-            "has_speech": False,
-            "speech_start": 0.0,
-            "speech_end": 0.0,
-            "confidence": 0.0,
-            "song_duration": round(audio_duration, 3),
-        }
-
-    # Process each boundary chunk independently and collect speech frames
     frame_time = 1 / ((sr / hop_size) / 6)
-    all_speech_frames = []
-
     with torch.inference_mode():
-        for i in chunks_to_process:
-            chunk = audio_pcen[..., i * c_size : (i + 1) * c_size]
-            if chunk.shape[-1] == 0:
-                continue
-            la = model(chunk)
-            la = torch.sigmoid(la)
-            la = torch.max_pool1d(la, 6, 6)
-            chunk_labels = la.detach().cpu().numpy()[0]
+        # Phase 1: check first and last boundary chunks for speech
+        last_chunk = n_chunks - 1
+        start_frames = process_chunk(model, audio_pcen, 0, c_size, confidence_threshold)
+        start_has_speech = has_speech_in_zone(start_frames, confidence_threshold)
 
-            chunk_start_sec = i * duration
-            chunk_offset_frames = int(chunk_start_sec / frame_time)
+        end_frames = process_chunk(model, audio_pcen, last_chunk, c_size, confidence_threshold)
+        end_has_speech = has_speech_in_zone(end_frames, confidence_threshold)
 
-            for j, frame in enumerate(chunk_labels.T):
-                speech_prob = float(frame[1])
-                t = frame_time * (chunk_offset_frames + j)
-                all_speech_frames.append((t, speech_prob))
+        if not start_has_speech and not end_has_speech:
+            result = speech_empty()
+            result["song_duration"] = round(audio_duration, 3)
+            return result
 
+        # Phase 2: expand from detected boundary boundaries
+        all_frames = []
 
-    # Scan speech frames for contiguous regions within the end-of-song zone
-    boundary_end_limit = audio_duration - check_seconds
+        if start_has_speech:
+            forward_frames = expand_forward(
+                model, audio_pcen, 0, n_chunks, c_size, confidence_threshold
+            )
+            all_frames.extend(forward_frames)
 
-    raw_regions = []
-    active = False
-    start = 0.0
-    region_probs = []
+        if end_has_speech:
+            backward_frames = expand_backward(
+                model, audio_pcen, last_chunk, c_size, confidence_threshold
+            )
+            # merge: backward frames come before start zone; avoid duplicates
+            if all_frames:
+                start_at = all_frames[0][0]
+                backward_frames = [f for f in backward_frames if f[0] < start_at]
+            all_frames = backward_frames + all_frames
 
-    for t, speech_prob in all_speech_frames:
-        in_boundary = check_seconds <= 0 or t > boundary_end_limit
+    all_frames.sort(key=lambda x: x[0])
 
-        if speech_prob >= confidence_threshold and not active and in_boundary:
-            active = True
-            start = t
-            region_probs = [speech_prob]
-        elif speech_prob >= confidence_threshold and active and in_boundary:
-            region_probs.append(speech_prob)
-        elif active and (speech_prob < confidence_threshold or not in_boundary):
-            active = False
-            avg_conf = float(np.mean(region_probs))
-            raw_regions.append((start, t, avg_conf, len(region_probs)))
-            region_probs = []
-
-    if active:
-        avg_conf = float(np.mean(region_probs))
-        t_end = min(all_speech_frames[-1][0] + frame_time, audio_duration)
-        raw_regions.append((start, t_end, avg_conf, len(region_probs)))
+    raw_regions = extract_regions(all_frames, confidence_threshold, frame_time, audio_duration)
 
     if not raw_regions:
-        return {
-            "has_speech": False,
-            "speech_start": 0.0,
-            "speech_end": 0.0,
-            "confidence": 0.0,
-            "song_duration": round(audio_duration, 3),
-        }
+        result = speech_empty()
+        result["song_duration"] = round(audio_duration, 3)
+        return result
 
-    # Bridge adjacent speech regions within the end zone
     bridged = bridge_regions(raw_regions, max_speech_gap)
 
-    # Filter bridged regions by minimum duration
     speech_regions = [
         (r[0], r[1], r[2]) for r in bridged if r[1] - r[0] >= min_speech_duration
     ]
 
     if not speech_regions:
-        return {
-            "has_speech": False,
-            "speech_start": 0.0,
-            "speech_end": 0.0,
-            "confidence": 0.0,
-            "song_duration": round(audio_duration, 3),
-        }
+        result = speech_empty()
+        result["song_duration"] = round(audio_duration, 3)
+        return result
 
     largest = max(speech_regions, key=lambda x: x[1] - x[0])
 
@@ -328,10 +411,10 @@ def detect_speech(
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 6:
+    if len(sys.argv) < 5:
         print(
             json.dumps(
-                {"error": "Usage: detector.py <audio_path> <model_path> <confidence_threshold> <check_seconds> <min_speech_duration>"}
+                {"error": "Usage: detector.py <audio_path> <model_path> <confidence_threshold> <min_speech_duration>"}
             )
         )
         sys.exit(1)
@@ -344,19 +427,14 @@ if __name__ == "__main__":
         print(json.dumps({"error": "Invalid confidence_threshold value"}))
         sys.exit(1)
     try:
-        check_seconds = int(sys.argv[4])
-    except ValueError:
-        print(json.dumps({"error": "Invalid check_seconds value"}))
-        sys.exit(1)
-    try:
-        min_speech_duration = float(sys.argv[5])
+        min_speech_duration = float(sys.argv[4])
     except ValueError:
         print(json.dumps({"error": "Invalid min_speech_duration value"}))
         sys.exit(1)
 
     try:
         result = detect_speech(
-            audio_path, model_path, confidence_threshold, check_seconds, min_speech_duration
+            audio_path, model_path, confidence_threshold, min_speech_duration
         )
         print(json.dumps(result))
     except Exception as e:

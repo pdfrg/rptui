@@ -171,10 +171,9 @@ On Linux, the config file generally is located at `~/.config/rptui/config.toml`.
 | Setting | Type | Description |
 |---------|------|-------------|
 | `skip_dj_segments` | bool | Enable automatic skipping of DJ speech at end of songs |
-| `dj_check_seconds` | int | Seconds from end of song to check for DJ speech (5-120, default: 80) |
 | `dj_confidence` | float | Minimum confidence for speech detection (0.1-0.99, default: 0.88) |
 | `dj_safety_buffer` | float | Extra seconds to add after detected speech for safe skipping (0-5, default: 0.5) |
-| `dj_min_speech_duration` | float | Minimum speech segment duration in seconds to count as DJ talk (5-60, default: 15.0) |
+| `dj_min_speech_duration` | float | Minimum speech segment duration in seconds to count as DJ talk (5-60, default: 10.0) |
 
 ### Lidarr Integration
 
@@ -469,11 +468,14 @@ A confirmation prompt is shown before proceeding. If setup is already complete, 
 
 ### How It Works
 
-- Only the last `dj_check_seconds` (default: 80) of each song are analyzed. RP DJ interludes are always at song end.
-- Detection only runs on the **last song in each RP programming block** — DJs only speak at block boundaries. Favorites and jukebox songs are always checked since they lack block context, but results are cached permanently so detection only runs once per song.
-- Speech segments shorter than 15 seconds are ignored (filters out brief spoken-vocal moments that aren't DJ talk). Some speech segments are >60s.
-- Detected speech must end within 1.5s of the song's end — RP DJs talk at the very end of a track, so speech ending further from the end is rejected as a false positive (e.g., sung vocals).
-- A `dj_safety_buffer` (default: 0.5s) is added before and after the detected speech to ensure segment is skipped (no jarring partial spoken word effect).
+- Detection runs on **every song** (not just last in block). DJs may speak at the start or end of any song.
+- A two-phase approach is used:
+  - **Phase 1:** Only the first and last 10 seconds are scanned. If no speech frames are found in either boundary, detection stops (no speech).
+  - **Phase 2:** If speech is found at either boundary, scanning expands outward from that boundary until a gap >2.5s with no speech is encountered (natural pause threshold). The DJ speech segment is considered complete.
+- Speech segments are processed in 10-second chunks (up from 20s previously) for finer boundary detection.
+- Speech segments shorter than `dj_min_speech_duration` (default: 10s) are ignored (filters out brief spoken-vocal moments that aren't DJ talk).
+- Detected speech must start within 1.5s of song start OR end within 1.5s of song end — speech far from either boundary is rejected as a false positive (e.g., sung vocals).
+- A `dj_safety_buffer` (default: 0.5s) is added before and after the detected speech to ensure the entire segment is skipped (no jarring partial spoken word effect).
 - Results are cached per-song, so re-playing a song doesn't re-run detection.
 - Detection runs in the background and doesn't block playback or other song-change logic.
 
@@ -483,32 +485,27 @@ Enable in `config.toml`:
 
 ```toml
 skip_dj_segments = true
-dj_check_seconds = 80
 dj_confidence = 0.88
 dj_safety_buffer = 0.5
-dj_min_speech_duration = 15.0
+dj_min_speech_duration = 10.0
 ```
 
 **Config notes**
-- `dj_check_seconds`: In ~48 hours of Main Mix testing, there were no DJ speech segments >80s.
-However, longer segments are certainly possible.  To catch more, increase value.
-Detection is performed in 20s chunks, so values of 100, 120, etc. are advised.
+- Detection scans the first and last 10 seconds of each song (one 10s chunk each). Only if speech is found near a boundary does scanning expand outward to find the full speech segment. This minimizes CPU usage and download time for songs with no DJ speech.
 - `dj_confidence`: Almost all confirmed DJ speech segments have very high confidence (>0.95).
 However, occasionally a confirmed segment will have confidence ~0.90.  Unfortunately, for songs
-with lyrics that "sound spoken", confidence values can be as high as ~0.94.  Lyrics rarely 
-continue to song end, which existing skip logic relies on (speech segment ends <1.5s from song end).
-- `dj_safety_buffer`: Speech detection rarely omits the very beginning of the segment.  
+with lyrics that "sound spoken", confidence values can be as high as ~0.94.  Lyrics rarely
+continue to song boundaries, which the boundary proximity check (1.5s) already filters.
+- `dj_safety_buffer`: Speech detection rarely omits the very beginning of the segment.
 To avoid hearing a brief speech "blip", leave at 0.5s.  However, this can also skip the last
 0.5s of actual music.  To hear as much of the music as possible, change to 0.
-- `dj_min_speech_duration`: In testing, no confirmed DJ speech segments were <15s. Almost all
-were 20s+.  This setting could miss brief announcements, but reducing value also increases
-possibility of "false positives".
+- `dj_min_speech_duration`: Shorter DJ speech segments (as brief as ~10s) have been observed.
+Reducing this value catches shorter announcements, but may increase false positives from sung
+vocals near song boundaries.
 
 All DJ speech testing has been performed and optimized for Main Mix, RockIt!, and Mellow Mix
 (all DJ'd by William).  Other stations with other DJs may have different characteristics
-(shorter and/or longer DJ speech segments).  If so, changes to `dj_check_seconds` and/or
-`dj_min_speech_duration` would be advised.  Please report.  Consideration could be given
-for station-specific default settings.
+(shorter and/or longer DJ speech segments).  Please report.
 
 ## Lidarr Integration (Optional)
 
@@ -675,7 +672,7 @@ Your local machine (the SSH client, the one with speakers) needs to accept TCP c
 **PulseAudio** (Ubuntu 22.04 and similar):
 
 ```bash
-pactl load-module module-native-protocol-tcp port=4713
+pactl load-module module-native-protocol-tcp port=4713 auth-ip-acl=127.0.0.1
 ```
 
 Note the module number printed (e.g., `28`). If you run this multiple times, you'll get duplicate modules — check with:
