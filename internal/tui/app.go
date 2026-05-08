@@ -392,7 +392,8 @@ type Model struct {
 
 	// DJ speech skip (deferred until playback reaches speech boundary)
 	pendingDJSkip   *djSkipInfo
-	djSkipAvailable bool // true if --setup-dj-skip has been run successfully
+	djPreResults    map[int64]*djSkipInfo // pre-screened results keyed by EventID
+	djSkipAvailable bool                  // true if --setup-dj-skip has been run successfully
 
 	// Offline mode
 	offlineMode                 bool   // whether offline mode is active
@@ -686,6 +687,7 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 		jukeboxBatchSize:       10,
 		commentsPerPage:        20,
 		networkTransitionModal: nil,
+		djPreResults:           make(map[int64]*djSkipInfo),
 		djSkipAvailable:        djSkipAvail,
 		audioForward:           audioForward,
 	}
@@ -925,6 +927,7 @@ func NewOfflineModel(cfg *config.Config, theme *config.ColorTheme, songs []cache
 		songs:                       modelSongs,
 		currentSongIndex:            0,
 		networkTransitionModal:      nil,
+		djPreResults:                make(map[int64]*djSkipInfo),
 		djSkipAvailable:             djSkipAvail,
 	}
 
@@ -1411,8 +1414,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !nearBoundary {
 				logger.Printf("DJ speech: rejected (starts %.1fs from start, ends %.1fs from end, max %.1fs)", msg.skipStart, songDur-msg.skipEnd, maxSpeechDistanceFromBoundary)
 			} else if pos, err := m.mpvBackend.GetPlaybackPosition(); err == nil && pos.TimePos >= msg.skipStart && pos.TimePos < msg.skipEnd {
+				// Already at or inside the speech region — seek past it and fade in
+				_ = m.mpvBackend.SetVolume(0)
 				_ = m.mpvBackend.SeekAbsolute(msg.skipEnd)
-				logger.Printf("DJ speech: already at speech, skipping to %.1fs", msg.skipEnd)
+				go m.fadeVolumeIn(100.0, djSkipFadeDuration)
+				logger.Printf("DJ speech: already at speech, skipping to %.1fs with fade-in", msg.skipEnd)
 			} else if err == nil && pos.TimePos < msg.skipStart {
 				m.pendingDJSkip = &djSkipInfo{
 					skipStart:  msg.skipStart,
@@ -1422,6 +1428,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				logger.Printf("DJ speech detected (%.1fs at %.1fs), deferring skip (confidence: %.2f)", msg.skipEnd-msg.skipStart, msg.skipStart, msg.confidence)
 			}
+		}
+
+	case djPrescreenDoneMsg:
+		if msg.tempFile != "" {
+			os.Remove(msg.tempFile)
+		}
+		if msg.hasSpeech {
+			nearStart := msg.skipStart <= maxSpeechDistanceFromBoundary
+			nearEnd := msg.songDur > 0 && msg.songDur-msg.skipEnd <= maxSpeechDistanceFromBoundary
+			if nearStart || nearEnd {
+				m.djPreResults[msg.eventID] = &djSkipInfo{
+					skipStart:  msg.skipStart,
+					skipEnd:    msg.skipEnd,
+					confidence: msg.confidence,
+					eventID:    msg.eventID,
+				}
+				logger.Printf("DJ prescreen: speech found for event %d (%.1fs at %.1fs, confidence: %.2f)", msg.eventID, msg.skipEnd-msg.skipStart, msg.skipStart, msg.confidence)
+			} else {
+				logger.Printf("DJ prescreen: rejected for event %d (starts %.1fs from start, ends %.1fs from end)", msg.eventID, msg.skipStart, msg.songDur-msg.skipEnd)
+			}
+		} else {
+			m.djPreResults[msg.eventID] = nil
+			logger.Printf("DJ prescreen: no speech for event %d", msg.eventID)
 		}
 
 	case sleepTimerTickMsg:
@@ -3002,9 +3031,9 @@ func (m Model) handleBlockFetched(msg blockFetchedMsg) (tea.Model, tea.Cmd) {
 
 		// If MPV was restarted, trigger song change UI update
 		if mpvWasStopped {
-			return m, tea.Batch(reconnectedCmd, m.songChangedCmds())
+			return m, tea.Batch(reconnectedCmd, m.songChangedCmds(), m.startDJPrescreenBatch(msg.songs))
 		}
-		return m, reconnectedCmd
+		return m, tea.Batch(reconnectedCmd, m.startDJPrescreenBatch(msg.songs))
 	}
 
 	// First load (not initialized yet) — start MPV
@@ -3032,7 +3061,12 @@ func (m Model) handleBlockFetched(msg blockFetchedMsg) (tea.Model, tea.Cmd) {
 		m.initialized = true
 	}
 
-	return m, m.songChangedCmds()
+	prescreenSongs := msg.songs
+	if len(prescreenSongs) > 0 {
+		prescreenSongs = prescreenSongs[1:]
+	}
+
+	return m, tea.Batch(m.songChangedCmds(), m.startDJPrescreenBatch(prescreenSongs))
 }
 
 // handleChan99Fetched processes channel 99 song fetch results
@@ -3068,9 +3102,16 @@ func (m Model) handleChan99Fetched(msg chan99FetchedMsg) (tea.Model, tea.Cmd) {
 		m.connectedAt = time.Now()
 
 		m.updatePlaylist()
+
+		prescreenSongs := msg.songs
+		if len(prescreenSongs) > 0 {
+			prescreenSongs = prescreenSongs[1:]
+		}
+
 		return m, tea.Batch(
 			setStatus(&m, "My Paradise", false),
 			m.songChangedCmds(),
+			m.startDJPrescreenBatch(prescreenSongs),
 		)
 	}
 
@@ -3088,7 +3129,10 @@ func (m Model) handleChan99Fetched(msg chan99FetchedMsg) (tea.Model, tea.Cmd) {
 	m.pollingNextBlock = false
 	m.updatePlaylist()
 
-	return m, setStatus(&m, "My Paradise", false)
+	return m, tea.Batch(
+		setStatus(&m, "My Paradise", false),
+		m.startDJPrescreenBatch(msg.songs),
+	)
 }
 
 // handleQuitTick handles the 60-second countdown to quit
@@ -3837,6 +3881,19 @@ func (m *Model) prunePlaylist() {
 			logger.Printf("Overflow pruned %d songs (playlist was %d, currentIdx=%d)", pruneCount, len(m.songs)+pruneCount, m.currentSongIndex)
 		}
 	}
+
+	// Prune djPreResults for songs no longer in the playlist
+	if len(m.djPreResults) > 0 {
+		activeEventIDs := make(map[int64]bool, len(m.songs))
+		for _, s := range m.songs {
+			activeEventIDs[s.EventID] = true
+		}
+		for eventID := range m.djPreResults {
+			if !activeEventIDs[eventID] {
+				delete(m.djPreResults, eventID)
+			}
+		}
+	}
 }
 
 // updatePlaylist updates the playlist table
@@ -4295,13 +4352,142 @@ func (m *Model) startDJDetection(song *models.Song) tea.Cmd {
 	}
 }
 
-// djDetectionDoneMsg is sent when DJ detection completes
+// startDJPrescreen starts background DJ speech detection for an upcoming song
+// (not yet playing). Results are stored in djPreResults and consumed when the
+// song starts playing via songChangedCmds.
+func (m *Model) startDJPrescreen(song *models.Song) tea.Cmd {
+	return func() tea.Msg {
+		if !m.config.SkipDJSegments {
+			return djPrescreenDoneMsg{eventID: song.EventID}
+		}
+
+		originalURL := song.GaplessURL
+		if originalURL == "" {
+			return djPrescreenDoneMsg{eventID: song.EventID}
+		}
+
+		var tempFile string
+		audioPath := originalURL
+		cacheDir := filepath.Join(xdg.CacheHome, "rptui")
+
+		if strings.HasPrefix(originalURL, "http://") || strings.HasPrefix(originalURL, "https://") {
+			detectURL, err := smad.DetectionURL(originalURL)
+			if err != nil {
+				logger.Printf("DJ prescreen: failed to derive 64k URL: %v", err)
+				return djPrescreenDoneMsg{eventID: song.EventID}
+			}
+
+			dlCtx, dlCancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer dlCancel()
+
+			tempFile, err = smad.DownloadAudioFile(dlCtx, detectURL, smad.TmpDir(cacheDir))
+			if err != nil {
+				logger.Printf("DJ prescreen: failed to download %s: %v", detectURL, err)
+				return djPrescreenDoneMsg{eventID: song.EventID}
+			}
+			audioPath = tempFile
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+
+		checker := smad.NewDJChecker(
+			smad.PythonPath(cacheDir),
+			smad.DetectorPath(cacheDir),
+			smad.ModelPath(cacheDir),
+			smad.CacheDir(cacheDir),
+		)
+
+		speechStart, speechEnd, confidence, hasSpeech, err := checker.Detect(
+			ctx, originalURL, audioPath, m.config.DJConfidence, m.config.DJMinSpeechDuration, song.Artist, song.Title,
+		)
+
+		if err != nil {
+			logger.Printf("DJ prescreen failed for %s: %v", song.Title, err)
+			if tempFile != "" {
+				os.Remove(tempFile)
+			}
+			return djPrescreenDoneMsg{eventID: song.EventID}
+		}
+
+		songDur := song.GetDurationSeconds()
+
+		if hasSpeech {
+			skipStart := speechStart - m.config.DJSafetyBuffer
+			if skipStart < 0 {
+				skipStart = 0
+			}
+
+			skipEnd := speechEnd + m.config.DJSafetyBuffer
+			if skipEnd > songDur {
+				skipEnd = songDur
+			}
+
+			return djPrescreenDoneMsg{
+				eventID:    song.EventID,
+				hasSpeech:  true,
+				skipStart:  skipStart,
+				skipEnd:    skipEnd,
+				confidence: confidence,
+				songDur:    songDur,
+				tempFile:   tempFile,
+			}
+		}
+
+		if tempFile != "" {
+			os.Remove(tempFile)
+		}
+		return djPrescreenDoneMsg{eventID: song.EventID, songDur: songDur}
+	}
+}
+
+// startDJPrescreenBatch launches prescreen detection for multiple upcoming songs.
+// Skips songs already in djPreResults and the currently-playing song.
+func (m *Model) startDJPrescreenBatch(songs []*models.Song) tea.Cmd {
+	if !m.config.SkipDJSegments || len(songs) == 0 {
+		return nil
+	}
+
+	var cmds []tea.Cmd
+	for _, song := range songs {
+		if song == nil || song.EventID == 0 {
+			continue
+		}
+		if m.currentSong != nil && song.EventID == m.currentSong.EventID {
+			continue
+		}
+		if _, exists := m.djPreResults[song.EventID]; exists {
+			continue
+		}
+		cmds = append(cmds, m.startDJPrescreen(song))
+	}
+
+	if len(cmds) == 0 {
+		return nil
+	}
+	logger.Printf("DJ prescreen: launching detection for %d upcoming songs", len(cmds))
+	return tea.Batch(cmds...)
+}
+
+// djDetectionDoneMsg is sent when DJ detection completes for the currently-playing song.
 type djDetectionDoneMsg struct {
 	eventID    int64
 	hasSpeech  bool
 	skipStart  float64
 	skipEnd    float64
 	confidence float64
+	tempFile   string
+}
+
+// djPrescreenDoneMsg is sent when DJ pre-screening completes for an upcoming song.
+// The result is stored in djPreResults for consumption when the song starts playing.
+type djPrescreenDoneMsg struct {
+	eventID    int64
+	hasSpeech  bool
+	skipStart  float64
+	skipEnd    float64
+	confidence float64
+	songDur    float64
 	tempFile   string
 }
 
@@ -4455,9 +4641,33 @@ func (m *Model) songChangedCmds() tea.Cmd {
 
 	var cmds []tea.Cmd
 
-	// Start DJ detection if enabled
+	// Apply DJ prescreen result or start detection if enabled
 	if m.currentSong != nil && m.config.SkipDJSegments {
-		cmds = append(cmds, m.startDJDetection(m.currentSong))
+		if preResult, exists := m.djPreResults[m.currentSong.EventID]; exists {
+			delete(m.djPreResults, m.currentSong.EventID)
+			if preResult != nil {
+				songDur := m.currentSong.GetDurationSeconds()
+				nearStart := preResult.skipStart <= maxSpeechDistanceFromBoundary
+				if nearStart && m.mpvBackend != nil {
+					// Speech at song start — seek past it immediately and fade in
+					_ = m.mpvBackend.SetVolume(0)
+					_ = m.mpvBackend.SeekAbsolute(preResult.skipEnd)
+					go m.fadeVolumeIn(100.0, djSkipFadeDuration)
+					logger.Printf("DJ prescreen: start-of-song speech, seeking to %.1fs with fade-in", preResult.skipEnd)
+					cmds = append(cmds, setStatus(m, "Skipping speech...", false))
+				} else if songDur > 0 && songDur-preResult.skipEnd <= maxSpeechDistanceFromBoundary {
+					// Speech at song end — defer to progress tick handler
+					m.pendingDJSkip = preResult
+					logger.Printf("DJ prescreen: end-of-song speech, deferring skip (%.1fs at %.1fs)", preResult.skipEnd-preResult.skipStart, preResult.skipStart)
+				} else {
+					logger.Printf("DJ prescreen: rejected for %s (not near boundary)", m.currentSong.Title)
+				}
+			} else {
+				logger.Printf("DJ prescreen: no speech for %s (pre-screened)", m.currentSong.Title)
+			}
+		} else {
+			cmds = append(cmds, m.startDJDetection(m.currentSong))
+		}
 	}
 
 	// Clear old album art from terminal for sixel/iterm2 when song changes
