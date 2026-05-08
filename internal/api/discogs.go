@@ -138,7 +138,7 @@ func (d *DiscogsClient) fetchDiscogsName(ctx context.Context, entityType, idStr 
 	if err != nil {
 		return "", false
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		// Try alternate endpoint for r/m tags
@@ -191,7 +191,7 @@ func (d *DiscogsClient) fetchReleaseName(ctx context.Context, id int) (string, b
 	if err != nil {
 		return "", false
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", false
@@ -221,7 +221,7 @@ func (d *DiscogsClient) fetchMasterName(ctx context.Context, id int) (string, bo
 	if err != nil {
 		return "", false
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", false
@@ -366,7 +366,7 @@ func (d *DiscogsClient) SearchArtist(ctx context.Context, artistName, albumName 
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("discogs search status %d", resp.StatusCode)
@@ -484,7 +484,7 @@ func (d *DiscogsClient) SearchArtist(ctx context.Context, artistName, albumName 
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("discogs artist status %d", resp.StatusCode)
@@ -545,7 +545,7 @@ func (d *DiscogsClient) hasReleaseWithAlbum(ctx context.Context, artistID int, a
 	if err != nil {
 		return d.checkArtistReleasesFallback(ctx, artistID, albumNorm)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return d.checkArtistReleasesFallback(ctx, artistID, albumNorm)
@@ -575,7 +575,7 @@ func (d *DiscogsClient) hasReleaseWithAlbum(ctx context.Context, artistID int, a
 		masterResp, err := d.httpClient.Do(masterReq)
 		if err != nil || masterResp == nil || masterResp.StatusCode != http.StatusOK {
 			if masterResp != nil {
-				masterResp.Body.Close()
+				_ = masterResp.Body.Close()
 			}
 			continue
 		}
@@ -586,7 +586,7 @@ func (d *DiscogsClient) hasReleaseWithAlbum(ctx context.Context, artistID int, a
 			} `json:"artists"`
 		}
 		decodeErr := json.NewDecoder(masterResp.Body).Decode(&master)
-		masterResp.Body.Close()
+		_ = masterResp.Body.Close()
 
 		if decodeErr == nil && len(master.Artists) > 0 {
 			if master.Artists[0].ID == artistID {
@@ -613,7 +613,7 @@ func (d *DiscogsClient) fetchArtistName(ctx context.Context, artistID int) (stri
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var result struct {
 		Name string `json:"name"`
@@ -638,7 +638,7 @@ func (d *DiscogsClient) checkArtistReleasesFallback(ctx context.Context, artistI
 	if err != nil {
 		return false
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return false

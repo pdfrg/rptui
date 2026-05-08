@@ -102,7 +102,7 @@ func (m *MPVBackend) checkPulseServerReachable() error {
 	if err != nil {
 		return fmt.Errorf("cannot reach PULSE_SERVER %s: %w", addr, err)
 	}
-	conn.Close()
+	_ = conn.Close()
 	return nil
 }
 
@@ -121,10 +121,10 @@ func (m *MPVBackend) Start(urls []string) error {
 			return fmt.Errorf("failed to create socket directory: %w", err)
 		}
 		// Remove stale socket file
-		os.Remove(m.socketPath)
+		_ = os.Remove(m.socketPath)
 	} else {
 		// On Windows, remove stale named pipe
-		os.Remove(m.socketPath)
+		_ = os.Remove(m.socketPath)
 	}
 
 	// Pre-flight check: verify PULSE_SERVER tunnel is reachable
@@ -233,7 +233,7 @@ func (m *MPVBackend) stopLocked() error {
 	m.currentURLs = nil
 	m.isPaused = false
 	m.pauseStartTime = time.Time{}
-	os.Remove(m.socketPath)
+	_ = os.Remove(m.socketPath)
 	return nil
 }
 
@@ -602,7 +602,7 @@ func (m *MPVBackend) sendIPCCommandLocked(cmd IPCCommand) (*IPCResponse, error) 
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to MPV socket: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	_ = conn.SetReadDeadline(time.Now().Add(m.socketTimeout))
 	_ = conn.SetWriteDeadline(time.Now().Add(m.socketTimeout))

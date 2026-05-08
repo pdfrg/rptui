@@ -323,11 +323,12 @@ func (f Favorites) View() string {
 	favLabel := mutedStyle.Render("Favorites")
 	blockLabel := mutedStyle.Render("Blocklist")
 	offlineLabel := mutedStyle.Render("Offline")
-	if f.activeTab == TabFavorites {
+	switch f.activeTab {
+	case TabFavorites:
 		favLabel = cursorStyle.Render("▸ Favorites")
-	} else if f.activeTab == TabBlocklist {
+	case TabBlocklist:
 		blockLabel = cursorStyle.Render("▸ Blocklist")
-	} else {
+	default:
 		offlineLabel = cursorStyle.Render("▸ Offline")
 	}
 	tabs := favLabel + mutedStyle.Render("  │  ") + blockLabel + mutedStyle.Render("  │  ") + offlineLabel

@@ -36,7 +36,7 @@ func SendDesktopNotification(song *models.Song, stationName string, cfg *config.
 
 	if song.Album != "" && song.Album != "—" {
 		if song.Year != "" && song.Year != "—" {
-			body.WriteString(fmt.Sprintf("%s (%s)", song.Album, song.Year))
+			fmt.Fprintf(&body, "%s (%s)", song.Album, song.Year)
 		} else {
 			body.WriteString(song.Album)
 		}

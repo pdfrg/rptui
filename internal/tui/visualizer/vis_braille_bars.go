@@ -54,7 +54,7 @@ func (v *Visualizer) renderBrailleBars(width int) string {
 		}
 		for i, level := range v.bands {
 			for range bandWidth {
-				var braille rune = '\u2800'
+				braille := '\u2800'
 				for dr := range 4 {
 					for dc := range 2 {
 						dotRow := row*4 + dr

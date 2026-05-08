@@ -49,11 +49,11 @@ func (v *Visualizer) renderRain(width int) string {
 			if dist >= 0 && dist < dropLen {
 				var ch rune
 				var style lipgloss.Style
-				switch {
-				case dist == 0:
+				switch dist {
+				case 0:
 					ch = '┃'
 					style = highStyle
-				case dist == 1:
+				case 1:
 					ch = '│'
 					style = midStyle
 				default:

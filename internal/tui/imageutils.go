@@ -44,7 +44,7 @@ func buildSixelClearAtCurrentPosition(width, height int) string {
 		}
 	}
 	// Move back up to original position (top-left of image area)
-	b.WriteString(fmt.Sprintf("\x1b[%dA", height))
+	fmt.Fprintf(&b, "\x1b[%dA", height)
 	return b.String()
 }
 
@@ -63,7 +63,7 @@ func buildITerm2ClearAtCurrentPosition(width, height int) string {
 		}
 	}
 	// Move back up to original position
-	b.WriteString(fmt.Sprintf("\x1b[%dA", height))
+	fmt.Fprintf(&b, "\x1b[%dA", height)
 	return b.String()
 }
 
@@ -83,6 +83,6 @@ func buildHalfblocksClearAtCurrentPosition(width, height int) string {
 		}
 	}
 	// Move cursor back up to original position (after the last newline)
-	b.WriteString(fmt.Sprintf("\x1b[%dA", height))
+	fmt.Fprintf(&b, "\x1b[%dA", height)
 	return b.String()
 }

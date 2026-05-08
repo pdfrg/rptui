@@ -110,7 +110,7 @@ func queryCSI16tViaTmux() (width, height int, ok bool) {
 	if err != nil {
 		return 0, 0, false
 	}
-	defer tty.Close()
+	defer func() { _ = tty.Close() }()
 
 	oldState, err := term.MakeRaw(int(tty.Fd()))
 	if err != nil {
@@ -159,7 +159,7 @@ func queryCSI14tViaTmux() (width, height int, ok bool) {
 	if err != nil {
 		return 0, 0, false
 	}
-	defer tty.Close()
+	defer func() { _ = tty.Close() }()
 
 	oldState, err := term.MakeRaw(int(tty.Fd()))
 	if err != nil {

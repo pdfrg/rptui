@@ -517,11 +517,12 @@ func fetchDiscogsName(ctx context.Context, client *http.Client, entityType, idSt
 	if resp.StatusCode != http.StatusOK {
 		// Try alternate endpoint for r/m tags
 		var altEndpoint string
-		if entityType == "r" {
+		switch entityType {
+		case "r":
 			altEndpoint = fmt.Sprintf("https://api.discogs.com/masters/%d", id)
-		} else if entityType == "m" {
+		case "m":
 			altEndpoint = fmt.Sprintf("https://api.discogs.com/releases/%d", id)
-		} else {
+		default:
 			discogsIDCacheMu.Lock()
 			discogsIDCache[cacheKey] = ""
 			discogsIDCacheMu.Unlock()
@@ -535,7 +536,7 @@ func fetchDiscogsName(ctx context.Context, client *http.Client, entityType, idSt
 			}
 			resp2, err := client.Do(req2)
 			if err == nil {
-				defer resp2.Body.Close()
+				defer func() { _ = resp2.Body.Close() }()
 				if resp2.StatusCode == http.StatusOK {
 					var r struct {
 						Title string `json:"title"`

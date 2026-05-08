@@ -48,7 +48,8 @@ func (n *NetworkTransition) Update(msg tea.Msg) tea.Cmd {
 		key := keyMsg.String()
 
 		// Going offline: handle cache selection (1-9) or dismiss (n)
-		if n.variant == NetworkGoingOffline {
+		switch n.variant {
+		case NetworkGoingOffline:
 			// User pressed a number 1-9 to select a cache
 			if len(key) == 1 && key >= "1" && key <= "9" {
 				idx := int(key[0] - '1')
@@ -108,7 +109,8 @@ func (n NetworkTransition) View() string {
 
 	var b strings.Builder
 
-	if n.variant == NetworkGoingOffline {
+	switch n.variant {
+	case NetworkGoingOffline:
 		b.WriteString(centerStyled(warningStyle.Render("NETWORK ISSUE DETECTED"), contentWidth))
 		b.WriteString("\n\n")
 		b.WriteString(centerStyled(mutedStyle.Render(fmt.Sprintf("%s • Retrying...", n.errorMsg)), contentWidth))
@@ -149,7 +151,7 @@ func (n NetworkTransition) View() string {
 				accentStyle.Render("n") + mutedStyle.Render(" ignore")
 			b.WriteString(centerStyled(helpText, contentWidth))
 		}
-	} else if n.variant == NetworkGoingOnline {
+	case NetworkGoingOnline:
 		b.WriteString(centerStyled(successStyle.Render("CONNECTION RESTORED"), contentWidth))
 		b.WriteString("\n\n")
 		b.WriteString(centerStyled(mutedStyle.Render("✓ Back online"), contentWidth))

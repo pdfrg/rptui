@@ -326,7 +326,7 @@ func (r *CacheRecorder) downloadSong(url, path string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return 0, fmt.Errorf("HTTP %d", resp.StatusCode)
@@ -340,7 +340,7 @@ func (r *CacheRecorder) downloadSong(url, path string) (int64, error) {
 
 	size, err := io.Copy(f, resp.Body)
 	if err != nil {
-		f.Close()
+		_ = f.Close()
 		os.Remove(tmpPath)
 		return 0, err
 	}
