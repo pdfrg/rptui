@@ -35,6 +35,7 @@ While Radio Paradise offers the absolute best internet radio stations, human-cur
 - **Artist Images**: Smart query for artist thumbnails and image galleries from Discogs (requires user token) and TheAudioDB (no token required).
 - **Artist Discographies**: All official studio albums from [MusicBrainz](https://musicbrainz.org/)
 - **Album Art**: Smart terminal support via [go-termimg](https://github.com/blacktop/go-termimg) (Kitty, iTerm2, Sixel, Unicode fallback).  Terminals with Kitty image protocol support recommended (Kitty, Ghostty, and Rio all work perfectly).
+- **SSH & tmux Compatible**: Full Kitty image protocol support over SSH connections and inside tmux sessions (DCS passthrough). Audio forwarding via `--audio-forward` redirects playback to your local machine.
 - **Visualizations**: 9 real-time audio visualizations (bars, braille, braille bars, wave, rain, stars, binary, segmented, classic peak).  Full terminal window toggle, true fullscreen when terminal maximized.
 - **Scrobbling**: [Last.fm](https://www.last.fm/) and [ListenBrainz](https://listenbrainz.org/) support.
 - **Themes**: Automatic current Omarchy theme detection with live-reloads, 6 built-in themes, and custom colors.toml support.  Smart parsing of Omarchy themes for optimum color choices (tested on 70 themes).  Option to disable theme background or themes entirely to use your own terminal palette.
