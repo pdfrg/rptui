@@ -5,6 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.3.0] - 2026-05-08
+
+### Added
+
+- **SSH audio forwarding**: `--audio-forward` flag redirects playback to your local machine over SSH, with automatic PulseAudio output detection
+- **tmux Kitty image support**: Full Kitty image protocol passthrough inside tmux sessions using combined DCS escape sequences, outer terminal detection, and client cell size queries
+- **DJ speech pre-screening**: Upcoming songs are pre-screened for DJ speech before playback starts, eliminating gaps at block boundaries
+- **Skip DJ Speech toggle**: New option in the options modal to enable/disable DJ speech skipping (visible for users with setup complete)
+
+### Fixed
+
+- **Visualizer stuck on loading**: Added retry logic, default sink monitor fallback, and ring buffer fixes to prevent the visualizer from hanging on startup
+- **tmux startup hang**: Fixed hang caused by `/dev/tty` termios restore inside tmux
+- **tmux cell ratio detection**: Corrected cell size detection inside tmux using `CSI 16t` queries
+- **tmux multi-pane image passthrough**: Fixed image rendering with `allow-passthrough=all`, quit delay, and gallery timing
+- **tmux gallery image pixel area**: Capped pixel area in tmux to avoid DCS splitting issues
+- **Rio + SSH Kitty detection**: Fixed Kitty protocol detection when running Rio over SSH
+- **WezTerm + SSH font dimensions**: Swapped font width/height dimensions for correct cell ratio over SSH
+- **SSH audio forwarding**: Now properly forces PulseAudio output instead of auto-detecting
+- **DJ speech detection**: Fixed boundary window, gap tracking, and merge bugs in two-phase detection
+- **CI workflow**: Fixed golangci-lint compatibility, indentation, and setup-go caching
+- **Code formatting**: Applied `gofmt` across all files
+
+### Changed
+
+- **DJ speech detection**: Two-phase boundary scanning now runs on all songs, not just block-position candidates; removed `dj_check_seconds` config option (auto-detected now); `dj_min_speech_duration` default changed from 15.0 to 10.0
+- **Config file**: New `[audio]` section with `ssh_audio_server` setting for SSH audio forwarding
+- **Terminal color queries**: Updated `termenv` API usage for compatibility (`.Writer()` instead of `.TTY()`)
+- **Theme style building**: Refactored to build base styles first, then conditionally apply backgrounds
+
+### Documentation
+
+- Added offline mode section to DOCUMENTATION.md
+- Added HELP.md for MPV and NerdFont installation
+- Added note about updating/fixing config file by changing stations in-app
+- Added contributing guide (CONTRIBUTING.md)
+- Updated CI badge to branch=main
+- Updated issue templates
+
+### Note for Existing Users
+
+Your existing config file is fully backward-compatible. Removed fields (like `dj_check_seconds`) are silently ignored, and new fields use sensible defaults. To regenerate your config with the latest format and default values, simply change stations from within the app to force an overwrite.
+
 ## [v1.2.0] - 2025-04-27
 
 ### Added
