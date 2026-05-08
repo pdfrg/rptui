@@ -116,7 +116,7 @@ func queryCSI16tViaTmux() (width, height int, ok bool) {
 	if err != nil {
 		return 0, 0, false
 	}
-	defer term.Restore(int(tty.Fd()), oldState)
+	defer func() { _ = term.Restore(int(tty.Fd()), oldState) }()
 
 	query := wrapTmuxPassthrough("\x1b[16t")
 
@@ -134,8 +134,8 @@ func queryCSI16tViaTmux() (width, height int, ok bool) {
 				parts := strings.Split(response, ";")
 				if len(parts) >= 3 {
 					var h, w int
-					fmt.Sscanf(parts[1], "%d", &h)
-					fmt.Sscanf(parts[2], "%dt", &w)
+					_, _ = fmt.Sscanf(parts[1], "%d", &h)
+					_, _ = fmt.Sscanf(parts[2], "%dt", &w)
 					if w > 0 && h > 0 {
 						responseChan <- [2]int{w, h}
 						return
@@ -165,7 +165,7 @@ func queryCSI14tViaTmux() (width, height int, ok bool) {
 	if err != nil {
 		return 0, 0, false
 	}
-	defer term.Restore(int(tty.Fd()), oldState)
+	defer func() { _ = term.Restore(int(tty.Fd()), oldState) }()
 
 	query := wrapTmuxPassthrough("\x1b[14t")
 
@@ -183,8 +183,8 @@ func queryCSI14tViaTmux() (width, height int, ok bool) {
 				parts := strings.Split(response, ";")
 				if len(parts) >= 3 {
 					var h, w int
-					fmt.Sscanf(parts[1], "%d", &h)
-					fmt.Sscanf(parts[2], "%dt", &w)
+					_, _ = fmt.Sscanf(parts[1], "%d", &h)
+					_, _ = fmt.Sscanf(parts[2], "%dt", &w)
 					if w > 0 && h > 0 {
 						responseChan <- [2]int{w, h}
 						return
