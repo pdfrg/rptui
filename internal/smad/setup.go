@@ -162,7 +162,7 @@ func downloadModel(cacheDir string) error {
 	if err != nil {
 		return fmt.Errorf("failed to download model: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("failed to download model: server returned %d", resp.StatusCode)
@@ -172,7 +172,7 @@ func downloadModel(cacheDir string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create model file: %w", err)
 	}
-	defer outFile.Close()
+	defer func() { _ = outFile.Close() }()
 
 	if _, err := io.Copy(outFile, resp.Body); err != nil {
 		return fmt.Errorf("failed to write model file: %w", err)

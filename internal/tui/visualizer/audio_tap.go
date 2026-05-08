@@ -150,7 +150,7 @@ func DetectPulseAudioFormat() (string, int, error) {
 			}
 		}
 	}
-	return "", 0, fmt.Errorf("Default Sample Specification not found")
+	return "", 0, fmt.Errorf("default Sample Specification not found")
 }
 
 // AudioTap captures audio from the PipeWire monitor sink via pw-record.

@@ -1071,15 +1071,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// For compact/narrow layouts, constrain header/footer to now-playing width
 		// so they align with nowplaying widget
 		widgetWidth := msg.Width
-		if m.layoutMode == LayoutNarrow {
+		switch m.layoutMode {
+		case LayoutNarrow:
 			artHeight := 16
 			artWidth := int(float64(artHeight) * m.cellRatio)
 			if artWidth < 10 {
 				artWidth = 10
 			}
 			widgetWidth = artWidth
-		} else if m.layoutMode == LayoutCompact {
-			// Compact: use same width as nowplaying widget
+		case LayoutCompact:
 			widgetWidth = msg.Width - 4
 		}
 		m.headerWidget.SetWidth(widgetWidth)
@@ -1887,19 +1887,19 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 
 		// Fetch lyrics/artist if needed when entering those views
-		if m.bottomViewMode == ViewLyrics || m.bottomViewMode == ViewSyncedLyrics {
+		switch m.bottomViewMode {
+		case ViewLyrics, ViewSyncedLyrics:
 			if m.lyrics == "" && m.currentSong != nil {
 				cmds = append(cmds, m.fetchLyricsCmd())
 			}
-		} else if m.bottomViewMode == ViewArtist {
+		case ViewArtist:
 			if m.artistInfo == nil && m.currentSong != nil {
 				cmds = append(cmds, m.fetchArtistCmd())
 			}
 			if m.artistArtLoaded && m.artistArtStr != "" {
 				cmds = append(cmds, renderArtistArtAfterDelay())
 			}
-		} else if m.bottomViewMode == ViewComments {
-			// Fetch comments if not already loaded for current song
+		case ViewComments:
 			if m.currentSong != nil && m.commentsSongID != m.currentSong.SongID {
 				m.commentsSongID = m.currentSong.SongID
 				cmds = append(cmds, m.fetchCommentsCmd())
@@ -3437,11 +3437,12 @@ func (m Model) handleProgressTick(msg progressTickMsg) (tea.Model, tea.Cmd) {
 
 	// Handle per-service scrobble flash states (timeout and blink)
 	for service, state := range m.scrobbleStates {
-		if state == flashSolid {
+		switch state {
+		case flashSolid:
 			if time.Since(m.scrobbleFlashAt) >= flashDuration {
 				m.scrobbleStates[service] = flashOff
 			}
-		} else if state == flashBlinkOn || state == flashBlinkOff {
+		case flashBlinkOn, flashBlinkOff:
 			if time.Since(m.scrobbleFlashAt) >= flashDuration {
 				m.scrobbleStates[service] = flashOff
 			} else {
@@ -4060,18 +4061,7 @@ func (m *Model) updateBottomView() {
 			if m.artistInfo == nil {
 				// Indent when no artist image (viewport not right-shifted)
 				indent := ""
-				if !(m.artistArtLoaded && m.artistArtStr != "") {
-					indent = "  "
-				}
-				if m.artistStatus != "" {
-					content = indent + m.spinner.View() + " " + m.artistStatus
-				} else {
-					content = indent + "Loading artist info..."
-				}
-			} else {
-				// Indent when no artist image (viewport not right-shifted)
-				indent := ""
-				if !(m.artistArtLoaded && m.artistArtStr != "") {
+				if !m.artistArtLoaded || m.artistArtStr == "" {
 					indent = "  "
 				}
 				var lines []string
@@ -4728,7 +4718,7 @@ func (m *Model) checkAndQueueFavorite() tea.Cmd {
 		return nil
 	}
 	if !m.mpvBackend.IsRunning() && !m.mpvBackend.IsPaused() {
-		if !(m.pollingNextBlock && m.currentSongIndex >= len(m.songs)-1) {
+		if !m.pollingNextBlock || m.currentSongIndex < len(m.songs)-1 {
 			return nil
 		}
 	}
@@ -5014,7 +5004,7 @@ func (m Model) fetchArtistCmd() tea.Cmd {
 			var discoBuilder strings.Builder
 			for _, a := range mb.albums {
 				if a.Year != "" {
-					discoBuilder.WriteString(fmt.Sprintf("%s (%s)\n", a.Title, a.Year))
+					fmt.Fprintf(&discoBuilder, "%s (%s)\n", a.Title, a.Year)
 				} else {
 					discoBuilder.WriteString(a.Title + "\n")
 				}
@@ -5845,7 +5835,7 @@ func positionMultiLineImage(imgStr string, startRow, startCol int) string {
 	var b strings.Builder
 	for i, line := range lines {
 		if line != "" {
-			b.WriteString(fmt.Sprintf("\x1b[%d;%dH%s", startRow+i, startCol, line))
+			fmt.Fprintf(&b, "\x1b[%d;%dH%s", startRow+i, startCol, line)
 		}
 	}
 	return b.String()
@@ -6184,8 +6174,8 @@ func (m Model) renderFullscreenVisualizer() tea.View {
 		if retryStatus != "" {
 			b.WriteString(retryStatus + "\n")
 		} else {
-			b.WriteString(fmt.Sprintf("Loading %s visualization...\n", modeName))
-			b.WriteString(fmt.Sprintf("Connecting to %s audio...\n", source))
+			fmt.Fprintf(&b, "Loading %s visualization...\n", modeName)
+			fmt.Fprintf(&b, "Connecting to %s audio...\n", source)
 		}
 		return m.altView(b.String())
 	}

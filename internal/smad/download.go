@@ -66,7 +66,7 @@ func DownloadAudioFile(ctx context.Context, url, dir string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("download failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("download failed: HTTP %d", resp.StatusCode)
@@ -79,9 +79,9 @@ func DownloadAudioFile(ctx context.Context, url, dir string) (string, error) {
 	tmpPath := tmpFile.Name()
 
 	_, err = io.Copy(tmpFile, resp.Body)
-	tmpFile.Close()
+	_ = tmpFile.Close()
 	if err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return "", fmt.Errorf("download write failed: %w", err)
 	}
 
@@ -111,7 +111,7 @@ func CleanupStaleTempFiles(dir string, maxAge time.Duration) {
 		}
 		if strings.HasPrefix(entry.Name(), "dj-") && info.ModTime().Before(cutoff) {
 			p := filepath.Join(dir, entry.Name())
-			os.Remove(p)
+			_ = os.Remove(p)
 			dlog.Printf("Cleaned stale temp file: %s", p)
 		}
 	}

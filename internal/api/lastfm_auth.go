@@ -115,7 +115,7 @@ func lastFMPollSession(client *http.Client, token string) (string, error) {
 		}
 
 		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		var result struct {
 			Session struct {

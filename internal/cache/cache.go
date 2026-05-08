@@ -118,7 +118,7 @@ func (c *CacheManager) EnsureDirectories() error {
 	// Clean up orphaned .tmp files from crashed/interrupted downloads
 	if tmpFiles, err := filepath.Glob(filepath.Join(c.favoritesDir, "*.tmp")); err == nil {
 		for _, f := range tmpFiles {
-			os.Remove(f)
+			_ = os.Remove(f)
 		}
 	}
 
@@ -545,7 +545,7 @@ func (c *CacheManager) downloadAndAdd(song *models.Song, fileExt string) bool {
 		logger.Printf("Failed to download audio for event %d: %v", song.EventID, err)
 		return false
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		logger.Printf("Audio download returned status %d for event %d", resp.StatusCode, song.EventID)
@@ -564,20 +564,20 @@ func (c *CacheManager) downloadAndAdd(song *models.Song, fileExt string) bool {
 	}
 
 	if _, err := io.Copy(f, resp.Body); err != nil {
-		f.Close()
-		os.Remove(tmpPath)
+		_ = f.Close()
+		_ = os.Remove(tmpPath)
 		logger.Printf("Failed to write audio file: %v", err)
 		return false
 	}
 
 	if err := f.Close(); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		logger.Printf("Failed to close audio file: %v", err)
 		return false
 	}
 
 	if err := os.Rename(tmpPath, audioPath); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		logger.Printf("Failed to rename temp audio file: %v", err)
 		return false
 	}

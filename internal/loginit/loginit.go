@@ -21,7 +21,7 @@ func init() {
 
 	f, err := os.OpenFile(LogFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err == nil {
-		f.Close()
+		_ = f.Close()
 	}
 }
 

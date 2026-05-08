@@ -15,6 +15,9 @@ linters:
     errcheck:
       check-type-assertions: false
       check-blank: false
+      exclude-functions:
+        - (io.Closer).Close
+        - os.Remove
     gocritic:
       disabled-checks:
         - singleCaseSwitch
