@@ -4058,7 +4058,7 @@ func (m *Model) updateBottomView() {
 				m.viewport.SetWidth(m.width)
 			}
 
-			if m.artistInfo == nil {
+			if m.artistInfo != nil {
 				// Indent when no artist image (viewport not right-shifted)
 				indent := ""
 				if !m.artistArtLoaded || m.artistArtStr == "" {
@@ -4156,6 +4156,17 @@ func (m *Model) updateBottomView() {
 				}
 				// Pad with many newlines so viewport scrolls to blank space at bottom
 				content = strings.Join(lines, "\n") + strings.Repeat("\n", 10)
+			} else {
+				// Artist info not loaded yet — show loading indicator
+				indent := ""
+				if !m.artistArtLoaded || m.artistArtStr == "" {
+					indent = "  "
+				}
+				if m.artistStatus != "" {
+					content = indent + m.spinner.View() + " " + m.artistStatus
+				} else {
+					content = indent + "Loading artist info..."
+				}
 			}
 		}
 
