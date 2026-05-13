@@ -130,6 +130,15 @@ Both `go install` and `go build` work for basic usage. See [DOCUMENTATION.md](DO
 
 Pre-built binaries for Linux, Windows, and MacOS with Last.fm support baked-in are downloadable from releases. Only a Last.fm user account is required. See DOCUMENTATION.md / Scrobbling for details.
 
+### Arch Linux and Arch-based distros (CachyOS, Omarchy, EndeavourOS, Manjaro, etc.)
+
+Install from the AUR:
+
+```bash
+yay -S rptui-bin
+```
+Thanks to @Dominiquini
+
 ## Terminal Compatibility
 
 The included themes are designed and tested primarily on modern GPU-accelerated terminals (Kitty, Ghostty, and Rio on Arch-based systems). These give the cleanest, most polished look.
