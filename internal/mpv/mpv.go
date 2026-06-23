@@ -122,9 +122,6 @@ func (m *MPVBackend) Start(urls []string) error {
 		}
 		// Remove stale socket file
 		_ = os.Remove(m.socketPath)
-	} else {
-		// On Windows, remove stale named pipe
-		_ = os.Remove(m.socketPath)
 	}
 
 	// Pre-flight check: verify PULSE_SERVER tunnel is reachable
@@ -156,7 +153,11 @@ func (m *MPVBackend) Start(urls []string) error {
 		logger.Printf("MPV URL[%d]: %s", i, url)
 	}
 
-	m.process = exec.Command("mpv", args...)
+	binaryName := "mpv"
+	if runtime.GOOS == "windows" {
+		binaryName = "mpv.exe"
+	}
+	m.process = exec.Command(binaryName, args...)
 	m.process.Stdout = nil
 	if m.pulseServer != "" {
 		m.process.Env = append(os.Environ(), "PULSE_SERVER="+m.pulseServer)
@@ -206,11 +207,13 @@ func (m *MPVBackend) Start(urls []string) error {
 	// Wait a moment for socket to be created
 	time.Sleep(200 * time.Millisecond)
 
-	// Check if socket was created
-	if _, err := os.Stat(m.socketPath); os.IsNotExist(err) {
-		logger.Printf("WARNING: MPV socket not created at %s", m.socketPath)
-	} else {
-		logger.Printf("MPV socket exists at %s", m.socketPath)
+	// Check if socket was created (Unix only; Windows named pipes aren't filesystem objects)
+	if runtime.GOOS != "windows" {
+		if _, err := os.Stat(m.socketPath); os.IsNotExist(err) {
+			logger.Printf("WARNING: MPV socket not created at %s", m.socketPath)
+		} else {
+			logger.Printf("MPV socket exists at %s", m.socketPath)
+		}
 	}
 
 	return nil
@@ -233,7 +236,9 @@ func (m *MPVBackend) stopLocked() error {
 	m.currentURLs = nil
 	m.isPaused = false
 	m.pauseStartTime = time.Time{}
-	_ = os.Remove(m.socketPath)
+	if runtime.GOOS != "windows" {
+		_ = os.Remove(m.socketPath)
+	}
 	return nil
 }
 
@@ -589,16 +594,7 @@ func (m *MPVBackend) AppendToPlaylist(urls []string) error {
 
 // sendIPCCommandLocked sends an IPC command to MPV (must be called with lock held)
 func (m *MPVBackend) sendIPCCommandLocked(cmd IPCCommand) (*IPCResponse, error) {
-	var conn net.Conn
-	var err error
-
-	if runtime.GOOS == "windows" {
-		// Windows: use named pipe
-		conn, err = net.Dial("pipe", m.socketPath)
-	} else {
-		// Linux/macOS: use Unix socket
-		conn, err = net.Dial("unix", m.socketPath)
-	}
+	conn, err := dialMPV(m.socketPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to MPV socket: %w", err)
 	}

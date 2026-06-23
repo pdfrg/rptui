@@ -569,9 +569,11 @@ func (t *AudioTap) readLoop() {
 			if err != nil {
 				if audioLogger != nil {
 					audioLogger.Printf("AudioTap readLoop: read error: %v", err)
-					state, sterr := t.cmd.Process.Wait()
-					if sterr == nil {
-						audioLogger.Printf("AudioTap readLoop: process exited: %v", state)
+					if t.cmd != nil && t.cmd.Process != nil {
+						state, sterr := t.cmd.Process.Wait()
+						if sterr == nil {
+							audioLogger.Printf("AudioTap readLoop: process exited: %v", state)
+						}
 					}
 				}
 				return
@@ -607,8 +609,10 @@ func (t *AudioTap) Close() {
 		return
 	}
 	t.closed = true
-	_ = t.cmd.Process.Kill()
-	_ = t.cmd.Wait()
+	if t.cmd != nil && t.cmd.Process != nil {
+		_ = t.cmd.Process.Kill()
+		_ = t.cmd.Wait()
+	}
 	<-t.done
 }
 
