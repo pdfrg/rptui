@@ -24,8 +24,6 @@ type wasapiTap struct {
 }
 
 func wasapiTapReadLoop(tap *wasapiTap) {
-	defer close(tap.done)
-
 	for {
 		select {
 		case <-tap.done:

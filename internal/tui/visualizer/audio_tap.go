@@ -612,8 +612,10 @@ func (t *AudioTap) Close() {
 	if t.cmd != nil && t.cmd.Process != nil {
 		_ = t.cmd.Process.Kill()
 		_ = t.cmd.Wait()
+		<-t.done
+	} else {
+		close(t.done)
 	}
-	<-t.done
 }
 
 func (t *AudioTap) IsAlive() bool {
