@@ -163,6 +163,7 @@ type AudioTap struct {
 	closed     bool
 	sampleSize int  // bytes per sample: 4 for float32, 2 for s16le
 	useStderr  bool // for parecord -v: audio goes to stderr instead of stdout
+	cleanup    func()
 }
 
 // findMonitorSourceNode returns the node ID of the default sink's monitor source.
@@ -609,6 +610,9 @@ func (t *AudioTap) Close() {
 		return
 	}
 	t.closed = true
+	if t.cleanup != nil {
+		t.cleanup()
+	}
 	if t.cmd != nil && t.cmd.Process != nil {
 		_ = t.cmd.Process.Kill()
 		_ = t.cmd.Wait()
