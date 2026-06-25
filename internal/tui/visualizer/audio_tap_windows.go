@@ -67,6 +67,24 @@ func wasapiTapReadLoop(tap *wasapiTap) {
 	}
 }
 
+// Close stops the WASAPI stream and releases COM resources.
+func (wt *wasapiTap) Close() {
+	if wt.closed {
+		return
+	}
+	wt.closed = true
+
+	if wt.audioClient != nil {
+		_ = wt.audioClient.Stop()
+	}
+	if wt.capture != nil {
+		wt.capture.Release()
+	}
+	if wt.audioClient != nil {
+		wt.audioClient.Release()
+	}
+}
+
 // winWASAPITap creates WASAPI loopback audio tap
 func winWASAPITap() *wasapiTap {
 	if audioLogger != nil {
@@ -104,8 +122,6 @@ func winWASAPITap() *wasapiTap {
 		}
 		return nil
 	}
-	defer audioClient.Release()
-
 	var format *wca.WAVEFORMATEX
 	if err := audioClient.GetMixFormat(&format); err != nil {
 		if audioLogger != nil {
@@ -166,7 +182,7 @@ func winWASAPITap() *wasapiTap {
 	return wTap
 }
 
-// newWASAPITap returns Windows WASAPI tap
+// newWASAPITap returns a Windows WASAPI loopback audio tap.
 func newWASAPITap() *AudioTap {
 	wtap := winWASAPITap()
 	if wtap == nil {
@@ -176,6 +192,9 @@ func newWASAPITap() *AudioTap {
 		buf:    wtap.buf,
 		done:   wtap.done,
 		closed: false,
+		cleanup: func() {
+			wtap.Close()
+		},
 	}
 }
 

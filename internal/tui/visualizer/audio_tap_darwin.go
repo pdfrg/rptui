@@ -63,9 +63,9 @@ func newDarwinAudioTap() *AudioTap {
 	cmd := exec.Command("sox",
 		"-t", "coreaudio", device,
 		"-t", "raw", "-",
+		"-e", "floating-point",
 		"rate", "48000",
 		"channels", "1",
-		"encoding", "float",
 	)
 
 	stdout, err := cmd.StdoutPipe()
