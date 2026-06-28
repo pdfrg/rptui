@@ -165,6 +165,11 @@ Audio visualizations: [cliamp](https://github.com/bjarneo/cliamp). Awesome music
 
 For detailed configuration options and advanced usage, see [DOCUMENTATION.md](DOCUMENTATION.md).
 
+## See Also
+
+If you like `rptui`, please try [must](https://github.com/pdfrg/must) - MUSicTUI. A local music player
+and subsonic/navidrome client, with albumart in the terminal.
+
 ## Support
 
 If you enjoy listening to Radio Paradise, please consider [supporting them](https://radioparadise.com/donate).
