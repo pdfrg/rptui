@@ -179,6 +179,7 @@ func (m *MPVBackend) Start(urls []string) error {
 	// Read stderr in background
 	if stderrPipe != nil {
 		go func() {
+			defer loginit.Recover(logger, "MPV stderr reader")
 			buf := make([]byte, 4096)
 			for {
 				n, err := stderrPipe.Read(buf)
@@ -200,6 +201,7 @@ func (m *MPVBackend) Start(urls []string) error {
 	// when MPV exits naturally (end of playlist). Without this,
 	// IsRunning() returns true forever after natural exit.
 	go func() {
+		defer loginit.Recover(logger, "MPV process reaper")
 		_ = m.process.Wait()
 		logger.Printf("MPV process exited naturally")
 	}()

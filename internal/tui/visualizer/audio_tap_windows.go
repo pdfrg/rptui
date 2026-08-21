@@ -8,6 +8,8 @@ import (
 
 	"github.com/go-ole/go-ole"
 	"github.com/moutend/go-wca/pkg/wca"
+
+	"github.com/pdfrg/rptui/internal/loginit"
 )
 
 func newDarwinAudioTap() *AudioTap {
@@ -24,6 +26,7 @@ type wasapiTap struct {
 }
 
 func wasapiTapReadLoop(tap *wasapiTap) {
+	defer loginit.Recover(audioLogger, "WASAPI tap read loop")
 	for {
 		select {
 		case <-tap.done:

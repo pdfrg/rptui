@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+
+	"github.com/pdfrg/rptui/internal/loginit"
 )
 
 var audioLogger *log.Logger
@@ -382,6 +384,7 @@ func newPulseAudioTap() *AudioTap {
 
 	// Log when process exits
 	go func() {
+		defer loginit.Recover(audioLogger, "parecord exit watcher")
 		err := cmd.Wait()
 		if audioLogger != nil {
 			audioLogger.Printf("AudioTap: parecord process exited: %v", err)
@@ -528,6 +531,7 @@ func ActiveBackend() string {
 }
 
 func (t *AudioTap) readLoop() {
+	defer loginit.Recover(audioLogger, "audio tap readLoop")
 	defer close(t.done)
 
 	if audioLogger != nil {

@@ -76,6 +76,7 @@ func sendLinuxNotification(title, body string, withImage bool, cfg *config.Confi
 	args = append(args, "--", title, body)
 
 	go func() {
+		defer loginit.Recover(notifyLogger, "linux desktop notification")
 		cmd := exec.Command("notify-send", args...)
 		stderr, _ := cmd.StderrPipe()
 		_ = cmd.Start()
@@ -98,6 +99,7 @@ func sendMacOSNotification(title, body string, withImage bool, cfg *config.Confi
 
 	script := fmt.Sprintf(`display notification "%s" with title "%s" %s`, strings.ReplaceAll(body, "\"", "\\\""), strings.ReplaceAll(title, "\"", "\\\""), imgArg)
 	go func() {
+		defer loginit.Recover(notifyLogger, "macos desktop notification")
 		cmd := exec.Command("osascript", "-e", script)
 		cmd.Stderr = os.Stderr
 		_ = cmd.Start()
@@ -149,6 +151,7 @@ $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
 		xmlContent)
 
 	go func() {
+		defer loginit.Recover(notifyLogger, "windows desktop notification")
 		cmd := exec.Command("powershell", "-NoProfile", "-Command", script)
 		if notifyLogger != nil {
 			notifyLogger.Printf("Windows notification: title='%s', withImage=%v, imagePath='%s'", title, withImage, usedImagePath)

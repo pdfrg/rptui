@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"time"
@@ -4969,13 +4970,31 @@ func (m Model) fetchArtistCmd() tea.Cmd {
 		tadbCh := make(chan tadbResult, 1)
 		mbCh := make(chan mbResult, 1)
 
+		// res is sent unconditionally by the deferred closer so a panic in
+		// the fetch cannot leave the channel receive below hanging.
 		go func() {
+			var res tadbResult
+			defer func() {
+				if r := recover(); r != nil {
+					logger.Printf("TADB artist fetch panicked: %v\n%s", r, debug.Stack())
+					res = tadbResult{err: fmt.Errorf("panic: %v", r)}
+				}
+				tadbCh <- res
+			}()
 			a, e := tadbClient.SearchArtist(ctx, song.Artist, song.Album)
-			tadbCh <- tadbResult{a, e}
+			res = tadbResult{artist: a, err: e}
 		}()
 		go func() {
+			var res mbResult
+			defer func() {
+				if r := recover(); r != nil {
+					logger.Printf("MusicBrainz discography fetch panicked: %v\n%s", r, debug.Stack())
+					res = mbResult{err: fmt.Errorf("panic: %v", r)}
+				}
+				mbCh <- res
+			}()
 			mbid, a, e := mbClient.GetDiscography(ctx, song.Artist, song.Album)
-			mbCh <- mbResult{mbid, a, e}
+			res = mbResult{mbid: mbid, albums: a, err: e}
 		}()
 
 		tadb := <-tadbCh

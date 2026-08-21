@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"time"
 
 	"github.com/adrg/xdg"
@@ -43,4 +44,19 @@ func InitLogger(prefix string) *log.Logger {
 		return log.New(os.Stderr, prefix, log.LstdFlags|log.Lshortfile)
 	}
 	return log.New(f, prefix, log.LstdFlags|log.Lshortfile)
+}
+
+// Recover is used as a deferred call in background goroutines to convert a
+// panic into a logged error instead of crashing the whole process.
+//
+//	defer loginit.Recover(logger, "mpv process reaper")
+func Recover(l *log.Logger, context string) {
+	if r := recover(); r != nil {
+		msg := fmt.Sprintf("background panic in %s: %v\n%s", context, r, debug.Stack())
+		if l != nil {
+			l.Print(msg)
+		} else {
+			log.Print(msg)
+		}
+	}
 }

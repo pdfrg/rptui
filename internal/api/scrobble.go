@@ -96,6 +96,7 @@ func (s *Scrobbler) ServiceNames() []string {
 func (s *Scrobbler) SendNowPlaying(ctx context.Context, song models.Song) {
 	for _, c := range s.clients {
 		go func(client ScrobbleClient) {
+			defer loginit.Recover(scrobbleLogger, "now-playing "+client.Name())
 			if err := client.SendNowPlaying(ctx, song); err != nil {
 				scrobbleLogger.Printf("NowPlaying %s failed: %v", client.Name(), err)
 			}
@@ -110,6 +111,7 @@ func (s *Scrobbler) Scrobble(ctx context.Context, song models.Song, startTime ti
 
 	for _, c := range s.clients {
 		go func(client ScrobbleClient) {
+			defer loginit.Recover(scrobbleLogger, "scrobble "+client.Name())
 			if err := client.Scrobble(ctx, song, startTime); err != nil {
 				scrobbleLogger.Printf("Scrobble %s failed for %q: %v", client.Name(), song.Title, err)
 				// Cache the failed scrobble

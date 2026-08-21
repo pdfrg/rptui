@@ -7,6 +7,8 @@ import (
 	"io"
 	"math"
 	"os/exec"
+
+	"github.com/pdfrg/rptui/internal/loginit"
 )
 
 func newWASAPITap() *AudioTap {
@@ -107,6 +109,7 @@ func newDarwinAudioTap() *AudioTap {
 }
 
 func (t *AudioTap) readLoopDarwin() {
+	defer loginit.Recover(audioLogger, "audio tap readLoopDarwin")
 	defer close(t.done)
 
 	if audioLogger != nil {
