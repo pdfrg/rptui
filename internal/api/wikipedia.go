@@ -498,11 +498,14 @@ func (w *WikipediaClient) fetchDiscography(ctx context.Context, pageTitle string
 		url.QueryEscape(targetIndex),
 	)
 
-	resp, err = w.wikiGet(ctx, u)
+	// Use a fresh response variable here: reassigning the earlier `resp`
+	// would leave its deferred Body.Close dereferencing nil if this
+	// request fails.
+	discogResp, err := w.wikiGet(ctx, u)
 	if err != nil {
 		return ""
 	}
-	defer resp.Body.Close()
+	defer discogResp.Body.Close()
 
 	var htmlResult struct {
 		Parse struct {
@@ -512,7 +515,7 @@ func (w *WikipediaClient) fetchDiscography(ctx context.Context, pageTitle string
 		} `json:"parse"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&htmlResult); err != nil {
+	if err := json.NewDecoder(discogResp.Body).Decode(&htmlResult); err != nil {
 		return ""
 	}
 

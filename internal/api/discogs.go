@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/pdfrg/rptui/internal/loginit"
 )
 
 var discogsLogger *log.Logger
@@ -278,8 +280,18 @@ func (d *DiscogsClient) resolveDiscogsBio(ctx context.Context, text string) stri
 	results := make(chan result, len(entries))
 	for i, e := range entries {
 		go func(idx int, typ, id string) {
+			// res is sent unconditionally by the deferred closer so a panic
+			// in the lookup cannot leave the collection loop hanging.
+			var res result
+			defer func() {
+				if r := recover(); r != nil {
+					loginit.Recover(discogsLogger, "discogs name lookup")
+					res = result{idx: idx}
+				}
+				results <- res
+			}()
 			name, ok := d.fetchDiscogsName(ctx, typ, id)
-			results <- result{idx, name, ok}
+			res = result{idx: idx, name: name, ok: ok}
 		}(i, e.typ, e.idStr)
 	}
 
@@ -472,6 +484,10 @@ func (d *DiscogsClient) SearchArtist(ctx context.Context, artistName, albumName 
 	}
 
 	// Step 2: Fetch artist details
+	//
+	// Use a fresh response variable here: reassigning the Step-1 `resp`
+	// would leave the deferred Step-1 closer dereferencing nil if this
+	// request fails (http.Client.Do returns a nil response on error).
 	reqURL = fmt.Sprintf("https://api.discogs.com/artists/%d", artistID)
 	req, err = http.NewRequestWithContext(ctx, "GET", reqURL, nil)
 	if err != nil {
@@ -480,14 +496,14 @@ func (d *DiscogsClient) SearchArtist(ctx context.Context, artistName, albumName 
 	req.Header.Set("User-Agent", "rptui/1.0")
 	d.setAuth(req)
 
-	resp, err = d.httpClient.Do(req)
+	detailResp, err := d.httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = detailResp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("discogs artist status %d", resp.StatusCode)
+	if detailResp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("discogs artist status %d", detailResp.StatusCode)
 	}
 
 	var artistResult struct {
@@ -499,7 +515,7 @@ func (d *DiscogsClient) SearchArtist(ctx context.Context, artistName, albumName 
 		} `json:"images"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&artistResult); err != nil {
+	if err := json.NewDecoder(detailResp.Body).Decode(&artistResult); err != nil {
 		return nil, err
 	}
 
