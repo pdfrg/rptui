@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=RPtui
+Comment=Radio Paradise internet radio TUI
+Exec=xdg-terminal-exec --app-id=rptui.large -e /home/mds/Work/rptui-bubbletea/assets/rptui-launch.sh
+Icon=rptui
+Terminal=false
+Categories=AudioVideo;Audio;Music;
+Keywords=radio;music;paradise;rptui;
+StartupWMClass=rptui.large
