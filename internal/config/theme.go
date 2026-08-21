@@ -160,11 +160,33 @@ func BuiltinTheme(name string) *ColorTheme {
 	return nil
 }
 
+// omarchyThemeCandidates returns the possible locations of the current
+// omarchy theme's colors.toml, newest first:
+//   - Omarchy 4+: ~/.local/state/omarchy/current/theme/colors.toml (XDG state dir)
+//   - Omarchy 3.x: ~/.config/omarchy/current/theme/colors.toml (legacy)
+func omarchyThemeCandidates() []string {
+	return []string{
+		filepath.Join(xdg.StateHome, "omarchy", "current", "theme", "colors.toml"),
+		filepath.Join(xdg.ConfigHome, "omarchy", "current", "theme", "colors.toml"),
+	}
+}
+
+// OmarchyThemePath returns the path of the current omarchy theme's
+// colors.toml, or "" if no omarchy theme is installed.
+func OmarchyThemePath() string {
+	for _, p := range omarchyThemeCandidates() {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
+}
+
 // LoadTheme loads theme with fallback chain
 // Priority:
 // 1. User-provided colors_file (if set in config)
 // 2. Named built-in theme (if set and valid)
-// 3. Omarchy: ~/.config/omarchy/current/theme/colors.toml
+// 3. Omarchy current theme (see OmarchyThemePath)
 // 4. Defaults (Catppuccin Mocha)
 func LoadTheme(colorsFile, themeName string) (*ColorTheme, error) {
 	// Try user-provided file first
@@ -185,8 +207,7 @@ func LoadTheme(colorsFile, themeName string) (*ColorTheme, error) {
 	}
 
 	// Try Omarchy theme
-	omarchyPath := filepath.Join(xdg.ConfigHome, "omarchy", "current", "theme", "colors.toml")
-	if _, err := os.Stat(omarchyPath); err == nil {
+	if omarchyPath := OmarchyThemePath(); omarchyPath != "" {
 		theme, err := loadThemeFromFile(omarchyPath)
 		if err == nil {
 			return theme, nil

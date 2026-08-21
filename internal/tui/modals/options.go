@@ -2,13 +2,10 @@
 package modals
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/adrg/xdg"
 	"github.com/pdfrg/rptui/internal/config"
 	"github.com/pdfrg/rptui/internal/tui/visualizer"
 )
@@ -75,8 +72,7 @@ func themeFromConfig(colorsFile, themeName string) int {
 	}
 
 	// Check if Omarchy theme exists
-	omarchyPath := filepath.Join(xdg.ConfigHome, "omarchy", "current", "theme", "colors.toml")
-	if _, err := os.Stat(omarchyPath); err == nil {
+	if config.OmarchyThemePath() != "" {
 		return 1 // "Omarchy"
 	}
 

@@ -2,21 +2,18 @@ package config
 
 import (
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
-
-	"github.com/adrg/xdg"
 )
 
 type ThemeWatcher struct {
-	mu          sync.Mutex
-	events      chan string
-	closed      bool
-	colorsFile  string
-	omarchyPath string
-	lastMtime   map[string]time.Time
-	stopChan    chan struct{}
+	mu           sync.Mutex
+	events       chan string
+	closed       bool
+	colorsFile   string
+	omarchyPaths []string
+	lastMtime    map[string]time.Time
+	stopChan     chan struct{}
 }
 
 func NewThemeWatcher(colorsFile string) *ThemeWatcher {
@@ -33,7 +30,9 @@ func (tw *ThemeWatcher) Events() <-chan string {
 }
 
 func (tw *ThemeWatcher) Start() error {
-	tw.omarchyPath = filepath.Join(xdg.ConfigHome, "omarchy", "current", "theme", "colors.toml")
+	// Watch all candidate omarchy theme locations so a newly created or
+	// upgraded omarchy installation is picked up mid-session
+	tw.omarchyPaths = omarchyThemeCandidates()
 
 	// Initialize mtimes to avoid spurious reload on first poll
 	if tw.colorsFile != "" {
@@ -41,8 +40,10 @@ func (tw *ThemeWatcher) Start() error {
 			tw.lastMtime[tw.colorsFile] = info.ModTime()
 		}
 	}
-	if info, err := os.Stat(tw.omarchyPath); err == nil {
-		tw.lastMtime[tw.omarchyPath] = info.ModTime()
+	for _, path := range tw.omarchyPaths {
+		if info, err := os.Stat(path); err == nil {
+			tw.lastMtime[path] = info.ModTime()
+		}
 	}
 
 	go tw.run()
@@ -69,7 +70,7 @@ func (tw *ThemeWatcher) checkForChanges() {
 	if tw.colorsFile != "" {
 		paths = append(paths, tw.colorsFile)
 	}
-	paths = append(paths, tw.omarchyPath)
+	paths = append(paths, tw.omarchyPaths...)
 
 	for _, path := range paths {
 		info, err := os.Stat(path)
