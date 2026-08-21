@@ -41,4 +41,4 @@ release:
   github:
     owner: pdfrg
     name: rptui
-  draft: true  # Set to false when ready for production
+  draft: false
