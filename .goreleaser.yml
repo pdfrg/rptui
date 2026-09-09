@@ -46,3 +46,11 @@ release:
     owner: pdfrg
     name: rptui
   draft: false
+
+# NOTE: the default changelog format embeds committer emails — never use it.
+# This format intentionally omits all author fields.
+changelog:
+  use: git
+  sort: asc
+  format: "* {{ .Message }} ({{ .SHA }})"
+  abbrev: 7
