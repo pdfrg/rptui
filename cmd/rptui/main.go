@@ -324,11 +324,24 @@ func handleRPAuth() {
 
 	// Save session tokens
 	if err := authClient.SaveState(authPath); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to save auth state: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Authentication succeeded but failed to save auth state to %s: %v\n", authPath, err)
+		os.Exit(1)
+	}
+
+	// Verify the saved state reloads into a usable session so a
+	// subsequent `rptui` run is actually authenticated.
+	verifyClient := api.NewRPAuthClient()
+	if err := verifyClient.LoadState(authPath); err != nil {
+		fmt.Fprintf(os.Stderr, "Authentication succeeded but saved auth state is unreadable (%s): %v\n", authPath, err)
+		os.Exit(1)
+	}
+	if !verifyClient.HasAuth() || verifyClient.Username() == "" {
+		fmt.Fprintf(os.Stderr, "Authentication succeeded but saved auth state is incomplete (missing session token or username).\n")
+		os.Exit(1)
 	}
 
 	fmt.Printf("Successfully authenticated as %s (user ID: %s)\n", username, authClient.UserID())
-	fmt.Println("Session tokens saved. Authenticated features are now available.")
+	fmt.Printf("Session tokens saved to %s. Authenticated features are now available.\n", authPath)
 }
 
 // parseCacheRequest parses a --cache argument and its optional station/bitrate

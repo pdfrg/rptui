@@ -527,7 +527,11 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 	}
 	if authClient.HasAuth() {
 		rpAPI.WithAuth(authClient)
-		logger.Printf("RP API: authenticated as %s (user ID: %s)", authClient.Username(), authClient.UserID())
+		if authClient.Username() == "" {
+			logger.Printf("Warning: RP auth state loaded (user ID: %s) but username is missing; session cookies will be incomplete. Run `rptui --rp-auth` again to repair.", authClient.UserID())
+		} else {
+			logger.Printf("RP API: authenticated as %s (user ID: %s)", authClient.Username(), authClient.UserID())
+		}
 	} else if cfg.RPAuth.Username != "" {
 		logger.Printf("RP API: authentication not available (login failed, no valid session)")
 		// If channel 99 is configured but auth failed, fall back to main mix

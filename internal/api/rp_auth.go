@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -35,6 +36,7 @@ type RPAuthResponse struct {
 
 // RPAuthState represents persisted session tokens
 type RPAuthState struct {
+	Username     string `toml:"username"`
 	CPasswd      string `toml:"c_passwd"`
 	UserID       string `toml:"c_user_id"`
 	CValidated   string `toml:"c_validated"`
@@ -52,8 +54,10 @@ func NewRPAuthClient() *RPAuthClient {
 
 // Login authenticates with RP using username/password and stores session tokens
 func (a *RPAuthClient) Login(username, password string) error {
-	url := fmt.Sprintf("https://api.radioparadise.com/api/auth?username=%s&passwd=%s",
-		username, password)
+	params := url.Values{}
+	params.Set("username", username)
+	params.Set("passwd", password)
+	url := "https://api.radioparadise.com/api/auth?" + params.Encode()
 
 	resp, err := a.httpClient.Get(url)
 	if err != nil {
@@ -109,6 +113,7 @@ func (a *RPAuthClient) SetCredentials(username, password string) {
 // SaveState persists session tokens to disk
 func (a *RPAuthClient) SaveState(path string) error {
 	state := RPAuthState{
+		Username:     a.username,
 		CPasswd:      a.cPasswd,
 		UserID:       a.userID,
 		CValidated:   a.cValidated,
@@ -147,6 +152,11 @@ func (a *RPAuthClient) LoadState(path string) error {
 		return fmt.Errorf("failed to parse auth state: %w", err)
 	}
 
+	// Restore username from state so fresh processes send complete
+	// session cookies even when no credentials are stored in config.
+	if state.Username != "" {
+		a.username = state.Username
+	}
 	a.cPasswd = state.CPasswd
 	a.userID = state.UserID
 	a.cValidated = state.CValidated
