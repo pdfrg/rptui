@@ -81,7 +81,7 @@ func themeFromConfig(colorsFile, themeName string) int {
 }
 
 // Valid station IDs in order
-var stationIDs = []int{0, 1, 2, 3, 42, 5, 945}
+var stationIDs = []int{0, 1, 2, 3, 42, 5, 945, 9}
 
 // Valid bitrate IDs in order
 var bitrateIDs = []int{1, 2, 3, 4}

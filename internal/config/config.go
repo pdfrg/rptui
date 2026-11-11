@@ -17,6 +17,7 @@ var StationNames = map[int]string{
 	2:   "RockIt!",
 	3:   "The Globe",
 	5:   "Beyond...",
+	9:   "Velvet",
 	42:  "Serenity",
 	99:  "My Paradise",
 	945: "KFAT",
@@ -33,7 +34,8 @@ var BitrateNames = map[int]string{
 // Config manages user configuration persistence
 type Config struct {
 	path                  string
-	Channel               int    `toml:"channel" comment:"default station for new sessions\nchanges made in app are saved to file and retained on restart\n0=Main, 1=Mellow, 2=Rock, 3=Globe, 42=Serenity, 5=Beyond, 945=KFAT (default: 0)"`
+	unsupportedChan       int
+	Channel               int    `toml:"channel" comment:"default station for new sessions\nchanges made in app are saved to file and retained on restart\n0=Main, 1=Mellow, 2=Rock, 3=Globe, 42=Serenity, 5=Beyond, 9=Velvet, 945=KFAT (default: 0)"`
 	Bitrate               int    `toml:"bitrate" comment:"1=64k AAC, 2=128k AAC, 3=320k AAC, 4=FLAC (default: 3)"`
 	ShowAlbumArt          bool   `toml:"show_album_art" comment:"display album art for each song\nuses the best supported image protocol with auto fallback\nkitty > iterm2 > sixel > unicode (default: true)"`
 	CopyAlbumArt          bool   `toml:"copy_album_art" comment:"save album art to file, useful for desktop/statusbar widgets (default: false)"`
@@ -281,8 +283,11 @@ func (c *Config) Save() error {
 func (c *Config) applyDefaults() {
 	defaults := DefaultConfig()
 
-	// Validate channel (must be a known station)
+	// Validate channel (must be a known station). Remember an unsupported
+	// value so the TUI can tell the user instead of silently ignoring it.
+	c.unsupportedChan = 0
 	if _, ok := StationNames[c.Channel]; !ok {
+		c.unsupportedChan = c.Channel
 		c.Channel = defaults.Channel
 	}
 
@@ -364,6 +369,12 @@ func (c *Config) applyDefaults() {
 	if c.DJMinSpeechDuration < 5 || c.DJMinSpeechDuration > 60 {
 		c.DJMinSpeechDuration = defaults.DJMinSpeechDuration
 	}
+}
+
+// UnsupportedChannel returns the channel value from the config file that was
+// replaced during validation, or 0 if the configured channel was valid.
+func (c *Config) UnsupportedChannel() int {
+	return c.unsupportedChan
 }
 
 // GetDisplayInfo returns display string for current station/bitrate

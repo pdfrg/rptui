@@ -193,6 +193,7 @@ type BlockResponse struct {
 	BlockID   string                    `json:"block_id"`
 	SliceNum  string                    `json:"slice_num"`
 	SchedTime int64                     `json:"sched_time_millis"`
+	Error     string                    `json:"error"`
 }
 
 // GetBlock fetches audio block with playback URLs

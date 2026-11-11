@@ -61,8 +61,8 @@ EXAMPLES:
 
 STATIONS:
     0 - The Main Mix  1 - Mellow Mix    2 - RockIt!
-    3 - The Globe     42 - Serenity     5 - Beyond...
-    945 - KFAT
+    3 - The Globe     5 - Beyond...     9 - Velvet
+    42 - Serenity     945 - KFAT
 
 BITRATES:
     1 - 64k AAC   2 - 128k AAC   3 - 320k AAC   4 - FLAC
@@ -85,7 +85,7 @@ On Linux, the config file generally is located at `~/.config/rptui/config.toml`.
 
 | Setting | Type | Description |
 |---------|------|-------------|
-| `channel` | int | Default station (0=Main, 1=Mellow, 2=Rock, 3=Globe, 42=Serenity, 5=Beyond, 945=KFAT) |
+| `channel` | int | Default station (0=Main, 1=Mellow, 2=Rock, 3=Globe, 42=Serenity, 5=Beyond, 9=Velvet, 945=KFAT) |
 | `bitrate` | int | Audio quality (1=64k, 2=128k, 3=320k, 4=FLAC) |
 | `layout` | string | UI layout: `large`, `medium`, `compact`, `narrow` |
 | `force_protocol` | string | Force image protocol: `kitty`, `sixel`, `iterm2`, `halfblocks` (default: auto-detect) |

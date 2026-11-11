@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	_ "image/jpeg"
@@ -43,6 +44,10 @@ import (
 
 // Logger for TUI
 var logger *log.Logger
+
+// errMyParadiseEmpty indicates that the authenticated My Paradise station
+// currently has no playable songs (for example, no ratings above the cutoff).
+var errMyParadiseEmpty = errors.New("no songs available for My Paradise - rate more tracks in your RP account or lower the chan_99 cutoff")
 
 func init() {
 	logger = loginit.InitLogger("[TUI] ")
@@ -697,6 +702,13 @@ func NewModel(cfg *config.Config, theme *config.ColorTheme, startJukebox bool, l
 		audioForward:           audioForward,
 	}
 
+	if unsupported := cfg.UnsupportedChannel(); unsupported != 0 {
+		stationName := config.StationNames[cfg.Channel]
+		logger.Printf("Config: unsupported channel %d, falling back to %s (%d)", unsupported, stationName, cfg.Channel)
+		m.statusMsg = fmt.Sprintf("Unsupported channel %d in config; using %s", unsupported, stationName)
+		m.statusIsError = true
+	}
+
 	// Determine layout mode
 	layoutMode := LayoutLarge
 	switch cfg.Layout {
@@ -1018,6 +1030,12 @@ func (m Model) fetchBlockCmd() tea.Msg {
 
 	songs, imageBase := m.rpAPI.ParseBlockSongs(block)
 	if len(songs) == 0 {
+		if m.config.Channel == 99 {
+			return blockFetchedMsg{err: errMyParadiseEmpty}
+		}
+		if block.Error != "" {
+			return blockFetchedMsg{err: fmt.Errorf("RP returned no songs: %s", block.Error)}
+		}
 		return blockFetchedMsg{err: fmt.Errorf("no songs in block")}
 	}
 
@@ -2071,7 +2089,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, statusCmd
 
-	case "0", "1", "2", "3", "4", "5", "6":
+	case "0", "1", "2", "3", "4", "5", "6", "7":
 		// Station hotkeys — disabled in offline and jukebox mode
 		if m.offlineMode || m.jukeboxMode {
 			return m, nil
@@ -2084,6 +2102,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			"4": 42,
 			"5": 5,
 			"6": 945,
+			"7": 9,
 		}
 		station := stationMap[msg.String()]
 		return m.switchStation(station)
@@ -2094,7 +2113,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if !m.rpAPI.IsAuthenticated() {
-			return m, setStatus(&m, "Channel 99 requires RP authentication", true)
+			return m, setStatus(&m, "My Paradise (key 9) requires RP authentication", true)
 		}
 		return m.switchStation(99)
 
@@ -2484,6 +2503,7 @@ func (m Model) switchStation(channel int) (tea.Model, tea.Cmd) {
 	m.consecutiveFailures = 0
 	m.retryInterval = 0
 	m.connErrorMsg = ""
+	m.err = nil
 
 	return m, tea.Batch(setStatus(&m, fmt.Sprintf("Switching to %s...", stationName), false), m.fetchBlockCmd)
 }
@@ -2829,6 +2849,13 @@ func (m Model) handleBlockFetched(msg blockFetchedMsg) (tea.Model, tea.Cmd) {
 
 	if msg.err != nil {
 		if !m.initialized {
+			if errors.Is(msg.err, errMyParadiseEmpty) {
+				logger.Printf("My Paradise unavailable, falling back to Main Mix")
+				m.config.Channel = 0
+				m.rpAPI.SetChannel(0)
+				m.err = nil
+				return m, tea.Batch(setStatus(&m, "My Paradise has no songs - using The Main Mix", true), m.fetchBlockCmd)
+			}
 			// Fatal on startup — can't play without a block
 			m.err = msg.err
 			return m, setStatus(&m, fmt.Sprintf("Error: %v", msg.err), true)

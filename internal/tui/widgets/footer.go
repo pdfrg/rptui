@@ -107,6 +107,7 @@ func NewFooter(accentStyle, mutedStyle lipgloss.Style) *Footer {
 			{Key: "4", Icon: "", Label: "Serenity"},
 			{Key: "5", Icon: "", Label: "Beyond"},
 			{Key: "6", Icon: "", Label: "KFAT"},
+			{Key: "7", Icon: "", Label: "Velvet"},
 		},
 		miniKeys: []KeyBinding{
 			{Key: "Space", Icon: "󰐎", Label: ""},

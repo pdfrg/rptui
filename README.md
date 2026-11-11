@@ -25,7 +25,7 @@ While Radio Paradise offers the absolute best internet radio stations, human-cur
 
 ## Features
 
-- **All RP Stations / Qualities**: Play any RadioParadise channel (Main Mix, Mellow Mix, RockIt!, The Globe, Beyond..., Serenity, KFAT) at your choice of bitrate (64k 128k 320k FLAC).
+- **All RP Stations / Qualities**: Play any RadioParadise channel (Main Mix, Mellow Mix, RockIt!, The Globe, Beyond..., Velvet, Serenity, KFAT) at your choice of bitrate (64k 128k 320k FLAC).
 - **No Stream Buffering**: Uses the same full audio file-based playback as the official clients.
 - **Skip / Previous / Seek / Restart Song**: Same functionality as provided by local music players.
 - **Favorites**: Mark songs as favorites > saved to cache for later playback. Auto-queues favorites for playback when skipped ahead of livestream.  Random play favorites in jukebox mode.  Search favorites with `/`, play immediately or enqueue.

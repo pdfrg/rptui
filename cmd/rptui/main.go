@@ -844,8 +844,8 @@ EXAMPLES:
 
 STATIONS:
     0 - The Main Mix  1 - Mellow Mix    2 - RockIt!
-    3 - The Globe     42 - Serenity     5 - Beyond...
-    945 - KFAT
+    3 - The Globe     5 - Beyond...     9 - Velvet
+    42 - Serenity     945 - KFAT
 
 BITRATES:
     1 - 64k AAC   2 - 128k AAC   3 - 320k AAC   4 - FLAC
