@@ -23,7 +23,7 @@ import (
 	"github.com/pdfrg/rptui/internal/tui"
 )
 
-var Version = "v1.3.5"
+var Version = "v1.4.0"
 
 // CacheRequest holds parameters for a cache recording request
 type CacheRequest struct {

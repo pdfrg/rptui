@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.4.0] - 2026-11-11
+
+### Added
+
+- **Velvet station**: Added Radio Paradise's Velvet station (channel 9) with the `7` hotkey, Options station picker, CLI support (`--station velvet`), and documentation updates
+
+### Fixed
+
+- **My Paradise empty-station handling**: Authenticated users without eligible My Paradise songs now get a specific explanation and a session fallback to The Main Mix instead of the generic "no songs in block" error; unauthenticated key `9` messaging now identifies My Paradise explicitly
+- **Unsupported config channel handling**: Manual `channel =` values that are not supported are still safely replaced with the default station, but now produce a log entry and visible status message instead of failing silently
+- **RP block errors**: Empty RP block responses now surface the API's error detail where available
+
 ## [v1.3.0] - 2026-05-08
 
 ### Added
